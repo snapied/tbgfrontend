@@ -1,0 +1,63 @@
+/* Custom overrides over Excalidraw's stock CSS.
+ *
+ * Goals (per user feedback):
+ *   1. Hide hamburger menu (top-left dropdown)
+ *   2. Hide library button (top-right of canvas)
+ *   3. Hide help icon (bottom-right)
+ *   4. Hide welcome screen / "powered by Excalidraw" footer
+ *   5. Bring the shape toolbar to the bottom-centre, scale it up — Figjam style
+ *
+ * Everything is scoped to `.excalidraw` so we don't leak styles to the rest
+ * of the app. Selectors target Excalidraw v0.18 markup. If a future version
+ * renames classes, these gracefully no-op (display:none doesn't fail).
+ */
+
+/* --- Hide top-left main menu (hamburger) --- */
+.excalidraw .App-menu_top__left .dropdown-menu,
+.excalidraw button[data-testid="main-menu-trigger"],
+.excalidraw .dropdown-menu-button {
+  display: none !important;
+}
+
+/* --- Hide library button + panel trigger --- */
+.excalidraw .layer-ui__library,
+.excalidraw button[aria-label*="library" i],
+.excalidraw button[data-testid="library-button"],
+.excalidraw .library-button,
+.excalidraw .sidebar-trigger {
+  display: none !important;
+}
+
+/* --- Hide help / docs icon and the "?" bubble --- */
+.excalidraw .help-icon,
+.excalidraw button[aria-label*="Help" i],
+.excalidraw .HelpDialog {
+  display: none !important;
+}
+
+/* --- Hide the welcome screen + Excalidraw's promotional footer --- */
+.excalidraw .welcome-screen-decor,
+.excalidraw .WelcomeScreen,
+.excalidraw .layer-ui__wrapper__footer-left,
+.excalidraw .ExcalidrawLogo,
+.excalidraw a[href*="excalidraw.com"] {
+  display: none !important;
+}
+
+/* --- Hide Excalidraw's native bottom toolbar entirely --- */
+/* We render our own Figjam/Freeform-style toolbar in WhiteboardToolbar.tsx.
+ * The lock toggle + zoom controls are part of the same island; we hide the
+ * whole thing to avoid duplication. */
+.excalidraw .App-toolbar {
+  display: none !important;
+}
+/* Excalidraw also renders a "shapes shortcuts" island; hide for the same reason. */
+.excalidraw .App-bottom-bar {
+  display: none !important;
+}
+
+/* --- Make sure our renderTopRightUI buttons sit above other UI when the
+ * toolbar is at the bottom (avoids overlap with shape options popovers). --- */
+.excalidraw .layer-ui__wrapper__top-right {
+  z-index: 6;
+}

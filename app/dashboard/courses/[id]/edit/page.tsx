@@ -1,0 +1,1289 @@
+"use client"
+
+import { use, useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
+import {
+  ArrowLeft,
+  Award,
+  Copy,
+  Eye,
+  Globe,
+  Loader2,
+  Lock,
+  Plus,
+  Save,
+  Tag as TagIcon,
+  Trash2,
+  Wand2,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { cn } from "@/lib/utils"
+import {
+  generateId,
+  useLMS,
+  type Coupon,
+  type Course,
+  type CourseVisibility,
+  type Module,
+} from "@/lib/lms-store"
+import { slugify } from "@/lib/lesson-utils"
+import { CurriculumEditor } from "@/components/course-editor/curriculum-editor"
+import { TagsInput } from "@/components/course-editor/tags-input"
+import { FileUploadField } from "@/components/upload/file-upload-field"
+import { ThumbnailField } from "@/components/upload/thumbnail-field"
+import { VideoUrlPreview } from "@/components/upload/video-url-preview"
+import { useUnsavedChangesGuard } from "@/lib/use-unsaved-changes-guard"
+import { RichTextEditor } from "@/components/editor/rich-text-editor"
+import { uploadDataUrl } from "@/lib/upload-asset"
+import { BUILTIN_TEMPLATES } from "@/lib/certificate-templates"
+import { loadCustomTemplates } from "@/lib/custom-templates"
+import { CertificateTemplatePicker } from "@/components/course-editor/certificate-template-picker"
+import { CategoryCombobox } from "@/components/course-editor/category-combobox"
+import { CATEGORY_TAG_SUGGESTIONS } from "@/lib/course-categories"
+import { SUPPORTED_CURRENCIES, currencyInfo, formatMoney } from "@/lib/currency"
+import { fireWebhookEvent } from "@/lib/event-dispatcher"
+import { AIGenerateButton } from "@/components/ai/ai-generate-button"
+import { aiCourseTitles, aiCourseDescription } from "@/lib/ai-client"
+import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
+
+const COURSE_EDIT_TOUR: TourStep[] = [
+  {
+    title: "Edit your course",
+    body: "Five tabs — Basics, Curriculum, Pricing, Access, SEO. Edits autosave every 2 seconds; the header shows the last save timestamp.",
+    emoji: "📚",
+    placement: "center",
+  },
+  {
+    target: "[data-tour='course-edit-tabs']",
+    title: "Five sections, one place",
+    body: "Basics has title + thumbnail + description. Curriculum holds the lesson tree. Pricing is the SKU + currency. Access controls drip + visibility. SEO sets meta tags.",
+    emoji: "🗂️",
+    placement: "bottom",
+  },
+  {
+    target: "[data-tour='course-edit-preview']",
+    title: "Preview live",
+    body: "Opens the public course page in a new tab so you can see what students will see — including unpublished draft changes.",
+    emoji: "👁️",
+    placement: "left",
+  },
+  {
+    target: "[data-tour='course-edit-save']",
+    title: "Manual save anytime",
+    body: "Autosave runs every 2 seconds while you edit — but you can hit Save to force-flush before navigating away.",
+    emoji: "💾",
+    placement: "left",
+  },
+]
+import { toast } from "sonner"
+
+// Resolve a display label for either a built-in template id or a custom
+// template id (custom-xxx) the teacher designed. Used in the status row
+// above the certificate picker.
+function resolveTemplateLabel(id: string): string {
+  const builtin = BUILTIN_TEMPLATES.find((t) => t.id === id)
+  if (builtin) return `the "${builtin.name}" template`
+  if (typeof window !== "undefined") {
+    const custom = loadCustomTemplates().find((t) => t.id === id)
+    if (custom) return `your custom template "${custom.name}"`
+  }
+  return `template "${id}"`
+}
+
+// Thin guard wrapper. The lms-store hydrates asynchronously
+// (localStorage → server blob), so on a hard refresh `getCourseById`
+// briefly returns undefined and every useState below would seed with
+// blanks. We hold rendering of the form until both the store is
+// hydrated AND the course resolves, then key the inner component on
+// the course id so it remounts with fresh useState seeds.
+export default function EditCoursePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
+  const { getCourseById, hydrated: lmsHydrated } = useLMS()
+  const course = getCourseById(id)
+  if (!course && !lmsHydrated) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
+  if (!course) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold">Course not found</h2>
+          <p className="mt-2 text-muted-foreground">
+            The course you are looking for does not exist.
+          </p>
+          <Button asChild className="mt-4">
+            <Link href="/dashboard/courses">Back to courses</Link>
+          </Button>
+        </div>
+      </div>
+    )
+  }
+  return <EditCoursePageInner course={course} key={course.id} />
+}
+
+function EditCoursePageInner({ course }: { course: Course }) {
+  const id = course.id
+  const router = useRouter()
+  const { updateCourse, users, getCourseById } = useLMS()
+  // Faculty pool for the curriculum editor's per-module owner
+  // picker + the course-level co-instructor picker. Computed once
+  // here so both surfaces stay in sync with whoever's on the team
+  // right now.
+  const facultyPool = users.filter((u) => u.role === "admin" || u.role === "instructor")
+
+  // ---- Form state, seeded from course ----
+  const [title, setTitle] = useState(course?.title ?? "")
+  const [subtitle, setSubtitle] = useState(course?.subtitle ?? "")
+  const [description, setDescription] = useState(course?.description ?? "")
+  const [thumbnail, setThumbnail] = useState(course?.thumbnail ?? "")
+  const [introVideoUrl, setIntroVideoUrl] = useState(course?.introVideoUrl ?? "")
+  const [category, setCategory] = useState(course?.category ?? "")
+  const [level, setLevel] = useState<"beginner" | "intermediate" | "advanced">(course?.level ?? "beginner")
+  const [language, setLanguage] = useState(course?.language ?? "English")
+  const [tags, setTags] = useState<string[]>(course?.tags ?? [])
+  // Co-instructors — additional teachers who can build / edit
+  // alongside the primary course owner. Stored as a list of User ids
+  // resolved against `users[]` at render time. Empty = solo course.
+  const [coInstructorIds, setCoInstructorIds] = useState<string[]>(course?.coInstructorIds ?? [])
+  const [slug, setSlug] = useState(course?.slug ?? "")
+  const [slugDirty, setSlugDirty] = useState<boolean>(!!course?.slug)
+  // SEO fields — initialized from the saved override OR auto-derived from
+  // the course's own fields so the form is never blank by default. The
+  // teacher sees the meta filled in with sensible values they can keep,
+  // tweak, or clear. Whatever ends up in the input is what gets saved.
+  //
+  // Derived defaults:
+  //   • title       → course title (truncated to 60 inside the input)
+  //   • description → plain-text version of the rich description
+  //   • keywords    → category first, then user tags
+  //   • OG image    → course thumbnail
+  //
+  // A "Reset to course defaults" button below the form clears any overrides
+  // back to the auto-derived values in one click.
+  const autoDerivedSeo = useMemo(() => {
+    const plainDescription = (course?.description ?? "")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+    const keywordSeed = [course?.category, ...(course?.tags ?? [])].filter(Boolean) as string[]
+    return {
+      title: (course?.title ?? "").slice(0, 70),
+      description: plainDescription.slice(0, 200),
+      keywords: keywordSeed.join(", "),
+      ogImage: course?.thumbnail ?? "",
+    }
+  }, [course?.title, course?.description, course?.category, course?.tags, course?.thumbnail])
+
+  const [seoTitle, setSeoTitle] = useState(course?.seoTitle ?? autoDerivedSeo.title)
+  const [seoDescription, setSeoDescription] = useState(course?.seoDescription ?? autoDerivedSeo.description)
+  const [seoKeywords, setSeoKeywords] = useState(
+    course?.seoKeywords && course.seoKeywords.length > 0
+      ? course.seoKeywords.join(", ")
+      : autoDerivedSeo.keywords,
+  )
+  const [ogImage, setOgImage] = useState(course?.ogImage ?? autoDerivedSeo.ogImage)
+
+  const resetSeoToCourseDefaults = () => {
+    setSeoTitle(autoDerivedSeo.title)
+    setSeoDescription(autoDerivedSeo.description)
+    setSeoKeywords(autoDerivedSeo.keywords)
+    setOgImage(autoDerivedSeo.ogImage)
+  }
+
+  // Pricing
+  const [price, setPrice] = useState((course?.price ?? 0).toString())
+  const [originalPrice, setOriginalPrice] = useState((course?.originalPrice ?? "").toString())
+  // INR-only on v1. Legacy courses created when USD was selectable
+  // still load with their old currency, but new edits cannot switch
+  // to a disabled currency through the picker.
+  const [currency, setCurrency] = useState(course?.currency ?? "INR")
+  const [earlyBirdPrice, setEarlyBirdPrice] = useState((course?.earlyBirdPrice ?? "").toString())
+  const [earlyBirdUntil, setEarlyBirdUntil] = useState(course?.earlyBirdUntil?.slice(0, 16) ?? "")
+  const [coupons, setCoupons] = useState<Coupon[]>(course?.coupons ?? [])
+
+  // Lifecycle
+  const [status, setStatus] = useState<"draft" | "published" | "archived">(course?.status ?? "draft")
+  const [publishAt, setPublishAt] = useState(course?.publishAt?.slice(0, 16) ?? "")
+  const [visibility, setVisibility] = useState<CourseVisibility>(course?.visibility ?? "public")
+  const [accessPassword, setAccessPassword] = useState(course?.accessPassword ?? "")
+  // Existing courses pre-date the explicit toggle, so we fall back to "has a
+  // template" instead of a blanket `true` — that way legacy courses keep
+  // their cert behaviour without us flipping the bit silently for any course
+  // that genuinely shouldn't issue one.
+  const [certificateEligible, setCertificateEligible] = useState<boolean>(
+    course?.certificateEligible ?? !!course?.certificateTemplate,
+  )
+  // Accepts either a built-in template id (TemplateType) or a custom template
+  // id like "custom-xxx". Falls back to "modern" only when there's no course
+  // value at all.
+  const [certificateTemplate, setCertificateTemplate] = useState<string>(
+    course?.certificateTemplate ?? "modern",
+  )
+
+  // Curriculum
+  const [modules, setModules] = useState<Module[]>(course?.modules ?? [])
+
+  // Save/auto-save state
+  const [saving, setSaving] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const firstRender = useRef(true)
+
+  // Warn before navigating away with pending changes. Autosave runs 2s
+  // after the last edit, so this only really fires during that gap or
+  // when the network/save is mid-flight — but it's the difference
+  // between losing work and not.
+  const { confirmLeave } = useUnsavedChangesGuard(dirty || saving)
+
+  const [regeneratingCover, setRegeneratingCover] = useState(false)
+
+  const handleRegenerateCover = async () => {
+    setRegeneratingCover(true)
+    try {
+      // Reconstruct seed category
+      const norm = (category || "").toLowerCase()
+      let seedCat: "math" | "yoga" | "coding" | "finance" | "language" | "exam-prep" | "creative" | "wellness" | "business" | "general" = "general"
+      if (norm.includes("math") || norm.includes("edu")) seedCat = "math"
+      else if (norm.includes("yoga") || norm.includes("fitness")) seedCat = "yoga"
+      else if (norm.includes("cod") || norm.includes("tech")) seedCat = "coding"
+      else if (norm.includes("fin") || norm.includes("money")) seedCat = "finance"
+      else if (norm.includes("lang")) seedCat = "language"
+      else if (norm.includes("exam") || norm.includes("prep")) seedCat = "exam-prep"
+      else if (norm.includes("creat") || norm.includes("art")) seedCat = "creative"
+      else if (norm.includes("well") || norm.includes("health")) seedCat = "wellness"
+      else if (norm.includes("bus")) seedCat = "business"
+
+      const CATEGORY_HUE = {
+        math:        210,
+        yoga:        265,
+        coding:      150,
+        finance:     45,
+        language:    340,
+        "exam-prep": 195,
+        creative:    20,
+        wellness:    170,
+        business:    285,
+        general:     230,
+      }
+
+      const seed = {
+        rawInput: title,
+        topic: title,
+        category: seedCat,
+        audienceHint: subtitle || undefined,
+        brandHue: CATEGORY_HUE[seedCat] || 230,
+        modules: modules.map((m) => ({
+          title: m.title,
+          lessons: (m.lessons || []).map((l) => l.title),
+        })),
+        priceInr: parseFloat(price) || 0,
+        promiseLines: [],
+        sampleStudentName: "Student",
+      }
+
+      const { composeCoverPng } = await import("@/lib/cover-image-compose")
+      const baked = await composeCoverPng(seed)
+      if (baked) {
+        setThumbnail(baked)
+        setDirty(true)
+      }
+    } catch (err) {
+      console.error("Failed to regenerate designed cover:", err)
+    } finally {
+      setRegeneratingCover(false)
+    }
+  }
+
+  // Mark form dirty whenever any controlled value changes.
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    setDirty(true)
+  }, [
+    title, subtitle, description, thumbnail, introVideoUrl, category, level, language,
+    tags, slug, price, originalPrice, currency, earlyBirdPrice, earlyBirdUntil, coupons,
+    status, publishAt, visibility, accessPassword, certificateEligible, certificateTemplate, modules,
+    seoTitle, seoDescription, seoKeywords, ogImage,
+  ])
+
+  // Auto-derive slug from title (until the user manually edits the slug).
+  useEffect(() => {
+    if (!slugDirty) setSlug(slugify(title))
+  }, [title, slugDirty])
+
+  // Auto-save 2s after the last edit. Lightweight: just dispatches updateCourse.
+  useEffect(() => {
+    if (!dirty || !course) return
+    const t = setTimeout(() => {
+      void doSave({ silent: true })
+    }, 2000)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, title, subtitle, description, thumbnail, introVideoUrl, category, level,
+      language, tags, slug, price, originalPrice, currency, earlyBirdPrice, earlyBirdUntil,
+      coupons, status, publishAt, visibility, accessPassword, certificateEligible,
+      certificateTemplate, modules, seoTitle, seoDescription, seoKeywords, ogImage])
+
+  const coursePriced = parseFloat(price) > 0
+  const totalLessons = useMemo(() => modules.reduce((a, m) => a + m.lessons.length, 0), [modules])
+  const totalDuration = useMemo(
+    () => modules.reduce((a, m) => a + m.lessons.reduce((la, l) => la + (l.duration || 0), 0), 0),
+    [modules],
+  )
+  const previewLessons = useMemo(
+    () => modules.reduce((a, m) => a + m.lessons.filter((l) => l.isPreview).length, 0),
+    [modules],
+  )
+
+  if (!course) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold">Course not found</h2>
+          <p className="mt-2 text-muted-foreground">The course you are looking for does not exist.</p>
+          <Button asChild className="mt-4">
+            <Link href="/dashboard/courses">Back to Courses</Link>
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  async function doSave(options: { silent?: boolean } = {}) {
+    if (saving) return
+    // Capture the pre-save status so we can detect a draft→published
+    // transition and fire the matching webhook exactly once.
+    const courseBefore = getCourseById(id)
+    const wasPublished = courseBefore?.status === "published"
+    setSaving(true)
+    let currentThumbnail = thumbnail
+    if (thumbnail.startsWith("data:")) {
+      try {
+        currentThumbnail = await uploadDataUrl(thumbnail, "course-cover")
+        setThumbnail(currentThumbnail)
+      } catch (err) {
+        console.error("Failed to upload designed thumbnail on save:", err)
+      }
+    }
+    updateCourse(id, {
+      title,
+      subtitle: subtitle || undefined,
+      description,
+      thumbnail: currentThumbnail,
+      introVideoUrl: introVideoUrl || undefined,
+      category,
+      tags: tags.length > 0 ? tags : undefined,
+      coInstructorIds: coInstructorIds.length > 0 ? coInstructorIds : undefined,
+      level,
+      language,
+      slug: slug || slugify(title),
+      price: parseFloat(price) || 0,
+      originalPrice: originalPrice ? parseFloat(originalPrice) : undefined,
+      currency,
+      earlyBirdPrice: earlyBirdPrice ? parseFloat(earlyBirdPrice) : undefined,
+      earlyBirdUntil: earlyBirdUntil ? new Date(earlyBirdUntil).toISOString() : undefined,
+      coupons: coupons.length > 0 ? coupons : undefined,
+      status,
+      publishAt: publishAt ? new Date(publishAt).toISOString() : undefined,
+      visibility,
+      accessPassword: visibility === "password" ? accessPassword : undefined,
+      certificateEligible,
+      certificateTemplate,
+      modules,
+      totalLessons,
+      totalDuration,
+      seoTitle: seoTitle.trim() || undefined,
+      seoDescription: seoDescription.trim() || undefined,
+      // Split the comma-separated string the form edits back into an array;
+      // strip empties so trailing commas don't produce blank tags.
+      seoKeywords: seoKeywords
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean),
+      ogImage: ogImage.trim() || undefined,
+    })
+    if (!wasPublished && status === "published") {
+      fireWebhookEvent("course.published", { id, title, slug: slug || slugify(title) })
+    }
+    setLastSavedAt(new Date())
+    setDirty(false)
+    // Settle the spinner briefly even on silent autosaves for nicer UX.
+    setTimeout(() => setSaving(false), options.silent ? 250 : 400)
+  }
+
+  return (
+    <div className="space-y-6">
+      <ProductTour tourId="courses-edit-v1" steps={COURSE_EDIT_TOUR} />
+      {/* Header */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              if (confirmLeave()) router.push(`/dashboard/courses/${id}`)
+            }}
+            aria-label="Back"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Edit Course</h1>
+            <p className="text-xs text-muted-foreground">
+              {saving ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Saving…
+                </span>
+              ) : dirty ? (
+                "Unsaved changes — autosave in 2s"
+              ) : lastSavedAt ? (
+                `Saved · ${lastSavedAt.toLocaleTimeString()}`
+              ) : (
+                "All changes saved"
+              )}
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <TakeATourButton tourId="courses-edit-v1" />
+          <Button variant="outline" asChild data-tour="course-edit-preview">
+            <Link href={`/learn/${slug || course.slug}`} target="_blank" rel="noreferrer">
+              <Eye className="mr-2 h-4 w-4" />
+              Preview
+            </Link>
+          </Button>
+          <Button onClick={() => doSave()} disabled={saving} data-tour="course-edit-save">
+            {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+            Save changes
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+        {/* Main */}
+        <Tabs defaultValue="basics" className="space-y-4">
+          <TabsList className="w-full justify-start gap-1" data-tour="course-edit-tabs">
+            <TabsTrigger value="basics">Basics</TabsTrigger>
+            <TabsTrigger value="curriculum">
+              Curriculum
+              <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">{totalLessons}</Badge>
+            </TabsTrigger>
+            <TabsTrigger value="pricing">Pricing</TabsTrigger>
+            <TabsTrigger value="access">Access</TabsTrigger>
+            <TabsTrigger value="seo">SEO</TabsTrigger>
+          </TabsList>
+
+          {/* --- Basics --- */}
+          <TabsContent value="basics" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Basic information</CardTitle>
+                <CardDescription>Title, subtitle, description, and intro media.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="title">Course title *</Label>
+                    <AIGenerateButton
+                      label="Suggest titles"
+                      size="xs"
+                      disabled={!category && !title}
+                      onGenerate={async () => {
+                        const topic = title.trim() || category || ""
+                        if (!topic) {
+                          toast.error("Enter a category or any working title first so AI knows the topic.")
+                          return
+                        }
+                        const r = await aiCourseTitles({ topic })
+                        if ("error" in r) {
+                          toast.error(r.error)
+                          return
+                        }
+                        const picked = r.titles[0]
+                        if (picked) {
+                          setTitle(picked)
+                          toast.success("Title suggested — review and edit as you like.", {
+                            description: r.titles.slice(1).join(" · ") || undefined,
+                          })
+                        }
+                      }}
+                    />
+                  </div>
+                  <Input
+                    id="title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Complete Full-Stack JavaScript Bootcamp"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="subtitle">Subtitle</Label>
+                  <Input
+                    id="subtitle"
+                    value={subtitle}
+                    onChange={(e) => setSubtitle(e.target.value)}
+                    placeholder="Master modern JS, React, Node, and MongoDB by shipping real apps."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="desc">Description</Label>
+                    <AIGenerateButton
+                      label="Write with AI"
+                      size="xs"
+                      disabled={!title.trim()}
+                      onGenerate={async () => {
+                        if (!title.trim()) {
+                          toast.error("Give the course a title first.")
+                          return
+                        }
+                        const r = await aiCourseDescription({ title: title.trim(), topic: category || undefined })
+                        if ("error" in r) {
+                          toast.error(r.error)
+                          return
+                        }
+                        setDescription(r.description)
+                        toast.success("Description drafted. Edit anything you don't love.")
+                      }}
+                    />
+                  </div>
+                  <RichTextEditor
+                    value={description}
+                    onChange={setDescription}
+                    placeholder="What students will learn, who it's for, and what makes it different. Format text, drop in images, embed YouTube previews."
+                    minHeight={180}
+                  />
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Thumbnail</Label>
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs text-primary"
+                        onClick={handleRegenerateCover}
+                        disabled={regeneratingCover}
+                      >
+                        {regeneratingCover ? (
+                          <>
+                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                            Regenerating...
+                          </>
+                        ) : (
+                          "Regenerate designed cover"
+                        )}
+                      </Button>
+                    </div>
+                    <ThumbnailField
+                      value={thumbnail}
+                      onChange={setThumbnail}
+                      defaultTitle={title}
+                      folder="courses"
+                    />
+                    <p className="text-[11px] text-muted-foreground">
+                      Upload, search Unsplash, or design one. Recommended 1280×720.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Intro video</Label>
+                    <FileUploadField
+                      value={introVideoUrl}
+                      onChange={setIntroVideoUrl}
+                      accept="video/mp4,video/webm,video/quicktime"
+                      maxSizeMB={100}
+                      urlPlaceholder="YouTube, Vimeo, Loom, or MP4 link"
+                      hint="Tip: host long videos on YouTube/Vimeo/Bunny and paste the link."
+                    />
+                    <VideoUrlPreview url={introVideoUrl} />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Discovery</CardTitle>
+                <CardDescription>How students find and judge your course.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>Category</Label>
+                    <CategoryCombobox
+                      value={category}
+                      onChange={setCategory}
+                      placeholder="Pick a category"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Level</Label>
+                    <Select value={level} onValueChange={(v) => setLevel(v as "beginner" | "intermediate" | "advanced")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="beginner">Beginner</SelectItem>
+                        <SelectItem value="intermediate">Intermediate</SelectItem>
+                        <SelectItem value="advanced">Advanced</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Language</Label>
+                    <Input value={language} onChange={(e) => setLanguage(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1.5">
+                    <TagIcon className="h-3.5 w-3.5" /> Tags
+                  </Label>
+                  <TagsInput
+                    value={tags}
+                    onChange={setTags}
+                    suggestions={CATEGORY_TAG_SUGGESTIONS[category]}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* --- Curriculum --- */}
+          <TabsContent value="curriculum" className="space-y-4">
+            {/* Course-level co-instructors. The primary owner stays
+                the headline teacher (shown on the hero, signs the
+                certificate); these are additional contributors. Only
+                renders when there's another faculty member to
+                actually pick. */}
+            {facultyPool.length > 1 && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Co-instructors</CardTitle>
+                  <CardDescription>
+                    Additional teachers who can build and grade alongside the primary owner.
+                    Tap a name to add or remove.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex flex-wrap gap-2">
+                    {facultyPool
+                      .filter((u) => u.id !== course?.instructor?.id)
+                      .map((u) => {
+                        const selected = coInstructorIds.includes(u.id)
+                        return (
+                          <button
+                            type="button"
+                            key={u.id}
+                            onClick={() =>
+                              setCoInstructorIds((prev) =>
+                                prev.includes(u.id)
+                                  ? prev.filter((x) => x !== u.id)
+                                  : [...prev, u.id],
+                              )
+                            }
+                            className={
+                              "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition " +
+                              (selected
+                                ? "border-primary bg-primary text-primary-foreground"
+                                : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-primary/5")
+                            }
+                          >
+                            {u.avatar ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={u.avatar} alt="" className="h-5 w-5 rounded-full object-cover" />
+                            ) : (
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[9px] font-semibold text-muted-foreground">
+                                {u.name.split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? "").join("")}
+                              </span>
+                            )}
+                            {u.name}
+                          </button>
+                        )
+                      })}
+                    {facultyPool.filter((u) => u.id !== course?.instructor?.id).length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        No other faculty in this workspace yet — invite some from{" "}
+                        <a className="font-medium text-primary hover:underline" href="/dashboard/faculty">
+                          Faculty
+                        </a>
+                        .
+                      </p>
+                    )}
+                  </div>
+                  {coInstructorIds.length > 0 && (
+                    <p className="mt-3 text-[11px] text-muted-foreground">
+                      {coInstructorIds.length} co-instructor{coInstructorIds.length === 1 ? "" : "s"} selected.
+                      Set the per-module owner inside each module below if you want to split the syllabus.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <div>
+                  <CardTitle>Curriculum</CardTitle>
+                  <CardDescription>
+                    {modules.length} module{modules.length === 1 ? "" : "s"} · {totalLessons} lesson{totalLessons === 1 ? "" : "s"} · {totalDuration} min · {previewLessons} free preview
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <CurriculumEditor
+                  modules={modules}
+                  onChange={setModules}
+                  coursePriced={coursePriced}
+                  courseId={id}
+                  faculty={facultyPool}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* --- Pricing --- */}
+          <TabsContent value="pricing" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Pricing model</CardTitle>
+                <CardDescription>
+                  {coursePriced
+                    ? "This is a paid course. Lessons marked as free preview are accessible to everyone."
+                    : "This course is free. Every lesson is accessible to enrolled students."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-[140px_1fr_1fr]">
+                  <div className="space-y-2">
+                    <Label>Currency</Label>
+                    <Select value={currency} onValueChange={setCurrency}>
+                      {/* Trigger only renders the short value (₹ INR / $ USD);
+                          the long label lives inside the dropdown so it doesn't
+                          overflow into the adjacent Price input. */}
+                      <SelectTrigger>
+                        <SelectValue placeholder={currency}>
+                          <span className="font-medium">
+                            {currencyInfo(currency).symbol} {currency}
+                          </span>
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SUPPORTED_CURRENCIES.map((c) => (
+                          <SelectItem key={c.code} value={c.code} disabled={c.disabled}>
+                            <span className="font-medium">{c.symbol} {c.code}</span>
+                            <span className="ml-2 text-muted-foreground">— {c.label}</span>
+                            {c.disabled && (
+                              <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                Coming soon
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Price (0 = free)</Label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                        {currencyInfo(currency).symbol}
+                      </span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={price}
+                        onChange={(e) => setPrice(e.target.value)}
+                        className="pl-8"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Original (strike-through)</Label>
+                    <div className="relative">
+                      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                        {currencyInfo(currency).symbol}
+                      </span>
+                      <Input
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={originalPrice}
+                        onChange={(e) => setOriginalPrice(e.target.value)}
+                        placeholder="Optional"
+                        className="pl-8"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Early-bird price</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={earlyBirdPrice}
+                      onChange={(e) => setEarlyBirdPrice(e.target.value)}
+                      placeholder="Optional"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Early-bird ends</Label>
+                    <Input
+                      type="datetime-local"
+                      value={earlyBirdUntil}
+                      onChange={(e) => setEarlyBirdUntil(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <CouponsCard coupons={coupons} onChange={setCoupons} />
+          </TabsContent>
+
+          {/* --- Access --- */}
+          <TabsContent value="access" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Publishing</CardTitle>
+                <CardDescription>
+                  Draft courses are invisible. Scheduled courses publish automatically at the set time.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={status} onValueChange={(v) => setStatus(v as "draft" | "published" | "archived")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="draft">Draft</SelectItem>
+                        <SelectItem value="published">Published</SelectItem>
+                        <SelectItem value="archived">Archived</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Auto-publish at</Label>
+                    <Input
+                      type="datetime-local"
+                      value={publishAt}
+                      onChange={(e) => setPublishAt(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Visibility</CardTitle>
+                <CardDescription>Who can see this course once it&apos;s published?</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {(
+                    [
+                      { key: "public", icon: <Globe className="h-4 w-4" />, label: "Public", desc: "Discoverable + open" },
+                      { key: "unlisted", icon: <Eye className="h-4 w-4" />, label: "Unlisted", desc: "Only via link" },
+                      { key: "password", icon: <Lock className="h-4 w-4" />, label: "Password", desc: "Gated by password" },
+                      { key: "private", icon: <Lock className="h-4 w-4" />, label: "Private", desc: "Invite-only" },
+                    ] as Array<{ key: CourseVisibility; icon: React.ReactNode; label: string; desc: string }>
+                  ).map((v) => {
+                    const active = visibility === v.key
+                    return (
+                      <button
+                        key={v.key}
+                        type="button"
+                        onClick={() => setVisibility(v.key)}
+                        className={cn(
+                          "rounded-md border p-3 text-left transition-colors",
+                          active
+                            ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                            : "border-border hover:bg-muted/40",
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5 text-sm font-medium">
+                          {v.icon}
+                          {v.label}
+                        </div>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{v.desc}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+                {visibility === "password" && (
+                  <div className="space-y-2">
+                    <Label>Access password</Label>
+                    <Input
+                      value={accessPassword}
+                      onChange={(e) => setAccessPassword(e.target.value)}
+                      placeholder="Anyone with this password can view the course"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Stored in plain text for the POC — hash this on the server before production.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="space-y-2">
+                <CardTitle>Certification</CardTitle>
+                <CardDescription>Auto-issue a certificate when students complete the course. Optional.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-md border border-border/60 p-3">
+                  <div className="flex items-start gap-2">
+                    <Award className="mt-0.5 h-4 w-4 text-accent" />
+                    <div>
+                      <p className="text-sm font-medium">Issue a certificate on completion</p>
+                      <p className="text-xs text-muted-foreground">
+                        {certificateEligible
+                          ? `Using ${resolveTemplateLabel(certificateTemplate)}.`
+                          : "Students will not receive a certificate when they finish this course."}
+                      </p>
+                    </div>
+                  </div>
+                  <Switch checked={certificateEligible} onCheckedChange={setCertificateEligible} />
+                </div>
+
+                {certificateEligible && (
+                  <CertificateTemplatePicker
+                    value={certificateTemplate}
+                    onSelect={setCertificateTemplate}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* --- SEO --- */}
+          <TabsContent value="seo" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>URL</CardTitle>
+                <CardDescription>The path students will see in their browser.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <Label>Slug</Label>
+                  <div className="flex gap-2">
+                    <div className="flex items-center rounded-l-md border border-r-0 border-input bg-muted/50 px-3 text-xs text-muted-foreground">
+                      /learn/
+                    </div>
+                    <Input
+                      className="rounded-l-none"
+                      value={slug}
+                      onChange={(e) => {
+                        setSlug(slugify(e.target.value))
+                        setSlugDirty(true)
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => {
+                        setSlug(slugify(title))
+                        setSlugDirty(false)
+                      }}
+                      title="Regenerate from title"
+                    >
+                      <Wand2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {slug ? `Preview: /learn/${slug}` : "Will be generated from the title."}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Search engine listing — pre-filled from the course's own
+                title / description / category / thumbnail so the form is
+                never blank. Teacher can edit any field, and the "Reset to
+                course defaults" link below puts everything back. */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle>Search engine listing</CardTitle>
+                    <CardDescription>
+                      Pre-filled from the course details below. Edit anything you want — clearing a field uses the course default.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={resetSeoToCourseDefaults}
+                    className="shrink-0 text-xs"
+                    title="Restore meta title, description, keywords, and OG image from the course's own fields"
+                  >
+                    <Wand2 className="mr-1 h-3.5 w-3.5" />
+                    Reset to course defaults
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="seo-title">Meta title</Label>
+                    <span className={cn(
+                      "text-[11px]",
+                      seoTitle.length > 60 ? "text-destructive" : "text-muted-foreground",
+                    )}>
+                      {seoTitle.length}/60
+                    </span>
+                  </div>
+                  <Input
+                    id="seo-title"
+                    value={seoTitle}
+                    onChange={(e) => setSeoTitle(e.target.value)}
+                    placeholder={title || "Course title"}
+                    maxLength={80}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Google truncates around 60 characters. Keep the keyword first.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="seo-description">Meta description</Label>
+                    <span className={cn(
+                      "text-[11px]",
+                      seoDescription.length > 160 ? "text-destructive" : "text-muted-foreground",
+                    )}>
+                      {seoDescription.length}/160
+                    </span>
+                  </div>
+                  <Textarea
+                    id="seo-description"
+                    value={seoDescription}
+                    onChange={(e) => setSeoDescription(e.target.value)}
+                    placeholder="One or two sentences that pitch the course to a stranger."
+                    rows={3}
+                    maxLength={200}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Google truncates around 160 characters.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="seo-keywords">Keywords</Label>
+                  <Input
+                    id="seo-keywords"
+                    value={seoKeywords}
+                    onChange={(e) => setSeoKeywords(e.target.value)}
+                    placeholder="comma, separated, phrases — e.g. JEE physics, NCERT, mock tests"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Lightly weighted by modern search engines but useful for your own analytics and site search.
+                  </p>
+                </div>
+
+                {/* Live SERP preview — gives the teacher a feel for what
+                    a Google result will look like before they publish. */}
+                <div className="rounded-md border border-border bg-background p-3">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Google preview
+                  </p>
+                  <p className="truncate text-xs text-emerald-700">
+                    {process.env.NEXT_PUBLIC_APP_URL ?? "https://yourdomain.com"}/learn/{slug || "slug"}
+                  </p>
+                  <p className="mt-0.5 truncate text-base text-[#1a0dab]">
+                    {(seoTitle || title || "Course title").slice(0, 60)}
+                  </p>
+                  <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                    {(seoDescription
+                      || description.replace(/<[^>]*>/g, "").trim()
+                      || "Add a meta description to control what Google shows here."
+                    ).slice(0, 160)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Social share card — separate image because the course
+                thumbnail (16:9) often doesn't have the right safe area
+                for OG (1.91:1). Falls back to the thumbnail if blank. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Social share image</CardTitle>
+                <CardDescription>
+                  Shown when this page is shared on Twitter, LinkedIn, WhatsApp, Slack, etc. Falls back to the course thumbnail.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FileUploadField
+                  value={ogImage}
+                  onChange={setOgImage}
+                  accept="image/png,image/jpeg,image/webp"
+                  maxSizeMB={4}
+                  urlPlaceholder="https://…/social-card.png"
+                  showImagePreview
+                  hint="Recommended 1200×630, under 1 MB. Keep text in the centre 60%."
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+
+        {/* Sidebar summary */}
+        <aside className="space-y-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Summary</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <SummaryRow label="Modules" value={`${modules.length}`} />
+              <SummaryRow label="Lessons" value={`${totalLessons}`} />
+              <SummaryRow label="Total duration" value={`${totalDuration} min`} />
+              <SummaryRow label="Free preview" value={`${previewLessons}`} />
+              <SummaryRow
+                label="Price"
+                value={coursePriced ? formatMoney(parseFloat(price), currency) : "Free"}
+              />
+              <SummaryRow label="Status" value={status} />
+              <SummaryRow label="Visibility" value={visibility} />
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
+    </div>
+  )
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-medium capitalize">{value}</span>
+    </div>
+  )
+}
+
+function CouponsCard({
+  coupons,
+  onChange,
+}: {
+  coupons: Coupon[]
+  onChange: (next: Coupon[]) => void
+}) {
+  const [code, setCode] = useState("")
+  const [discount, setDiscount] = useState("10")
+  const [validUntil, setValidUntil] = useState("")
+  const [maxUses, setMaxUses] = useState("")
+
+  const add = () => {
+    if (!code.trim()) return
+    const c: Coupon = {
+      id: generateId("coup"),
+      code: code.trim().toUpperCase(),
+      discountPercent: Math.min(100, Math.max(0, parseInt(discount) || 0)),
+      validUntil: validUntil ? new Date(validUntil).toISOString() : undefined,
+      maxUses: maxUses ? parseInt(maxUses) : undefined,
+      uses: 0,
+      createdAt: new Date().toISOString(),
+    }
+    onChange([...coupons, c])
+    setCode("")
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Coupons</CardTitle>
+        <CardDescription>Time-limited discounts students can apply at checkout.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {coupons.length > 0 && (
+          <ul className="space-y-2">
+            {coupons.map((c) => (
+              <li key={c.id} className="flex items-center gap-3 rounded-md border border-border/60 p-3">
+                <code className="rounded bg-muted px-2 py-0.5 text-xs font-bold tracking-wide">{c.code}</code>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  title="Copy code"
+                  onClick={() => navigator.clipboard?.writeText(c.code).catch(() => {})}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+                <span className="text-sm tabular-nums">{c.discountPercent}% off</span>
+                <span className="text-xs text-muted-foreground">
+                  {c.uses}{c.maxUses ? `/${c.maxUses}` : ""} uses
+                  {c.validUntil ? ` · until ${new Date(c.validUntil).toLocaleDateString()}` : ""}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="ml-auto h-7 w-7 text-destructive hover:text-destructive"
+                  onClick={() => onChange(coupons.filter((x) => x.id !== c.id))}
+                  aria-label="Delete coupon"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="grid gap-3 sm:grid-cols-[1.4fr_1fr_1.2fr_1fr_auto]">
+          <Input
+            placeholder="CODE"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            className="font-mono uppercase"
+          />
+          <Input
+            type="number"
+            placeholder="% off"
+            value={discount}
+            onChange={(e) => setDiscount(e.target.value)}
+          />
+          <Input
+            type="datetime-local"
+            value={validUntil}
+            onChange={(e) => setValidUntil(e.target.value)}
+          />
+          <Input
+            type="number"
+            placeholder="Max uses"
+            value={maxUses}
+            onChange={(e) => setMaxUses(e.target.value)}
+          />
+          <Button onClick={add} disabled={!code.trim()}>
+            <Plus className="mr-1 h-4 w-4" />
+            Add
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}

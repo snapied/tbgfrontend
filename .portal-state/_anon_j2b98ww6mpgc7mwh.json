@@ -1,0 +1,1098 @@
+{
+  "lms.users.v1": [
+    {
+      "id": "user-mpg74u2p-3hpfvf1qi",
+      "role": "student",
+      "name": "drawat MAY 223",
+      "email": "drawat+may222@shorterloop.com",
+      "createdAt": "2026-05-22T00:43:30.241Z",
+      "phone": "+919897647772"
+    },
+    {
+      "id": "user-mpg6rury-yydddgf98",
+      "role": "student",
+      "name": "drawat+may221@shorterloop.com",
+      "email": "drawat+may221@shorterloop.com",
+      "createdAt": "2026-05-22T00:33:24.622Z",
+      "phone": "+919897647760"
+    },
+    {
+      "id": "user-mpg6gqpl-b8jipda6q",
+      "role": "student",
+      "name": "drawat may 22",
+      "email": "drawat+may22@shorterloop.com",
+      "createdAt": "2026-05-22T00:24:46.136Z",
+      "avatar": "https://cdn.thebigclass.com/assets/acme-inc/students/2026-05/mpg6gawz-8e1d21b5b2394b72.jpg",
+      "bio": "I am testing the platform",
+      "phone": "+919897647770",
+      "dateOfBirth": "2000-06-19",
+      "age": 25,
+      "gender": "male",
+      "linkedInUrl": "http://localhost:3000/dashboard/students/new",
+      "githubUrl": "http://localhost:3000/dashboard/students/new",
+      "twitterUrl": "http://localhost:3000/dashboard/students/new",
+      "portfolioUrl": "http://localhost:3000/dashboard/students/new"
+    },
+    {
+      "id": "user-mperjjj2-mc2qwjto5",
+      "name": "John. deo",
+      "email": "deo@gmail.com",
+      "phone": "+919897647774",
+      "role": "instructor",
+      "createdAt": "2026-05-21T00:39:16.382Z",
+      "invitedAt": "2026-05-21T00:39:16.382Z"
+    },
+    {
+      "id": "user-mpe8sm09-3878b9",
+      "name": "Priya Sharma",
+      "email": "drawat+priya@shorterloop.com",
+      "role": "admin",
+      "phone": "+919897647774",
+      "createdAt": "2026-05-20T15:54:26.793Z",
+      "avatar": "https://cdn.thebigclass.com/assets/acme-inc/general/2026-05/mpe8zcnw-37dab8b589d8a1c9.jpg",
+      "lastLoginAt": "2026-05-21T13:50:27.929Z"
+    },
+    {
+      "id": "user-mpf1dizm-jx1v01i06",
+      "role": "student",
+      "name": "adsads",
+      "email": "drawat+may21@shorterloop.com",
+      "createdAt": "2026-05-21T05:14:31.906Z",
+      "phone": "+919897647773"
+    }
+  ],
+  "lms.courses.v1": [
+    {
+      "id": "course-mpf1l740-xqcxyqz37",
+      "title": "Yoga Basics for Indian Beginners",
+      "slug": "yoga-basics-for-indian-beginners",
+      "description": "This course is for Indian adults who have never practiced yoga before and feel unsure where to start. You will learn foundational poses, breathing techniques, and simple sequences that fit into a busy daily routine, helping you move with more ease and less stiffness.\n\nBy the end you'll be able to:\n\n- Identify and safely perform 6 basic yoga poses (asanas) for flexibility and strength\n- Use simple breathing exercises (pranayama) to calm your mind and reduce stress\n- Follow a 15-minute morning sequence designed for Indian body types and living conditions\n- Modify poses using a chair, wall, or cushion when you have limited space or mobility\n- Recognize common alignment mistakes and correct them without injury\n- Build a sustainable home practice that respects your energy levels and schedule\n\nPrerequisites: No prior yoga experience needed. A yoga mat or firm carpet, comfortable clothing, and an empty stomach (wait 2-3 hours after a meal) are recommended.",
+      "thumbnail": "https://cdn.thebigclass.com/assets/acme-inc/general/2026-05/mpfjrw72-64e8565a7c424d93.jpg",
+      "instructor": {
+        "id": "user-mpe8sm09-3878b9",
+        "name": "Priya Sharma",
+        "email": "drawat+priya@shorterloop.com",
+        "role": "admin",
+        "phone": "+919897647774",
+        "createdAt": "2026-05-20T15:54:26.793Z",
+        "avatar": "https://cdn.thebigclass.com/assets/acme-inc/general/2026-05/mpe8zcnw-37dab8b589d8a1c9.jpg",
+        "lastLoginAt": "2026-05-21T00:37:23.961Z"
+      },
+      "price": 0,
+      "currency": "INR",
+      "category": "Storytime & Rhymes",
+      "level": "beginner",
+      "language": "English",
+      "modules": [
+        {
+          "id": "mod-mpfgbl4a-199a94jch",
+          "title": "Module 1",
+          "description": "",
+          "lessons": [
+            {
+              "id": "les-mpfgbq40-8vddy2rp6",
+              "title": "Untitled lessonasd",
+              "description": "",
+              "type": "text",
+              "content": "### Opening Hook\n\nYou might think yoga is only for flexible people or those who can twist into pretzel-like shapes. But the real foundation of yoga is not about flexibility—it is about connecting your breath with simple movements to calm your mind. For beginners in India, starting with basic poses can help you build strength, improve posture, and reduce stress without needing any fancy equipment.\n\n### The Importance of Breath Awareness\n\nBreathing is the anchor of every yoga practice. In Indian traditions, this is called *pranayama*. When you focus on your breath, you signal your nervous system to relax. A simple technique is to inhale deeply through your nose for four counts, hold for four counts, and exhale through your nose for four counts. This calms your mind and prepares your body for movement.\n\n### Tadasana (Mountain Pose)\n\nTadasana is the foundation of all standing poses. Stand with your feet together, arms by your side. Press your feet firmly into the ground, engage your thighs, and lengthen your spine. Roll your shoulders back and down. Keep your chin parallel to the floor. Hold for 30 seconds while breathing deeply. This pose improves posture and strengthens your legs and core.\n\n### Adho Mukha Svanasana (Downward-Facing Dog)\n\nThis pose stretches your hamstrings, calves, and shoulders. Start on your hands and knees. Tuck your toes under and lift your hips toward the ceiling. Straighten your legs as much as comfortable, keeping your head between your arms. Press your heels gently toward the floor. Hold for 5-8 breaths. It helps relieve back tension and energizes your body.\n\n### Balasana (Child’s Pose)\n\nA resting pose to release lower back tension. Kneel on the floor, touch your big toes together, and sit on your heels. Fold forward, resting your forehead on the mat. Extend your arms forward or place them alongside your body. Breathe deeply for 1-2 minutes. This pose calms the mind and gently stretches the spine.\n\n### Try It Yourself: 5-Minute Morning Flow\n\n- Stand in Tadasana for 30 seconds. Breathe deeply.\n- Inhale, raise your arms overhead. Exhale, fold forward into Uttanasana (standing forward bend). Let your head hang heavy.\n- Inhale, lift your chest halfway into Ardha Uttanasana (half forward bend). Exhale, step back into Downward-Facing Dog. Hold for 5 breaths.\n- Lower your knees to the mat and rest in Child’s Pose for 1 minute.\n- Slowly roll up to standing. Repeat this flow 2 times.\n\n### Recap\n\n- Breath awareness is the core of yoga; practice *pranayama* to calm your mind before poses.\n- Tadasana builds posture and strength; it is the starting point for most standing poses.\n- Downward-Facing Dog stretches the whole back body and relieves tension.\n- Child’s Pose is a safe resting position to use anytime you need a break.",
+              "duration": 10,
+              "order": 1,
+              "isPreview": true,
+              "isLocked": false
+            }
+          ],
+          "order": 1
+        }
+      ],
+      "totalDuration": 10,
+      "totalLessons": 1,
+      "enrolledCount": 1,
+      "rating": 0,
+      "reviewCount": 0,
+      "status": "published",
+      "features": [
+        "Certificate of completion"
+      ],
+      "requirements": [],
+      "whatYouLearn": [],
+      "certificateEligible": false,
+      "certificateTemplate": "modern",
+      "createdAt": "2026-05-21T05:20:35.472Z",
+      "updatedAt": "2026-05-22T01:35:24.888Z",
+      "visibility": "public",
+      "seoTitle": "My yoga starting",
+      "seoDescription": "asd",
+      "seoKeywords": [
+        "Storytime & Rhymes"
+      ],
+      "ogImage": "https://cdn.thebigclass.com/assets/acme-inc/general/2026-05/mpfgbcl9-f4c4ba82362e322d.jpg",
+      "publishAt": "2026-05-21T02:49:00.000Z"
+    },
+    {
+      "id": "course-mpf1jv65-3vr7kuldx",
+      "title": "ad",
+      "slug": "ad",
+      "description": "<p>asdds</p>",
+      "thumbnail": "/placeholder.svg?height=400&width=600",
+      "instructor": {
+        "id": "user-mpe8sm09-3878b9",
+        "name": "Priya Sharma",
+        "email": "drawat+priya@shorterloop.com",
+        "role": "admin",
+        "phone": "+919897647774",
+        "createdAt": "2026-05-20T15:54:26.793Z",
+        "avatar": "https://cdn.thebigclass.com/assets/acme-inc/general/2026-05/mpe8zcnw-37dab8b589d8a1c9.jpg",
+        "lastLoginAt": "2026-05-21T00:37:23.961Z"
+      },
+      "price": 700,
+      "currency": "INR",
+      "category": "Toddler Activities",
+      "level": "beginner",
+      "language": "English",
+      "modules": [],
+      "totalDuration": 0,
+      "totalLessons": 0,
+      "enrolledCount": 1,
+      "rating": 0,
+      "reviewCount": 0,
+      "status": "published",
+      "features": [
+        "Certificate of completion"
+      ],
+      "requirements": [],
+      "whatYouLearn": [],
+      "certificateEligible": false,
+      "certificateTemplate": "modern",
+      "createdAt": "2026-05-21T05:19:33.236Z",
+      "updatedAt": "2026-05-22T02:33:57.593Z",
+      "visibility": "public",
+      "seoTitle": "ad",
+      "seoDescription": "asdds",
+      "seoKeywords": [
+        "Toddler Activities"
+      ],
+      "ogImage": "/placeholder.svg?height=400&width=600",
+      "originalPrice": 900,
+      "earlyBirdPrice": 700,
+      "earlyBirdUntil": "2026-05-29T21:00:00.000Z",
+      "coupons": [
+        {
+          "id": "coup-mpgayy4m-vz7d2qkgi",
+          "code": "CODE21",
+          "discountPercent": 10,
+          "validUntil": "2026-05-30T02:30:00.000Z",
+          "maxUses": 1,
+          "uses": 0,
+          "createdAt": "2026-05-22T02:30:54.022Z"
+        }
+      ],
+      "publishAt": "2026-05-21T15:30:00.000Z"
+    }
+  ],
+  "lms.enrollments.v1": [
+    {
+      "id": "enroll-mpg8ksed-qforxx2rt",
+      "courseId": "course-mpf1l740-xqcxyqz37",
+      "studentId": "user-mpg74u2p-3hpfvf1qi",
+      "enrolledAt": "2026-05-22T01:23:54.181Z",
+      "progress": 0,
+      "lastAccessedAt": "2026-05-22T01:23:54.181Z",
+      "completedLessons": []
+    },
+    {
+      "id": "enroll-mpgaz9ze-fvnw2n9iu",
+      "courseId": "course-mpf1jv65-3vr7kuldx",
+      "studentId": "user-mperjjj2-mc2qwjto5",
+      "enrolledAt": "2026-05-22T02:31:09.386Z",
+      "progress": 0,
+      "lastAccessedAt": "2026-05-22T02:31:09.386Z",
+      "completedLessons": []
+    }
+  ],
+  "lms.liveSessions.v1": [
+    {
+      "id": "session-mpgalxvm-mowqzdghr",
+      "courseId": "course-mpf1l740-xqcxyqz37",
+      "title": "Live q&a testing",
+      "description": "Live q&a testing",
+      "provider": "in-house",
+      "meetingUrl": "",
+      "scheduledAt": "2026-05-30T09:00",
+      "durationMinutes": 60,
+      "hostId": "user-mpe8sm09-3878b9",
+      "status": "scheduled",
+      "roomState": "scheduled",
+      "roomCode": "3wp88ou2hj",
+      "createdAt": "2026-05-22T02:20:47.170Z",
+      "notifiedAt": "2026-05-22T02:20:47.170Z",
+      "materials": []
+    }
+  ],
+  "lms.attendance.v1": [],
+  "lms.sentEmails.v1": [],
+  "lms.assignments.v1": [
+    {
+      "id": "assign-mpg9iyj1-io6t3iu4q",
+      "title": "ad",
+      "description": "<p>ddd</p>",
+      "courseId": "course-mpf1l740-xqcxyqz37",
+      "kind": "assignment",
+      "maxScore": 100,
+      "resources": [],
+      "createdAt": "2026-05-22T01:50:28.429Z"
+    },
+    {
+      "id": "assign-mpg9j263-buz5nqmgr",
+      "title": "ad",
+      "description": "<p>ddd</p>",
+      "courseId": "course-mpf1l740-xqcxyqz37",
+      "kind": "assignment",
+      "maxScore": 100,
+      "resources": [],
+      "createdAt": "2026-05-22T01:50:33.147Z"
+    }
+  ],
+  "lms.submissions.v1": [],
+  "lms.assignmentViews.v1": [
+    {
+      "id": "aview-mpgadtao-itomwlncb",
+      "assignmentId": "assign-mpg9j263-buz5nqmgr",
+      "studentId": "user-mpg74u2p-3hpfvf1qi",
+      "viewedAt": "2026-05-22T02:14:27.984Z"
+    }
+  ],
+  "lms.reviews.v1": [],
+  "lms.doubts.v1": [],
+  "lms.messages.v1": [
+    {
+      "id": "msg-mpg8nnw7-kobj1fg1q",
+      "senderId": "user-mpe8sm09-3878b9",
+      "recipientIds": [
+        "user-mpg74u2p-3hpfvf1qi"
+      ],
+      "channels": [
+        "in-app",
+        "email",
+        "whatsapp"
+      ],
+      "subject": "Hi",
+      "body": "<p>hello</p>",
+      "category": "reminder",
+      "createdAt": "2026-05-22T01:26:08.311Z"
+    }
+  ],
+  "lms.studentGroups.v1": [
+    {
+      "id": "batch-mperv8ob-kee51usll",
+      "name": "dasdsa",
+      "description": "asd",
+      "purpose": "asd",
+      "color": "#0a3024",
+      "memberIds": [
+        "user-mpf1dizm-jx1v01i06"
+      ],
+      "createdAt": "2026-05-21T00:48:22.187Z",
+      "updatedAt": "2026-05-21T13:51:09.851Z"
+    }
+  ],
+  "lms.batchPosts.v1": [],
+  "lms.whiteboards.v1": [
+    {
+      "id": "wb-mpfclojl-qhtzw2gsm",
+      "title": "Grid board",
+      "createdAt": "2026-05-21T10:28:48.129Z",
+      "updatedAt": "2026-05-21T10:28:48.129Z",
+      "createdBy": "user-mpe8sm09-3878b9",
+      "persistenceKey": "wb-mpfclojl-qhtzw2gsm"
+    },
+    {
+      "id": "wb-mpe9pbek-x1v3vuw35",
+      "title": "Whiteboard · May 20, 09:49 PM",
+      "createdAt": "2026-05-20T16:19:52.700Z",
+      "updatedAt": "2026-05-21T06:30:33.285Z",
+      "createdBy": "user-mpe8sm09-3878b9",
+      "persistenceKey": "wb-mpe9pbek-x1v3vuw35",
+      "visibility": "private",
+      "thumbnail": "data:image/svg+xml;charset=utf-8,%3Csvg%20version%3D%221.1%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20589.4874267578125%20457.69140625%22%20width%3D%221178.974853515625%22%20height%3D%22915.3828125%22%3E%3C!--%20svg-source%3Aexcalidraw%20--%3E%3Cmetadata%2F%3E%3Cdefs%3E%3Cstyle%20class%3D%22style-fonts%22%3E%0A%20%20%20%20%20%20%40font-face%20%7B%20font-family%3A%20Excalifont%3B%20src%3A%20url(data%3Afont%2Fwoff2%3Bbase64%2Cd09GMgABAAAAAAWcAA4AAAAACZAAAAVHAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGhYbgSwcNAZgAEwRCAqJGIcOCxAAATYCJAMcBCAFgxgHIBuFB8iOwrZtE8GZTL68EREPxdrr270LoPo2hAoUsYoEYCPCxmUibMHY%2BurW%2BPZ%2BoFv9m1piUJ6WCAuqvfOCPtb%2FbppdH8JJCF%2FA1Kn8FpBsnqIJ01jn63xMHUssgtFgcIA8aNJaQSanwAWjetVtYDAZZjgPYpCFcXR08wKtcBUphHoh0GxMAovVjLwy4FwMdbcC56a7rgU4j1W97cBhAX%2Bj8FDX3Q42bKRSCkOjNP2G2JaGqQHKoRBSaaRm%2BKVC3QkUDumJThBLCTzAFVgvswx5BSw1poJRCWA9R8YxiP3l0GqQqxuZBXAFLvUU%2Ff8pwLLoR%2FpJgC8A4kPf1M0GiQI1R7%2FGwqTlfKOUrjRp1%2BNiX2pcd6g%2Bq4WKrl6HXKerSqoNAdrLTcQrQPziahmqWjXG7xGzTv5oKoeXmlSuCFDj8yYuYjaXnzSyCaFcSO9eWCEWzMiCL3UWmxOVTZbNGljAHp87aMTmUJWdwudSxRUvQ9aNisWL9krCLFfp7ExpBvkuc6pZTuixm0bRTkOaxk6R4zMLO42ZJ3N99Zl6NlyQehkiDBUmudaeorRKpb3%2BMnchx0dxZo8fq0rhc8jEMfloHuwxoAeiVHaKEDUyNT9FEyvmXSbObpOnp5qmaYqypygKM5ZNGkmzXG%2Bv9L9oFBl5kyqsrFHp7uG6Ze7CeW%2BKpgCJUfHUIlqpCdiHq00mfJ67IKPYk0tzO7HJxVkQrCrFMXEIN3mol%2FN299kpUEOZysCa9UlAFszEFEeNTO3HlOw5mFwE%2BvBhgt6%2Fn9gfSWsPUmwjbD0twRyq0sjpBeJmPHXypPa2vdKXXsB1JtxUod43jy%2FHFprlSq3ykf%2F3kp%2FihuqERoOqZrGzRn8jPJXdMMWc0rmF333r0J9WxfHWtoUzwwUOH%2Bb4JTCtmUPWVmF4bYGby3pG3JkfSri0FIoGHFq8hPleSVWhch43KUfwtcwabfuO3d7unJl9%2FbZU03lSRPwuD4qnsJ2MTNuyOgn4bt%2Fwqm9OKM5j%2FVRzpas40ceieBUTxySt79110lfnzbhP3X47tdvbA%2F1oSxFeXGiR4p%2FmufqrAcueX5Pt%2BIzSTyQvdWHofXHDTvgRs%2FExBHYTzqlfnPdvkWY3OjqY7IltHsAsHUMlYYxcN%2BYaBu70j7%2B7ZVTKqxuPIFA9suRMWPycaF2VsbqzRILjoixUWLnCqwxAIt3Su%2BDlqx%2F9ySftdNNV7q5FJVTSNvGw5xAS7Sp33cp6oAHHDq51kXWlNYf%2Fpc%2FNx1hbx%2FNgG49QhBHq3wzHGXZst%2FoGt%2BS1PoeyCA8rG1FypKzEPaSga2faBWG2PcW3zGfauqT%2BQF5vDnSKRFKPGT0rOjzfShLtbn6l5Zggs9ytmHkV4XxFNkLymrvRO0r8NV9zNMmed%2B91WX%2Fwcn5KOSdZllH9jGvV9vlar1JLhoj5Y%2FjxtP4srGSzZfEPJ%2Fr%2BNhs2%2F%2F798fIfKyNT1n9k7dolGh8HgEDw0zb6lw3Ocb%2Fa2DO%2FAPwZCkgD4O%2Bur0f%2Bf%2Fs%2FYvGVRTSARgmCn2HVuRHk3z8DEADbUFRDeq4D%2F2QDNyNB5hdwSSeYSiH4QegpfkM9SITAorphH1OUtsCjZ4sJNZeY1O4bUxi1hSn1q2bqzPPao14%2FsGZQjSqtmtTr0K5XsBJ1GvRpVaVbhTrdejSxPClciLD5jWNlajWkU6MeJIkQYiQ%2FEmJikfzLRch22fQ0pTIViJXavZdaUnNBpyHdmjRo1Ovy2Rr%2BSGJhxKRI1YaQ6pm1ulUZEIKUrFUrUld7NrkuQZ3c33O1QjCBqf5jqQUAAAA%3D)%3B%20%7D%3C%2Fstyle%3E%3C%2Fdefs%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%22589.4874267578125%22%20height%3D%22457.69140625%22%20fill%3D%22%23fefefe%22%2F%3E%3Cg%20transform%3D%22translate(169.5078125%20286.60546875)%20rotate(0%2044.935546875%2040.09375)%22%20stroke%3D%22none%22%3E%3Cpath%20fill%3D%22%231e1e1e%22%20d%3D%22M%20-0.12%2C3.12%20Q%20-0.12%2C3.12%20-10.89%2C2.61%20-21.67%2C2.11%20-32.17%2C4.70%20-42.68%2C7.30%20-51.49%2C18.05%20-60.31%2C28.79%20-65.27%2C52.75%20-70.22%2C76.70%20-68.13%2C96.46%20-66.04%2C116.23%20-50.64%2C128.16%20-35.23%2C140.09%20-5.06%2C136.17%2025.11%2C132.25%2056.77%2C118.65%2088.44%2C105.05%20110.05%2C92.07%20131.65%2C79.10%20142.34%2C71.58%20153.03%2C64.05%20157.03%2C61.53%20161.03%2C59.01%20156.03%2C54.72%20151.03%2C50.43%20143.13%2C44.25%20135.24%2C38.06%20126.81%2C29.34%20118.38%2C20.62%20112.42%2C12.59%20106.47%2C4.57%20102.58%2C-1.60%2098.69%2C-7.78%2096.15%2C-12.45%2093.62%2C-17.12%2091.62%2C-21.70%2089.62%2C-26.29%2088.31%2C-28.39%2086.99%2C-30.48%2084.39%2C-31.46%2081.79%2C-32.43%2075.49%2C-30.35%2069.19%2C-28.27%2055.08%2C-17.76%2040.97%2C-7.24%2027.27%2C3.93%2013.58%2C15.12%205.74%2C21.91%20-2.09%2C28.69%20-4.37%2C31.25%20-6.65%2C33.81%20-6.96%2C34.02%20-7.27%2C34.22%20-7.62%2C34.35%20-7.96%2C34.48%20-8.33%2C34.52%20-8.70%2C34.56%20-9.07%2C34.52%20-9.44%2C34.47%20-9.79%2C34.33%20-10.13%2C34.20%20-10.44%2C33.99%20-10.74%2C33.77%20-10.99%2C33.49%20-11.23%2C33.21%20-11.40%2C32.88%20-11.57%2C32.55%20-11.65%2C32.19%20-11.74%2C31.83%20-11.74%2C31.45%20-11.73%2C31.08%20-11.64%2C30.72%20-11.55%2C30.36%20-11.37%2C30.04%20-11.20%2C29.71%20-10.95%2C29.43%20-10.70%2C29.16%20-0.55%2C22.83%209.60%2C16.50%2033.01%2C0.23%2056.43%2C-16.02%2080.78%2C-32.17%20105.14%2C-48.31%20122.53%2C-58.36%20139.92%2C-68.41%20148.55%2C-72.53%20157.18%2C-76.65%20161.87%2C-74.90%20166.56%2C-73.15%20166.48%2C-70.22%20166.40%2C-67.29%20164.93%2C-63.51%20163.47%2C-59.74%20163.05%2C-58.27%20162.63%2C-56.79%20162.29%2C-56.25%20161.96%2C-55.72%20161.47%2C-55.31%20160.98%2C-54.91%20160.38%2C-54.69%20159.79%2C-54.46%20159.15%2C-54.44%20158.52%2C-54.42%20157.91%2C-54.60%20157.30%2C-54.78%20156.78%2C-55.14%20156.27%2C-55.51%20155.89%2C-56.02%20155.51%2C-56.53%20155.32%2C-57.13%20155.13%2C-57.74%20155.14%2C-58.37%20155.15%2C-59.01%20155.37%2C-59.61%20155.58%2C-60.20%20155.97%2C-60.70%20156.36%2C-61.20%20156.89%2C-61.55%20157.43%2C-61.89%20158.04%2C-62.05%20158.65%2C-62.21%20159.29%2C-62.17%20159.92%2C-62.12%20160.51%2C-61.88%20161.09%2C-61.63%20161.57%2C-61.21%20162.04%2C-60.79%20162.36%2C-60.24%20162.68%2C-59.70%20162.81%2C-59.07%20162.93%2C-58.45%20162.85%2C-57.82%20162.77%2C-57.19%20162.50%2C-56.62%20162.22%2C-56.05%20161.77%2C-55.60%20161.33%2C-55.14%20160.76%2C-54.86%20160.20%2C-54.57%20159.57%2C-54.48%20158.94%2C-54.39%20158.32%2C-54.50%20157.69%2C-54.61%20157.14%2C-54.92%20156.58%2C-55.23%20156.16%2C-55.69%20155.73%2C-56.16%20155.47%2C-56.74%20155.21%2C-57.32%20155.16%2C-57.96%20155.10%2C-58.59%20155.25%2C-59.21%20155.39%2C-59.82%20155.39%2C-59.82%20155.39%2C-59.82%20156.15%2C-61.15%20156.91%2C-62.49%20157.92%2C-67.13%20158.93%2C-71.78%20150.76%2C-67.78%20142.59%2C-63.78%20125.35%2C-53.80%20108.11%2C-43.82%2083.82%2C-27.70%2059.53%2C-11.57%2036.04%2C4.77%2012.56%2C21.13%202.95%2C27.47%20-6.65%2C33.81%20-6.96%2C34.01%20-7.27%2C34.22%20-7.62%2C34.35%20-7.96%2C34.48%20-8.33%2C34.52%20-8.70%2C34.56%20-9.07%2C34.52%20-9.44%2C34.47%20-9.79%2C34.33%20-10.13%2C34.20%20-10.44%2C33.99%20-10.74%2C33.77%20-10.98%2C33.49%20-11.23%2C33.21%20-11.40%2C32.88%20-11.57%2C32.55%20-11.65%2C32.19%20-11.74%2C31.83%20-11.74%2C31.45%20-11.73%2C31.08%20-11.64%2C30.72%20-11.55%2C30.36%20-11.37%2C30.04%20-11.20%2C29.71%20-10.95%2C29.43%20-10.70%2C29.16%20-8.23%2C26.82%20-5.76%2C24.49%202.09%2C17.60%209.96%2C10.71%2023.71%2C-0.62%2037.46%2C-11.96%2052.40%2C-23.02%2067.34%2C-34.07%2075.35%2C-36.22%2083.36%2C-38.36%2087.65%2C-36.19%2091.93%2C-34.01%2093.24%2C-31.23%2094.54%2C-28.44%2096.45%2C-24.07%2098.36%2C-19.70%20100.84%2C-15.20%20103.31%2C-10.70%20107.11%2C-4.72%20110.92%2C1.26%20116.68%2C8.97%20122.44%2C16.69%20130.62%2C25.08%20138.81%2C33.48%20146.72%2C39.55%20154.63%2C45.61%20159.60%2C49.54%20164.57%2C53.46%20165.01%2C56.45%20165.45%2C59.43%20160.76%2C63.90%20156.08%2C68.38%20145.23%2C76.02%20134.39%2C83.66%20112.47%2C96.80%2090.54%2C109.94%2058.18%2C123.75%2025.81%2C137.56%20-5.79%2C141.11%20-37.40%2C144.66%20-54.13%2C131.29%20-70.85%2C117.92%20-73.24%2C96.78%20-75.63%2C75.64%20-70.20%2C50.55%20-64.77%2C25.46%20-54.71%2C13.76%20-44.66%2C2.05%20-33.08%2C-0.89%20-21.50%2C-3.85%20-10.68%2C-3.48%200.12%2C-3.12%200.49%2C-3.06%200.86%2C-3.00%201.21%2C-2.85%201.56%2C-2.70%201.86%2C-2.47%202.16%2C-2.25%202.40%2C-1.96%202.64%2C-1.66%202.80%2C-1.32%202.96%2C-0.98%203.03%2C-0.62%203.11%2C-0.25%203.09%2C0.12%203.08%2C0.50%202.97%2C0.86%202.87%2C1.22%202.68%2C1.55%202.49%2C1.87%202.23%2C2.14%201.97%2C2.42%201.65%2C2.62%201.33%2C2.82%200.98%2C2.94%200.62%2C3.06%200.24%2C3.09%20-0.12%2C3.12%20-0.12%2C3.12%20L%20-0.12%2C3.12%20Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate(10%2010)%20rotate(0%20187.451171875%20133.986328125)%22%20stroke%3D%22none%22%3E%3Cpath%20fill%3D%22%231e1e1e%22%20d%3D%22M%200%2C-3.68%20Q%200%2C-3.68%2018.52%2C-3.54%2037.05%2C-3.40%2076.35%2C-3.29%20115.66%2C-3.19%20163.90%2C-3.11%20212.15%2C-3.03%20249.98%2C-1.89%20287.82%2C-0.75%20310.91%2C1.23%20334.01%2C3.23%20345.70%2C5.09%20357.39%2C6.94%20362.72%2C8.41%20368.05%2C9.87%20370.66%2C11.87%20373.27%2C13.88%20373.52%2C16.89%20373.77%2C19.91%20371.09%2C28.51%20368.40%2C37.11%20363.56%2C58.65%20358.71%2C80.19%20353.23%2C108.86%20347.75%2C137.52%20342.56%2C164.12%20337.37%2C190.72%20333.79%2C208.78%20330.20%2C226.84%20327.97%2C238.42%20325.74%2C249.99%20324.51%2C255.61%20323.27%2C261.24%20320.19%2C261.98%20317.10%2C262.73%20308.38%2C249.39%20299.66%2C236.04%20286.91%2C218.05%20274.17%2C200.05%20261.12%2C186.45%20248.07%2C172.84%20228.21%2C164.55%20208.34%2C156.26%20183.46%2C151.51%20158.57%2C146.77%20132.86%2C144.28%20107.15%2C141.80%2088.42%2C140.72%2069.69%2C139.65%2058.46%2C139.30%2047.22%2C138.96%2040.75%2C138.69%2034.29%2C138.41%2030.22%2C136.04%2026.16%2C133.67%2024.47%2C128.88%2022.78%2C124.08%2023.82%2C118.12%2024.85%2C112.15%2026.85%2C106.14%2028.86%2C100.13%2032.43%2C91.22%2036.01%2C82.31%2042.59%2C70.90%2049.18%2C59.49%2059.05%2C47.97%2068.92%2C36.46%2079.00%2C28.66%2089.09%2C20.87%2095.79%2C17.13%20102.50%2C13.39%20105.69%2C11.70%20108.88%2C10.01%20110.14%2C9.16%20111.40%2C8.32%20111.92%2C8.17%20112.44%2C8.01%20112.99%2C8.03%20113.53%2C8.06%20114.04%2C8.25%20114.55%2C8.45%20114.97%2C8.79%20115.39%2C9.14%20115.68%2C9.60%20115.96%2C10.07%20116.09%2C10.60%20116.21%2C11.13%20116.16%2C11.67%20116.11%2C12.21%20115.89%2C12.71%20115.66%2C13.21%20115.29%2C13.61%20114.92%2C14.01%20114.45%2C14.27%20113.97%2C14.53%20113.43%2C14.63%20112.90%2C14.72%20112.36%2C14.64%20111.82%2C14.56%20111.33%2C14.31%20110.85%2C14.06%20110.47%2C13.67%20110.09%2C13.28%20109.85%2C12.79%20109.62%2C12.30%20109.55%2C11.76%20109.49%2C11.22%20109.60%2C10.68%20109.71%2C10.15%20109.98%2C9.68%20110.25%2C9.21%20110.67%2C8.85%20111.08%2C8.49%20111.58%2C8.28%20112.08%2C8.08%20112.63%2C8.04%20113.17%2C8.00%20113.70%2C8.14%20114.22%2C8.28%20114.68%2C8.58%20115.13%2C8.88%20115.47%2C9.31%20115.81%2C9.74%20115.99%2C10.25%20116.17%2C10.77%20116.17%2C11.31%20116.18%2C11.86%20116.01%2C12.38%20115.85%2C12.89%20115.52%2C13.33%20115.20%2C13.77%20114.75%2C14.08%20114.31%2C14.39%20114.31%2C14.39%20114.31%2C14.39%20112.86%2C14.84%20111.41%2C15.29%20108.24%2C16.65%20105.06%2C18.01%2098.68%2C21.54%2092.31%2C25.07%2082.62%2C32.50%2072.92%2C39.93%2063.35%2C51.05%2053.78%2C62.17%2047.38%2C73.24%2040.97%2C84.31%2037.47%2C93.07%2033.97%2C101.84%2032.08%2C107.52%2030.19%2C113.20%2029.12%2C117.99%2028.06%2C122.79%2028.89%2C126.24%2029.71%2C129.69%2032.27%2C131.45%2034.84%2C133.21%2041.11%2C133.43%2047.38%2C133.64%2058.69%2C133.98%2070.00%2C134.31%2088.83%2C135.37%20107.66%2C136.44%20133.63%2C138.93%20159.59%2C141.43%20185.02%2C146.31%20210.46%2C151.18%20231.20%2C160.02%20251.95%2C168.86%20265.39%2C182.80%20278.83%2C196.73%20291.71%2C214.77%20304.59%2C232.81%20311.68%2C245.90%20318.76%2C258.98%20319.52%2C253.97%20320.28%2C248.96%20322.46%2C237.35%20324.63%2C225.74%20328.14%2C207.68%20331.65%2C189.61%20336.73%2C163.01%20341.81%2C136.40%20347.16%2C107.61%20352.51%2C78.82%20357.22%2C57.00%20361.93%2C35.18%20364.22%2C25.14%20366.50%2C15.11%20361.51%2C13.78%20356.52%2C12.44%20345.03%2C10.67%20333.53%2C8.89%20310.59%2C6.99%20287.65%2C5.09%20249.90%2C4.06%20212.15%2C3.03%20163.90%2C3.11%20115.66%2C3.19%2076.35%2C3.29%2037.05%2C3.40%2018.52%2C3.54%200%2C3.68%20-0.44%2C3.63%20-0.88%2C3.57%20-1.29%2C3.42%20-1.71%2C3.26%20-2.07%2C3.01%20-2.44%2C2.75%20-2.73%2C2.42%20-3.03%2C2.09%20-3.24%2C1.70%20-3.44%2C1.30%20-3.55%2C0.87%20-3.65%2C0.44%20-3.65%2C-0.00%20-3.65%2C-0.44%20-3.55%2C-0.87%20-3.44%2C-1.30%20-3.24%2C-1.70%20-3.03%2C-2.09%20-2.73%2C-2.42%20-2.44%2C-2.75%20-2.07%2C-3.01%20-1.71%2C-3.26%20-1.29%2C-3.42%20-0.88%2C-3.57%20-0.44%2C-3.63%200.00%2C-3.68%200.00%2C-3.68%20L%200%2C-3.68%20Z%22%2F%3E%3C%2Fg%3E%3Cg%20transform%3D%22translate(508.1875%20123.609375)%20rotate(0%2035.64996337890625%2012.5)%22%3E%3Ctext%20x%3D%220%22%20y%3D%2217.619999999999997%22%20font-family%3D%22Excalifont%2C%20Xiaolai%2C%20Segoe%20UI%20Emoji%22%20font-size%3D%2220px%22%20fill%3D%22%231e1e1e%22%20text-anchor%3D%22start%22%20style%3D%22white-space%3A%20pre%3B%22%20direction%3D%22ltr%22%20dominant-baseline%3D%22alphabetic%22%3Edinsesh%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fsvg%3E"
+    }
+  ],
+  "lms.quizzes.v1": [
+    {
+      "id": "quiz-mpf34apf-jh76ln5n1",
+      "title": "te",
+      "description": "<p>te</p>",
+      "courseId": "course-mpf1l740-xqcxyqz37",
+      "questions": [
+        {
+          "id": "q-mpf3427u-524q0xglp",
+          "question": "asad",
+          "type": "multiple-choice",
+          "options": [
+            "a",
+            "d",
+            "aa",
+            "d"
+          ],
+          "correctAnswer": 0,
+          "explanation": "afaete",
+          "points": 10
+        }
+      ],
+      "passingScore": 60,
+      "maxAttempts": 3,
+      "shuffleQuestions": true,
+      "showAnswers": true,
+      "gradingMode": "teacher",
+      "createdAt": "2026-05-21T06:03:20.499Z"
+    },
+    {
+      "id": "quiz-mpg8wlut-mgcpev1jp",
+      "title": "Build an assessment for your course",
+      "description": "<p>Build an assessment for your course Build an assessment for your course Build an assessment for your course.<br><br></p><p>Build an assessment for your course Build an assessment for your course Build an assessment for your course.</p>",
+      "courseId": "course-mpf1l740-xqcxyqz37",
+      "questions": [
+        {
+          "id": "q-mpg8vgjd-xsjo2cfzv",
+          "question": "",
+          "type": "multiple-choice",
+          "options": [
+            "O1",
+            "o2",
+            "o3",
+            "o4"
+          ],
+          "correctAnswer": 0,
+          "explanation": "Build an assessment for your course Build an assessment for your course Build an assessment for your course.",
+          "points": 10
+        },
+        {
+          "id": "q-mpg8vv0i-th7gdk84h",
+          "question": "Build an assessment for your course Build an assessment for your course Build an assessment for your course.",
+          "type": "short-answer",
+          "correctAnswer": "Build an assessment for your course Build an assessment for your course Build an assessment for your course.",
+          "explanation": "",
+          "points": 10
+        }
+      ],
+      "passingScore": 60,
+      "maxAttempts": 1,
+      "shuffleQuestions": true,
+      "showAnswers": true,
+      "gradingMode": "teacher",
+      "createdAt": "2026-05-22T01:33:05.573Z"
+    }
+  ],
+  "lms.quizAttempts.v1": [
+    {
+      "id": "attempt-mpfbno9z-ap6w707cz",
+      "quizId": "quiz-mpf34apf-jh76ln5n1",
+      "studentId": "user-mpe8sm09-3878b9",
+      "answers": {
+        "q-mpf3427u-524q0xglp": 2
+      },
+      "score": 0,
+      "passed": false,
+      "startedAt": "2026-05-21T10:02:13.949Z",
+      "completedAt": "2026-05-21T10:02:21.479Z",
+      "timeSpent": 7,
+      "status": "pending-review"
+    },
+    {
+      "id": "attempt-mpgc83ry-lf499avbi",
+      "quizId": "quiz-mpf34apf-jh76ln5n1",
+      "studentId": "user-mpg74u2p-3hpfvf1qi",
+      "answers": {
+        "q-mpf3427u-524q0xglp": 2
+      },
+      "score": 0,
+      "passed": false,
+      "startedAt": "2026-05-22T03:05:53.677Z",
+      "completedAt": "2026-05-22T03:06:00.862Z",
+      "timeSpent": 7,
+      "status": "pending-review"
+    }
+  ],
+  "lms.notifications.v1": [
+    {
+      "id": "notif-mpgc83rz-710k0jgy4",
+      "userId": "user-mpe8sm09-3878b9",
+      "channel": "in-app",
+      "type": "quiz.submitted",
+      "title": "drawat MAY 223 submitted \"te\"",
+      "body": "Needs your review.",
+      "url": "/dashboard/quizzes/quiz-mpf34apf-jh76ln5n1",
+      "createdAt": "2026-05-22T03:06:00.863Z",
+      "status": "queued",
+      "meta": {
+        "quizId": "quiz-mpf34apf-jh76ln5n1",
+        "score": 0,
+        "passed": false,
+        "needsReview": true
+      }
+    },
+    {
+      "id": "notif-mpgc83rz-1zz2w2sea",
+      "userId": "user-mpe8sm09-3878b9",
+      "channel": "email",
+      "type": "quiz.submitted",
+      "title": "drawat MAY 223 submitted \"te\"",
+      "body": "Needs your review.",
+      "url": "/dashboard/quizzes/quiz-mpf34apf-jh76ln5n1",
+      "createdAt": "2026-05-22T03:06:00.863Z",
+      "status": "sent",
+      "meta": {
+        "quizId": "quiz-mpf34apf-jh76ln5n1",
+        "score": 0,
+        "passed": false,
+        "needsReview": true
+      },
+      "sentAt": "2026-05-22T03:06:00.863Z"
+    },
+    {
+      "id": "notif-mpgc83rz-n3nhb0jny",
+      "userId": "user-mpe8sm09-3878b9",
+      "channel": "whatsapp",
+      "type": "quiz.submitted",
+      "title": "drawat MAY 223 submitted \"te\"",
+      "body": "Needs your review.",
+      "url": "/dashboard/quizzes/quiz-mpf34apf-jh76ln5n1",
+      "createdAt": "2026-05-22T03:06:00.863Z",
+      "status": "sent",
+      "meta": {
+        "quizId": "quiz-mpf34apf-jh76ln5n1",
+        "score": 0,
+        "passed": false,
+        "needsReview": true
+      },
+      "sentAt": "2026-05-22T03:06:00.863Z"
+    },
+    {
+      "id": "notif-mpg9j263-z5mbgxtwk",
+      "userId": "user-mpg74u2p-3hpfvf1qi",
+      "channel": "in-app",
+      "type": "assignment.published",
+      "title": "New assignment: ad",
+      "body": "Yoga Basics for Indian Beginners · No due date.",
+      "url": "/learn/yoga-basics-for-indian-beginners#assignment-assign-mpg9j263-buz5nqmgr",
+      "createdAt": "2026-05-22T01:50:33.147Z",
+      "status": "queued",
+      "meta": {
+        "assignmentId": "assign-mpg9j263-buz5nqmgr",
+        "kind": "assignment"
+      }
+    },
+    {
+      "id": "notif-mpg9j263-2rao973gg",
+      "userId": "user-mpg74u2p-3hpfvf1qi",
+      "channel": "email",
+      "type": "assignment.published",
+      "title": "New assignment: ad",
+      "body": "Yoga Basics for Indian Beginners · No due date.",
+      "url": "/learn/yoga-basics-for-indian-beginners#assignment-assign-mpg9j263-buz5nqmgr",
+      "createdAt": "2026-05-22T01:50:33.147Z",
+      "status": "sent",
+      "meta": {
+        "assignmentId": "assign-mpg9j263-buz5nqmgr",
+        "kind": "assignment"
+      },
+      "sentAt": "2026-05-22T01:50:33.147Z"
+    },
+    {
+      "id": "notif-mpg9j264-n04kd3cyx",
+      "userId": "user-mpg74u2p-3hpfvf1qi",
+      "channel": "whatsapp",
+      "type": "assignment.published",
+      "title": "New assignment: ad",
+      "body": "Yoga Basics for Indian Beginners · No due date.",
+      "url": "/learn/yoga-basics-for-indian-beginners#assignment-assign-mpg9j263-buz5nqmgr",
+      "createdAt": "2026-05-22T01:50:33.147Z",
+      "status": "sent",
+      "meta": {
+        "assignmentId": "assign-mpg9j263-buz5nqmgr",
+        "kind": "assignment"
+      },
+      "sentAt": "2026-05-22T01:50:33.147Z"
+    },
+    {
+      "id": "notif-mpg9iyj1-0ieg82h48",
+      "userId": "user-mpg74u2p-3hpfvf1qi",
+      "channel": "in-app",
+      "type": "assignment.published",
+      "title": "New assignment: ad",
+      "body": "Yoga Basics for Indian Beginners · No due date.",
+      "url": "/learn/yoga-basics-for-indian-beginners#assignment-assign-mpg9iyj1-io6t3iu4q",
+      "createdAt": "2026-05-22T01:50:28.429Z",
+      "status": "queued",
+      "meta": {
+        "assignmentId": "assign-mpg9iyj1-io6t3iu4q",
+        "kind": "assignment"
+      }
+    },
+    {
+      "id": "notif-mpg9iyj1-91w6evhlx",
+      "userId": "user-mpg74u2p-3hpfvf1qi",
+      "channel": "email",
+      "type": "assignment.published",
+      "title": "New assignment: ad",
+      "body": "Yoga Basics for Indian Beginners · No due date.",
+      "url": "/learn/yoga-basics-for-indian-beginners#assignment-assign-mpg9iyj1-io6t3iu4q",
+      "createdAt": "2026-05-22T01:50:28.429Z",
+      "status": "sent",
+      "meta": {
+        "assignmentId": "assign-mpg9iyj1-io6t3iu4q",
+        "kind": "assignment"
+      },
+      "sentAt": "2026-05-22T01:50:28.429Z"
+    },
+    {
+      "id": "notif-mpg9iyj2-qqs1tj66r",
+      "userId": "user-mpg74u2p-3hpfvf1qi",
+      "channel": "whatsapp",
+      "type": "assignment.published",
+      "title": "New assignment: ad",
+      "body": "Yoga Basics for Indian Beginners · No due date.",
+      "url": "/learn/yoga-basics-for-indian-beginners#assignment-assign-mpg9iyj1-io6t3iu4q",
+      "createdAt": "2026-05-22T01:50:28.429Z",
+      "status": "sent",
+      "meta": {
+        "assignmentId": "assign-mpg9iyj1-io6t3iu4q",
+        "kind": "assignment"
+      },
+      "sentAt": "2026-05-22T01:50:28.429Z"
+    },
+    {
+      "id": "notif-mpg8nnw7-6dvkzwreg",
+      "userId": "user-mpg74u2p-3hpfvf1qi",
+      "channel": "in-app",
+      "type": "message.reminder",
+      "title": "Hi",
+      "body": "hello",
+      "createdAt": "2026-05-22T01:26:08.311Z",
+      "sentAt": "2026-05-22T01:26:08.311Z",
+      "status": "sent",
+      "meta": {
+        "messageId": "msg-mpg8nnw7-kobj1fg1q",
+        "attachments": 0
+      }
+    }
+  ],
+  "portal.config.v1": {
+    "brand": {},
+    "socials": {},
+    "footerColumns": [
+      {
+        "id": "col-explore",
+        "heading": "Explore",
+        "links": [
+          {
+            "label": "Courses",
+            "href": "/courses"
+          },
+          {
+            "label": "Teachers",
+            "href": "/teachers"
+          },
+          {
+            "label": "Blog",
+            "href": "/blog"
+          },
+          {
+            "label": "About",
+            "href": "/about"
+          }
+        ]
+      },
+      {
+        "id": "col-company",
+        "heading": "Company",
+        "links": [
+          {
+            "label": "Contact",
+            "href": "/contact"
+          }
+        ]
+      },
+      {
+        "id": "col-legal",
+        "heading": "Legal",
+        "links": [
+          {
+            "label": "Privacy",
+            "href": "/privacy"
+          },
+          {
+            "label": "Terms",
+            "href": "/terms"
+          }
+        ]
+      }
+    ],
+    "announcementBar": {
+      "enabled": false,
+      "message": "",
+      "variant": "info",
+      "dismissable": true,
+      "dismissPersists": "session"
+    },
+    "popups": [],
+    "defaultSeo": {},
+    "i18n": {
+      "multilingualEnabled": true,
+      "defaultLocale": "en",
+      "enabledLocales": [
+        "en",
+        "hi",
+        "bn",
+        "ta",
+        "te",
+        "mr",
+        "gu",
+        "kn",
+        "ml",
+        "pa"
+      ],
+      "overrides": {}
+    }
+  },
+  "portal.pages.v1": [
+    {
+      "id": "page_0j1ep7ej",
+      "slug": "/",
+      "title": "Home",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_475wtgtu",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "Welcome",
+            "headline": "Learn from a teacher who's done it before",
+            "subhead": "Practical, taught-live, and proven by hundreds of students. Pick a course below to get started.",
+            "primaryCta": {
+              "label": "Browse courses",
+              "href": "/courses"
+            },
+            "secondaryCta": {
+              "label": "Meet Your instructor",
+              "href": "/teachers"
+            },
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_fcm1uvuc",
+          "kind": "features",
+          "config": {
+            "heading": "Why learn here",
+            "items": [
+              {
+                "title": "Real-world projects",
+                "body": "Every course ends with something you can show off."
+              },
+              {
+                "title": "Live Q&A",
+                "body": "Drop into office hours — no chatbot, no canned answers."
+              },
+              {
+                "title": "Lifetime access",
+                "body": "Buy once, revisit forever as the material updates."
+              }
+            ]
+          }
+        },
+        {
+          "id": "sec_0sxzspkv",
+          "kind": "courses-grid",
+          "config": {
+            "heading": "Popular courses",
+            "mode": "popular",
+            "limit": 6
+          }
+        },
+        {
+          "id": "sec_k5sx54hy",
+          "kind": "testimonials",
+          "config": {
+            "heading": "What students say",
+            "source": "featured",
+            "layout": "grid"
+          }
+        },
+        {
+          "id": "sec_eij00lwi",
+          "kind": "cta",
+          "config": {
+            "headline": "Ready to start?",
+            "subhead": "Join the next cohort or self-pace through a course at your own speed.",
+            "primaryCta": {
+              "label": "Get started",
+              "href": "/courses"
+            }
+          }
+        }
+      ],
+      "showInNav": false,
+      "createdAt": "2026-05-22T03:06:04.785Z",
+      "updatedAt": "2026-05-22T03:06:04.785Z"
+    },
+    {
+      "id": "page_vwmlkt1j",
+      "slug": "/about",
+      "title": "About",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_lfbk6v8g",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "About",
+            "headline": "Our story",
+            "subhead": "Edit this section to tell visitors who you are and what you're building.",
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_r4uevyej",
+          "kind": "rich-text",
+          "config": {
+            "html": "<p>Tell your story here. Where did you start? What do you teach? Who are your students?</p>"
+          }
+        },
+        {
+          "id": "sec_oqgrpon8",
+          "kind": "faculty",
+          "config": {
+            "heading": "Meet the team",
+            "members": "all"
+          }
+        },
+        {
+          "id": "sec_mj16jnxt",
+          "kind": "stats",
+          "config": {
+            "items": [
+              {
+                "value": "10k+",
+                "label": "Students taught"
+              },
+              {
+                "value": "120+",
+                "label": "Hours of content"
+              },
+              {
+                "value": "4.8★",
+                "label": "Average rating"
+              }
+            ]
+          }
+        }
+      ],
+      "showInNav": true,
+      "navLabel": "About",
+      "navOrder": 1,
+      "createdAt": "2026-05-22T03:06:04.785Z",
+      "updatedAt": "2026-05-22T03:06:04.785Z"
+    },
+    {
+      "id": "page_qjtn6syu",
+      "slug": "/contact",
+      "title": "Contact",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_ypyy1mnu",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "Get in touch",
+            "headline": "Let's talk",
+            "subhead": "Questions about a course, custom training, or partnerships? Send a note.",
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_2xwhnyhs",
+          "kind": "contact-form",
+          "config": {
+            "heading": "Send a message",
+            "fields": [
+              "name",
+              "email",
+              "phone",
+              "message"
+            ],
+            "successMessage": "Thanks — we'll get back to you within a business day."
+          }
+        }
+      ],
+      "showInNav": true,
+      "navLabel": "Contact",
+      "navOrder": 4,
+      "createdAt": "2026-05-22T03:06:04.785Z",
+      "updatedAt": "2026-05-22T03:06:04.785Z"
+    }
+  ],
+  "portal.faculty.v1": [],
+  "portal.testimonials.v1": [],
+  "portal.posts.v1": [],
+  "portal.leads.v1": [],
+  "portal.live.config.v1": {
+    "brand": {},
+    "socials": {},
+    "footerColumns": [
+      {
+        "id": "col-explore",
+        "heading": "Explore",
+        "links": [
+          {
+            "label": "Courses",
+            "href": "/courses"
+          },
+          {
+            "label": "Teachers",
+            "href": "/teachers"
+          },
+          {
+            "label": "Blog",
+            "href": "/blog"
+          },
+          {
+            "label": "About",
+            "href": "/about"
+          }
+        ]
+      },
+      {
+        "id": "col-company",
+        "heading": "Company",
+        "links": [
+          {
+            "label": "Contact",
+            "href": "/contact"
+          }
+        ]
+      },
+      {
+        "id": "col-legal",
+        "heading": "Legal",
+        "links": [
+          {
+            "label": "Privacy",
+            "href": "/privacy"
+          },
+          {
+            "label": "Terms",
+            "href": "/terms"
+          }
+        ]
+      }
+    ],
+    "announcementBar": {
+      "enabled": false,
+      "message": "",
+      "variant": "info",
+      "dismissable": true,
+      "dismissPersists": "session"
+    },
+    "popups": [],
+    "defaultSeo": {},
+    "i18n": {
+      "multilingualEnabled": true,
+      "defaultLocale": "en",
+      "enabledLocales": [
+        "en",
+        "hi",
+        "bn",
+        "ta",
+        "te",
+        "mr",
+        "gu",
+        "kn",
+        "ml",
+        "pa"
+      ],
+      "overrides": {}
+    }
+  },
+  "portal.live.pages.v1": [
+    {
+      "id": "page_0j1ep7ej",
+      "slug": "/",
+      "title": "Home",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_475wtgtu",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "Welcome",
+            "headline": "Learn from a teacher who's done it before",
+            "subhead": "Practical, taught-live, and proven by hundreds of students. Pick a course below to get started.",
+            "primaryCta": {
+              "label": "Browse courses",
+              "href": "/courses"
+            },
+            "secondaryCta": {
+              "label": "Meet Your instructor",
+              "href": "/teachers"
+            },
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_fcm1uvuc",
+          "kind": "features",
+          "config": {
+            "heading": "Why learn here",
+            "items": [
+              {
+                "title": "Real-world projects",
+                "body": "Every course ends with something you can show off."
+              },
+              {
+                "title": "Live Q&A",
+                "body": "Drop into office hours — no chatbot, no canned answers."
+              },
+              {
+                "title": "Lifetime access",
+                "body": "Buy once, revisit forever as the material updates."
+              }
+            ]
+          }
+        },
+        {
+          "id": "sec_0sxzspkv",
+          "kind": "courses-grid",
+          "config": {
+            "heading": "Popular courses",
+            "mode": "popular",
+            "limit": 6
+          }
+        },
+        {
+          "id": "sec_k5sx54hy",
+          "kind": "testimonials",
+          "config": {
+            "heading": "What students say",
+            "source": "featured",
+            "layout": "grid"
+          }
+        },
+        {
+          "id": "sec_eij00lwi",
+          "kind": "cta",
+          "config": {
+            "headline": "Ready to start?",
+            "subhead": "Join the next cohort or self-pace through a course at your own speed.",
+            "primaryCta": {
+              "label": "Get started",
+              "href": "/courses"
+            }
+          }
+        }
+      ],
+      "showInNav": false,
+      "createdAt": "2026-05-22T03:06:04.785Z",
+      "updatedAt": "2026-05-22T03:06:04.785Z"
+    },
+    {
+      "id": "page_vwmlkt1j",
+      "slug": "/about",
+      "title": "About",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_lfbk6v8g",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "About",
+            "headline": "Our story",
+            "subhead": "Edit this section to tell visitors who you are and what you're building.",
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_r4uevyej",
+          "kind": "rich-text",
+          "config": {
+            "html": "<p>Tell your story here. Where did you start? What do you teach? Who are your students?</p>"
+          }
+        },
+        {
+          "id": "sec_oqgrpon8",
+          "kind": "faculty",
+          "config": {
+            "heading": "Meet the team",
+            "members": "all"
+          }
+        },
+        {
+          "id": "sec_mj16jnxt",
+          "kind": "stats",
+          "config": {
+            "items": [
+              {
+                "value": "10k+",
+                "label": "Students taught"
+              },
+              {
+                "value": "120+",
+                "label": "Hours of content"
+              },
+              {
+                "value": "4.8★",
+                "label": "Average rating"
+              }
+            ]
+          }
+        }
+      ],
+      "showInNav": true,
+      "navLabel": "About",
+      "navOrder": 1,
+      "createdAt": "2026-05-22T03:06:04.785Z",
+      "updatedAt": "2026-05-22T03:06:04.785Z"
+    },
+    {
+      "id": "page_qjtn6syu",
+      "slug": "/contact",
+      "title": "Contact",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_ypyy1mnu",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "Get in touch",
+            "headline": "Let's talk",
+            "subhead": "Questions about a course, custom training, or partnerships? Send a note.",
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_2xwhnyhs",
+          "kind": "contact-form",
+          "config": {
+            "heading": "Send a message",
+            "fields": [
+              "name",
+              "email",
+              "phone",
+              "message"
+            ],
+            "successMessage": "Thanks — we'll get back to you within a business day."
+          }
+        }
+      ],
+      "showInNav": true,
+      "navLabel": "Contact",
+      "navOrder": 4,
+      "createdAt": "2026-05-22T03:06:04.785Z",
+      "updatedAt": "2026-05-22T03:06:04.785Z"
+    }
+  ],
+  "portal.live.faculty.v1": [],
+  "portal.live.testimonials.v1": [],
+  "portal.live.posts.v1": [],
+  "portal.versions.v1": [],
+  "portal.lastPublishedAt.v1": "2026-05-22T01:14:03.923Z"
+}

@@ -1,0 +1,520 @@
+{
+  "portal.config.v1": {
+    "brand": {},
+    "socials": {},
+    "footerColumns": [
+      {
+        "id": "col-explore",
+        "heading": "Explore",
+        "links": [
+          {
+            "label": "Courses",
+            "href": "/courses"
+          },
+          {
+            "label": "Teachers",
+            "href": "/teachers"
+          },
+          {
+            "label": "Blog",
+            "href": "/blog"
+          },
+          {
+            "label": "About",
+            "href": "/about"
+          }
+        ]
+      },
+      {
+        "id": "col-company",
+        "heading": "Company",
+        "links": [
+          {
+            "label": "Contact",
+            "href": "/contact"
+          }
+        ]
+      },
+      {
+        "id": "col-legal",
+        "heading": "Legal",
+        "links": [
+          {
+            "label": "Privacy",
+            "href": "/privacy"
+          },
+          {
+            "label": "Terms",
+            "href": "/terms"
+          }
+        ]
+      }
+    ],
+    "announcementBar": {
+      "enabled": false,
+      "message": "",
+      "variant": "info",
+      "dismissable": true,
+      "dismissPersists": "session"
+    },
+    "popups": [],
+    "defaultSeo": {},
+    "i18n": {
+      "multilingualEnabled": true,
+      "defaultLocale": "en",
+      "enabledLocales": [
+        "en",
+        "hi",
+        "bn",
+        "ta",
+        "te",
+        "mr",
+        "gu",
+        "kn",
+        "ml",
+        "pa"
+      ],
+      "overrides": {}
+    }
+  },
+  "portal.pages.v1": [
+    {
+      "id": "page_ab0qxu37",
+      "slug": "/",
+      "title": "Home",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_44zqulzn",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "Welcome",
+            "headline": "Learn from a teacher who's done it before",
+            "subhead": "Practical, taught-live, and proven by hundreds of students. Pick a course below to get started.",
+            "primaryCta": {
+              "label": "Browse courses",
+              "href": "/courses"
+            },
+            "secondaryCta": {
+              "label": "Meet Your instructor",
+              "href": "/teachers"
+            },
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_m10gihcg",
+          "kind": "features",
+          "config": {
+            "heading": "Why learn here",
+            "items": [
+              {
+                "title": "Real-world projects",
+                "body": "Every course ends with something you can show off."
+              },
+              {
+                "title": "Live Q&A",
+                "body": "Drop into office hours — no chatbot, no canned answers."
+              },
+              {
+                "title": "Lifetime access",
+                "body": "Buy once, revisit forever as the material updates."
+              }
+            ]
+          }
+        },
+        {
+          "id": "sec_1azlz744",
+          "kind": "courses-grid",
+          "config": {
+            "heading": "Popular courses",
+            "mode": "popular",
+            "limit": 6
+          }
+        },
+        {
+          "id": "sec_olmcvwvd",
+          "kind": "testimonials",
+          "config": {
+            "heading": "What students say",
+            "source": "featured",
+            "layout": "grid"
+          }
+        },
+        {
+          "id": "sec_9qjs1738",
+          "kind": "cta",
+          "config": {
+            "headline": "Ready to start?",
+            "subhead": "Join the next cohort or self-pace through a course at your own speed.",
+            "primaryCta": {
+              "label": "Get started",
+              "href": "/courses"
+            }
+          }
+        }
+      ],
+      "showInNav": false,
+      "createdAt": "2026-05-22T01:18:28.367Z",
+      "updatedAt": "2026-05-22T01:18:28.367Z"
+    },
+    {
+      "id": "page_izs4ewnw",
+      "slug": "/about",
+      "title": "About",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_ps9x639i",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "About",
+            "headline": "Our story",
+            "subhead": "Edit this section to tell visitors who you are and what you're building.",
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_7tp9r3bd",
+          "kind": "rich-text",
+          "config": {
+            "html": "<p>Tell your story here. Where did you start? What do you teach? Who are your students?</p>"
+          }
+        },
+        {
+          "id": "sec_0xx1ns0y",
+          "kind": "faculty",
+          "config": {
+            "heading": "Meet the team",
+            "members": "all"
+          }
+        },
+        {
+          "id": "sec_v0407ex6",
+          "kind": "stats",
+          "config": {
+            "items": [
+              {
+                "value": "10k+",
+                "label": "Students taught"
+              },
+              {
+                "value": "120+",
+                "label": "Hours of content"
+              },
+              {
+                "value": "4.8★",
+                "label": "Average rating"
+              }
+            ]
+          }
+        }
+      ],
+      "showInNav": true,
+      "navLabel": "About",
+      "navOrder": 1,
+      "createdAt": "2026-05-22T01:18:28.367Z",
+      "updatedAt": "2026-05-22T01:18:28.367Z"
+    },
+    {
+      "id": "page_p10ubms9",
+      "slug": "/contact",
+      "title": "Contact",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_du8dsnqe",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "Get in touch",
+            "headline": "Let's talk",
+            "subhead": "Questions about a course, custom training, or partnerships? Send a note.",
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_69jml6il",
+          "kind": "contact-form",
+          "config": {
+            "heading": "Send a message",
+            "fields": [
+              "name",
+              "email",
+              "phone",
+              "message"
+            ],
+            "successMessage": "Thanks — we'll get back to you within a business day."
+          }
+        }
+      ],
+      "showInNav": true,
+      "navLabel": "Contact",
+      "navOrder": 4,
+      "createdAt": "2026-05-22T01:18:28.367Z",
+      "updatedAt": "2026-05-22T01:18:28.367Z"
+    }
+  ],
+  "portal.faculty.v1": [],
+  "portal.testimonials.v1": [],
+  "portal.posts.v1": [],
+  "portal.leads.v1": [],
+  "portal.live.config.v1": {
+    "brand": {},
+    "socials": {},
+    "footerColumns": [
+      {
+        "id": "col-explore",
+        "heading": "Explore",
+        "links": [
+          {
+            "label": "Courses",
+            "href": "/courses"
+          },
+          {
+            "label": "Teachers",
+            "href": "/teachers"
+          },
+          {
+            "label": "Blog",
+            "href": "/blog"
+          },
+          {
+            "label": "About",
+            "href": "/about"
+          }
+        ]
+      },
+      {
+        "id": "col-company",
+        "heading": "Company",
+        "links": [
+          {
+            "label": "Contact",
+            "href": "/contact"
+          }
+        ]
+      },
+      {
+        "id": "col-legal",
+        "heading": "Legal",
+        "links": [
+          {
+            "label": "Privacy",
+            "href": "/privacy"
+          },
+          {
+            "label": "Terms",
+            "href": "/terms"
+          }
+        ]
+      }
+    ],
+    "announcementBar": {
+      "enabled": false,
+      "message": "",
+      "variant": "info",
+      "dismissable": true,
+      "dismissPersists": "session"
+    },
+    "popups": [],
+    "defaultSeo": {},
+    "i18n": {
+      "multilingualEnabled": true,
+      "defaultLocale": "en",
+      "enabledLocales": [
+        "en",
+        "hi",
+        "bn",
+        "ta",
+        "te",
+        "mr",
+        "gu",
+        "kn",
+        "ml",
+        "pa"
+      ],
+      "overrides": {}
+    }
+  },
+  "portal.live.pages.v1": [
+    {
+      "id": "page_ab0qxu37",
+      "slug": "/",
+      "title": "Home",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_44zqulzn",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "Welcome",
+            "headline": "Learn from a teacher who's done it before",
+            "subhead": "Practical, taught-live, and proven by hundreds of students. Pick a course below to get started.",
+            "primaryCta": {
+              "label": "Browse courses",
+              "href": "/courses"
+            },
+            "secondaryCta": {
+              "label": "Meet Your instructor",
+              "href": "/teachers"
+            },
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_m10gihcg",
+          "kind": "features",
+          "config": {
+            "heading": "Why learn here",
+            "items": [
+              {
+                "title": "Real-world projects",
+                "body": "Every course ends with something you can show off."
+              },
+              {
+                "title": "Live Q&A",
+                "body": "Drop into office hours — no chatbot, no canned answers."
+              },
+              {
+                "title": "Lifetime access",
+                "body": "Buy once, revisit forever as the material updates."
+              }
+            ]
+          }
+        },
+        {
+          "id": "sec_1azlz744",
+          "kind": "courses-grid",
+          "config": {
+            "heading": "Popular courses",
+            "mode": "popular",
+            "limit": 6
+          }
+        },
+        {
+          "id": "sec_olmcvwvd",
+          "kind": "testimonials",
+          "config": {
+            "heading": "What students say",
+            "source": "featured",
+            "layout": "grid"
+          }
+        },
+        {
+          "id": "sec_9qjs1738",
+          "kind": "cta",
+          "config": {
+            "headline": "Ready to start?",
+            "subhead": "Join the next cohort or self-pace through a course at your own speed.",
+            "primaryCta": {
+              "label": "Get started",
+              "href": "/courses"
+            }
+          }
+        }
+      ],
+      "showInNav": false,
+      "createdAt": "2026-05-22T01:18:28.367Z",
+      "updatedAt": "2026-05-22T01:18:28.367Z"
+    },
+    {
+      "id": "page_izs4ewnw",
+      "slug": "/about",
+      "title": "About",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_ps9x639i",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "About",
+            "headline": "Our story",
+            "subhead": "Edit this section to tell visitors who you are and what you're building.",
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_7tp9r3bd",
+          "kind": "rich-text",
+          "config": {
+            "html": "<p>Tell your story here. Where did you start? What do you teach? Who are your students?</p>"
+          }
+        },
+        {
+          "id": "sec_0xx1ns0y",
+          "kind": "faculty",
+          "config": {
+            "heading": "Meet the team",
+            "members": "all"
+          }
+        },
+        {
+          "id": "sec_v0407ex6",
+          "kind": "stats",
+          "config": {
+            "items": [
+              {
+                "value": "10k+",
+                "label": "Students taught"
+              },
+              {
+                "value": "120+",
+                "label": "Hours of content"
+              },
+              {
+                "value": "4.8★",
+                "label": "Average rating"
+              }
+            ]
+          }
+        }
+      ],
+      "showInNav": true,
+      "navLabel": "About",
+      "navOrder": 1,
+      "createdAt": "2026-05-22T01:18:28.367Z",
+      "updatedAt": "2026-05-22T01:18:28.367Z"
+    },
+    {
+      "id": "page_p10ubms9",
+      "slug": "/contact",
+      "title": "Contact",
+      "status": "published",
+      "sections": [
+        {
+          "id": "sec_du8dsnqe",
+          "kind": "hero",
+          "config": {
+            "eyebrow": "Get in touch",
+            "headline": "Let's talk",
+            "subhead": "Questions about a course, custom training, or partnerships? Send a note.",
+            "alignment": "center"
+          }
+        },
+        {
+          "id": "sec_69jml6il",
+          "kind": "contact-form",
+          "config": {
+            "heading": "Send a message",
+            "fields": [
+              "name",
+              "email",
+              "phone",
+              "message"
+            ],
+            "successMessage": "Thanks — we'll get back to you within a business day."
+          }
+        }
+      ],
+      "showInNav": true,
+      "navLabel": "Contact",
+      "navOrder": 4,
+      "createdAt": "2026-05-22T01:18:28.367Z",
+      "updatedAt": "2026-05-22T01:18:28.367Z"
+    }
+  ],
+  "portal.live.faculty.v1": [],
+  "portal.live.testimonials.v1": [],
+  "portal.live.posts.v1": [],
+  "portal.versions.v1": []
+}
