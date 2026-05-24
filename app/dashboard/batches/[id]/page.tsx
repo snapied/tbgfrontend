@@ -7,25 +7,33 @@
 //     fuzzy pattern used elsewhere (typos OK).
 //
 // Common Room tab:
-//   - Feed of posts. Members can post + comment + react. Teacher can
+//   - Feed of posts. Members can post + comment + react. Instructor can
 //     pin, hide, delete. Pinned posts float to the top.
 //
 // This file is intentionally one screen — splitting Members and Common
 // Room into separate routes would mean two page-skeletons to maintain
 // for what's really one cohort context.
 
-import { use, useMemo, useRef, useState } from "react"
+import { use, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   ArrowLeft,
   AtSign,
+  Bell,
+  BellOff,
+  Bookmark,
+  BookmarkCheck,
+  CalendarClock,
+  Award,
+  BookOpen,
   Check,
   Download,
   Eye,
   EyeOff,
   FileText,
   Loader2,
+  PenSquare,
   LogOut,
   MessageCircle,
   MoreHorizontal,
@@ -51,6 +59,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -93,11 +102,24 @@ import {
   getBatchSpaces,
   DEFAULT_BATCH_SPACES,
   type BatchSpace,
+  type BatchPost,
 } from "@/lib/lms-store"
 import { fuzzySearch } from "@/lib/fuzzy-search"
 import { useTenant } from "@/lib/tenant-store"
+import { CommunityMemberToolkit } from "@/components/dashboard/community-member-toolkit"
+import { useCommunityMemberPrefs } from "@/lib/community-member-prefs"
+import { CommunityBulkInviteDialog } from "@/components/dashboard/community-bulk-invite-dialog"
+import { useCommunityModerators } from "@/lib/community-moderators"
+import { CommunityHealthWidget } from "@/components/dashboard/community-health-widget"
+import { useJoinRequests } from "@/lib/community-join-requests"
 import { cn } from "@/lib/utils"
 import { useConfirm } from "@/lib/use-confirm"
+import {
+  getMutedThreadIds,
+  isPostBookmarked,
+  setPostBookmarked,
+  setThreadMuted,
+} from "@/lib/community-post-prefs"
 import { RichTextEditor } from "@/components/editor/rich-text-editor"
 import type { Editor } from "@tiptap/react"
 import {
@@ -114,13 +136,13 @@ import { toastUndoableDelete } from "@/lib/toast-undo"
 const BATCH_TOUR: TourStep[] = [
   {
     placement: "center",
-    title: "Your batch's home base",
-    body: "The Common Room is the persistent feed your cohort talks in. This tour shows the bits people miss — the teacher pill, the @-tag picker, file attachments, and post editing.",
+    title: "Your community's home base",
+    body: "The Common Room is the persistent feed your cohort talks in. This tour shows the bits people miss — the Instructor pill, the @-tag picker, file attachments, and post editing.",
     emoji: "👥",
   },
   {
     target: "[data-tour='batch-teachers']",
-    title: "Teachers, pinned at the top",
+    title: "Instructors, pinned at the top",
     body: "Course instructors and co-instructors show as chips so everyone knows who's leading. Members count is on the right.",
     emoji: "🎓",
   },
@@ -139,7 +161,7 @@ const BATCH_TOUR: TourStep[] = [
   {
     target: "[data-tour='batch-attach']",
     title: "Attach anything",
-    body: "Images render as thumbnails, videos play inline, PDFs open in an embedded viewer, everything else becomes a download chip. Whole batch gets notified the moment you hit Post.",
+    body: "Images render as thumbnails, videos play inline, PDFs open in an embedded viewer, everything else becomes a download chip. The whole community gets notified the moment you hit Post.",
     emoji: "📎",
   },
   {
@@ -180,6 +202,24 @@ function previewText(html: string, max = 140): string {
     .trim()
     .slice(0, max)
 }
+// Assignment descriptions come from the WYSIWYG editor as HTML.  For the
+// table preview we want plain text — strip tags + collapse whitespace.
+// Server-rendered, no DOM; a small regex is enough since we're not parsing
+// for security, just stripping decoration.
+function stripHtmlToPreview(html: string | undefined, max = 140): string {
+  if (!html) return ""
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max)
+}
 
 export default function BatchDetailPage({
   params,
@@ -189,6 +229,11 @@ export default function BatchDetailPage({
   const { id } = use(params)
   const router = useRouter()
   const confirm = useConfirm()
+  const { currentTenant } = useTenant()
+  // Sprint B Communities #4/#5/#47 — derived once at the page root
+  // so all the per-community primitives (member toolkit, bulk
+  // invite, mod tier) read from a single source of truth.
+  const tenantSlug = currentTenant?.slug ?? ""
   const {
     studentGroups,
     updateStudentGroup,
@@ -198,6 +243,7 @@ export default function BatchDetailPage({
     students,
     courses,
     currentUser,
+    users,
     getUserById,
     getPostsForBatch,
     addBatchPost,
@@ -209,7 +255,14 @@ export default function BatchDetailPage({
     setBatchPostCommentHidden,
     updateBatchPost,
     addNotifications,
+    notifications,
   } = useLMS()
+  // Ref to the latest notifications array so the reaction-notify
+  // closure below sees fresh data without churning on every render.
+  // Reading through a ref keeps the onToggleReaction prop identity
+  // stable (no new function per notification arriving).
+  const postReactionNotifsRef = useRef(notifications)
+  postReactionNotifsRef.current = notifications
   // Active Space (sub-channel inside the batch). General by default;
   // the rail on the left lets the visitor switch.
   const [activeSpaceId, setActiveSpaceId] = useState<string>("space-general")
@@ -233,19 +286,19 @@ export default function BatchDetailPage({
   const members = batch.memberIds
     .map((mid) => getUserById(mid))
     .filter((u): u is NonNullable<typeof u> => !!u)
-  // Teacher = the linked course's primary instructor (if any). Falls back to
+  // Instructor = the linked course's primary instructor (if any). Falls back to
   // the current admin user — there's always *someone* moderating.
-  const teacher = course?.instructor ?? null
+  const Instructor = course?.instructor ?? null
   const coTeachers = (course?.coInstructorIds ?? [])
     .map((uid) => getUserById(uid))
     .filter((u): u is NonNullable<typeof u> => !!u)
-  // Mention list — teacher pinned to the top, then co-teachers, then members.
+  // Mention list — Instructor pinned to the top, then co-teachers, then members.
   // Used by the composer's @-picker.
   const mentionables: Mentionable[] = [
-    ...(teacher ? [{ id: teacher.id, name: teacher.name, role: "teacher" as const }] : []),
-    ...coTeachers.map((u) => ({ id: u.id, name: u.name, role: "teacher" as const })),
+    ...(Instructor ? [{ id: Instructor.id, name: Instructor.name, role: "Instructor" as const }] : []),
+    ...coTeachers.map((u) => ({ id: u.id, name: u.name, role: "Instructor" as const })),
     ...members
-      .filter((u) => u.id !== teacher?.id && !coTeachers.some((t) => t.id === u.id))
+      .filter((u) => u.id !== Instructor?.id && !coTeachers.some((t) => t.id === u.id))
       .map((u) => ({ id: u.id, name: u.name, role: "member" as const })),
   ]
 
@@ -257,7 +310,7 @@ export default function BatchDetailPage({
             href="/dashboard/batches"
             className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
           >
-            <ArrowLeft className="h-3 w-3" /> All batches
+            <ArrowLeft className="h-3 w-3" /> All communities
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-3">
             <span
@@ -275,9 +328,17 @@ export default function BatchDetailPage({
           </div>
           {(batch.description || batch.purpose) && (
             <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-              {batch.description || batch.purpose}
+              {stripHtmlToPreview(batch.description || batch.purpose)}
             </p>
           )}
+          {/* Cohort window strip — surfaces start/end dates inline
+              with the batch hero so the instructor (and any Instructor
+              who lands here) immediately sees "opens in 5 days" or
+              "wrapped 2 days ago" without diving into settings. */}
+          <CohortWindowBanner
+            startsAt={batch.startsAt}
+            endsAt={batch.endsAt}
+          />
         </div>
         <div className="flex items-center gap-2">
           <TakeATourButton tourId="batch-detail-v1" label="Take a tour" />
@@ -305,7 +366,7 @@ export default function BatchDetailPage({
                 onClick={async () => {
                   const ok = await confirm({
                     title: `Leave "${batch.name}"?`,
-                    description: "You'll stop seeing this community's posts and notifications. You can re-join later from an invite link if the teacher invites you back.",
+                    description: "You'll stop seeing this community's posts and notifications. You can re-join later from an invite link if the Instructor invites you back.",
                     destructive: true,
                     confirmLabel: "Leave community",
                   })
@@ -361,11 +422,27 @@ export default function BatchDetailPage({
             <Users2 className="h-3.5 w-3.5" />
             Directory <span className="text-muted-foreground">({batch.memberIds.length})</span>
           </TabsTrigger>
+          {/* Sprint C Communities #24 — pending requests tab. Admin-
+              only; hidden when no pending requests so we don't bait
+              admins with an empty surface. The badge surfaces the
+              count so admins see urgency. */}
+          {(currentUser?.role === "admin" || currentUser?.role === "instructor") && (
+            <PendingTabTrigger tenantSlug={tenantSlug} communityId={batch.id} />
+          )}
+          {/* Sprint C Communities #27 — insights tab. Admin-only. */}
+          {(currentUser?.role === "admin" || currentUser?.role === "instructor") && (
+            <TabsTrigger value="insights" className="gap-1.5">
+              <Sparkles className="h-3.5 w-3.5" />
+              Insights
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="room" className="mt-5">
           <CommonRoom
+            tenantSlug={tenantSlug}
             batchId={batch.id}
+            courseTitle={course?.title}
             spaces={getBatchSpaces(batch)}
             activeSpaceId={activeSpaceId}
             onSpaceChange={setActiveSpaceId}
@@ -452,7 +529,11 @@ export default function BatchDetailPage({
               const mentionedUsers = members.filter((u) => mentionedIds.has(u.id))
               // Thread participants (post author + prior commenters) get the
               // regular "new reply" ping. Exclude mentioned users so they
-              // don't get double-notified.
+              // don't get double-notified. We DON'T filter muted users
+              // here — mute is a per-user preference stored only in that
+              // user's own browser, so the sender's fan-out can't see
+              // it. Notifications still arrive and get hidden by each
+              // recipient's client-side filter in the inbox renderer.
               const involvedIds = new Set<string>([post.authorId, ...post.comments.map((c) => c.authorId)])
               involvedIds.delete(currentUser.id)
               for (const id of mentionedIds) involvedIds.delete(id)
@@ -499,7 +580,74 @@ export default function BatchDetailPage({
             }}
             onToggleReaction={(postId, emoji) => {
               if (!currentUser) return
+              const post = getPostsForBatch(batch.id).find((p) => p.id === postId)
+              // Determine whether this toggle is an ADD or a REMOVE
+              // BEFORE the state mutation. Only adds (not removes,
+              // not self-reactions) should produce a notification.
+              const alreadyReacted = post?.reactions?.[emoji]?.includes(
+                currentUser.id,
+              )
+              const isAdd = !alreadyReacted
               toggleBatchPostReaction(postId, emoji, currentUser.id)
+              if (!isAdd) return
+              if (!post) return
+              if (post.authorId === currentUser.id) return
+              // Debounce window — don't ping the author more than
+              // once per 15 minutes for reactions on this post.
+              // Reading existing notifications lets us share state
+              // across browsers without server changes.
+              const DEBOUNCE_MS = 15 * 60 * 1000
+              const recent = (postReactionNotifsRef.current ?? [])
+                .filter(
+                  (n) =>
+                    n.userId === post.authorId &&
+                    n.type === "batch-reaction" &&
+                    (n.meta as { postId?: string } | undefined)?.postId === postId,
+                )
+                .sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
+              if (recent) {
+                const since = Date.now() - Date.parse(recent.createdAt)
+                if (Number.isFinite(since) && since < DEBOUNCE_MS) return
+              }
+              // Count distinct reactors on this post (across every
+              // emoji) so the notification reads "5 people" not
+              // "5 reactions." Exclude the author themselves.
+              const reactionMap = {
+                ...(post.reactions ?? {}),
+                // Snapshot the just-added reaction so the count
+                // reflects the click that triggered us — we read
+                // before the store has fanned the update through.
+                [emoji]: Array.from(
+                  new Set([...(post.reactions?.[emoji] ?? []), currentUser.id]),
+                ),
+              }
+              const reactors = new Set<string>()
+              for (const ids of Object.values(reactionMap)) {
+                for (const id of ids) {
+                  if (id !== post.authorId) reactors.add(id)
+                }
+              }
+              const count = reactors.size
+              if (count === 0) return
+              const author = getUserById(post.authorId)
+              if (!author) return
+              const entries = buildNotifications(
+                [author],
+                {
+                  type: "batch-reaction",
+                  title:
+                    count === 1
+                      ? "Someone reacted to your post"
+                      : `${count} people reacted to your post 💛`,
+                  body: previewText(post.body),
+                  url: `/dashboard/batches/${batch.id}`,
+                  meta: { batchId: batch.id, postId },
+                },
+                // In-app only for reactions — emailing every reaction
+                // batch would dominate the author's inbox.
+                { channels: ["in-app"] },
+              )
+              addNotifications(entries)
             }}
             onToggleCommentHidden={setBatchPostCommentHidden}
           />
@@ -511,6 +659,10 @@ export default function BatchDetailPage({
             allStudents={students}
             getPostsForBatch={getPostsForBatch}
             batchId={batch.id}
+            communityName={batch.name}
+            tenantSlug={tenantSlug}
+            inviteCode={batch.inviteCode}
+            allUsers={users}
             onAdd={(ids) => addStudentsToGroup(batch.id, ids)}
             onRemove={(ids) => removeStudentsFromGroup(batch.id, ids)}
             isAdmin={
@@ -518,7 +670,279 @@ export default function BatchDetailPage({
             }
           />
         </TabsContent>
+
+        {/* Sprint C Communities #24 — pending requests panel.
+            Admin-only TabsContent; the TabsTrigger above is also
+            admin-gated so a non-admin opening this URL via deep-link
+            sees nothing. The component is its own self-contained
+            unit so adding it elsewhere later is mechanical. */}
+        {(currentUser?.role === "admin" || currentUser?.role === "instructor") && (
+          <TabsContent value="pending" className="mt-5">
+            <PendingMembersPanel
+              tenantSlug={tenantSlug}
+              communityId={batch.id}
+              communityName={batch.name}
+              users={users}
+              onApprove={(uid) => addStudentsToGroup(batch.id, [uid])}
+            />
+          </TabsContent>
+        )}
+
+        {/* Sprint C Communities #27 — insights tab. Charts derived
+            from the posts + members we already have in memory; no
+            extra fetches needed. */}
+        {(currentUser?.role === "admin" || currentUser?.role === "instructor") && (
+          <TabsContent value="insights" className="mt-5">
+            <CommunityInsightsPanel
+              posts={getPostsForBatch(batch.id)}
+              members={members}
+              getUserById={getUserById}
+            />
+          </TabsContent>
+        )}
       </Tabs>
+
+      {/* First-visit intro ritual for non-admin members. Pulls them
+          into the room by writing a real intro post (not just a
+          dialog they dismiss). Skip-able, one-shot per (member,
+          community), and silent for teachers / non-members. */}
+      <CommunityIntroPrompt
+        batchId={batch.id}
+        batchName={batch.name}
+        memberIds={batch.memberIds}
+        currentUser={currentUser}
+        existingPosts={getPostsForBatch(batch.id)}
+        activeSpaceId={activeSpaceId}
+        onPost={(html) => {
+          if (!currentUser) return
+          addBatchPost({
+            id: generateId("post"),
+            batchId: batch.id,
+            spaceId: activeSpaceId,
+            authorId: currentUser.id,
+            body: html,
+            pinned: false,
+            hidden: false,
+            reactions: {},
+            comments: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+        }}
+      />
+    </div>
+  )
+}
+
+// First-visit "introduce yourself" ritual.
+//
+// Why this exists: lurkers in a community are the silent killer of
+// engagement. Once a student has posted once, they're 4x more likely
+// to post again — but staring at a feed of veterans without saying
+// anything is paralysing. The intro prompt does the heavy lift of
+// the first post for them: pre-filled scaffold, one textarea, two
+// buttons, done.
+//
+// Fires only when:
+//   • The current user is a non-admin member of THIS community
+//   • They haven't posted here before (we check existingPosts)
+//   • They haven't dismissed or completed the prompt previously
+//     (per-(community, user) localStorage flag)
+//
+// Storage: `thebigclass.community.intro.<batchId>.<userId>` with
+// values "posted" | "dismissed". Absence = "should prompt".
+function CommunityIntroPrompt({
+  batchId,
+  batchName,
+  memberIds,
+  currentUser,
+  existingPosts,
+  activeSpaceId,
+  onPost,
+}: {
+  batchId: string
+  batchName: string
+  memberIds: string[]
+  currentUser?: { id: string; name: string; role?: string } | null
+  existingPosts: BatchPost[]
+  activeSpaceId: string
+  onPost: (html: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [intro, setIntro] = useState("")
+  // The decision to show the sheet runs once on mount per
+  // (batchId, userId) — we deliberately don't re-evaluate on every
+  // post add, because that would re-fire the prompt the instant
+  // the user posts something else and then revisits.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!currentUser) return
+    if (currentUser.role === "admin" || currentUser.role === "instructor") return
+    if (!memberIds.includes(currentUser.id)) return
+    const alreadyPosted = existingPosts.some((p) => p.authorId === currentUser.id)
+    if (alreadyPosted) return
+    const key = `thebigclass.community.intro.${batchId}.${currentUser.id}`
+    try {
+      if (window.localStorage.getItem(key)) return
+    } catch {
+      return
+    }
+    // Slight delay so the prompt doesn't slam into the page before
+    // the rest of the UI has painted — feels less aggressive when
+    // it eases in.
+    const t = window.setTimeout(() => setOpen(true), 600)
+    return () => window.clearTimeout(t)
+    // Intentional: re-run only on identity change, not post change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [batchId, currentUser?.id])
+
+  const markFlag = (value: "posted" | "dismissed") => {
+    if (typeof window === "undefined" || !currentUser) return
+    try {
+      window.localStorage.setItem(
+        `thebigclass.community.intro.${batchId}.${currentUser.id}`,
+        value,
+      )
+    } catch { /* private mode — best effort */ }
+  }
+
+  const handlePost = () => {
+    const trimmed = intro.trim()
+    if (!trimmed) return
+    // Convert plain text → minimal HTML (one paragraph per blank-
+    // line block). Tiptap renders paragraphs fine; this keeps line
+    // breaks visible without exposing the user to a rich editor in
+    // what should be a 30-second flow.
+    const html = trimmed
+      .split(/\n{2,}/)
+      .map((para) => `<p>${escapeHtml(para).replace(/\n/g, "<br/>")}</p>`)
+      .join("")
+    onPost(html)
+    markFlag("posted")
+    setOpen(false)
+    toast.success("Welcome! Your intro is live in the room.")
+  }
+
+  const handleSkip = () => {
+    markFlag("dismissed")
+    setOpen(false)
+  }
+
+  if (!currentUser) return null
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => (v ? setOpen(true) : handleSkip())}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Welcome to {batchName} 👋</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 pt-2">
+          <p className="text-sm text-muted-foreground">
+            Two sentences about you — the community sees this so they
+            know who you are. Don&rsquo;t overthink it.
+          </p>
+          <Textarea
+            value={intro}
+            onChange={(e) => setIntro(e.target.value)}
+            placeholder={`Hey everyone — I'm ${currentUser.name.split(" ")[0]}. I joined to learn ${batchName.toLowerCase()}. Excited to be here!`}
+            rows={4}
+            autoFocus
+            className="resize-none"
+          />
+          <p className="text-[11px] text-muted-foreground">
+            Posts into <span className="font-medium">#{activeSpaceId.replace(/^space-/, "")}</span> — you can edit or delete anytime.
+          </p>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          <Button variant="ghost" onClick={handleSkip}>
+            Skip for now
+          </Button>
+          <Button onClick={handlePost} disabled={!intro.trim()}>
+            Post my intro
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Lightweight HTML escape for the intro post body. We don't need
+// full sanitisation here — the body goes through the existing
+// RichTextContent renderer on display, which strips dangerous tags.
+// This guard just stops accidental "<" + "script" patterns from
+// inadvertently rendering as markup.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+}
+
+// ---------------------------------------------------------------
+// Cohort window banner — visible to anyone on the batch detail page
+// when startsAt / endsAt are set. Three states:
+//   • Pre-launch  → "Cohort begins in N days" (amber, anticipatory)
+//   • In window   → "Wraps in N days" or "Cohort is live" (primary)
+//   • Past        → "Wrapped on <date>" (muted, archived feel)
+// Always-on batches (no dates set) render nothing.
+// ---------------------------------------------------------------
+function CohortWindowBanner({
+  startsAt,
+  endsAt,
+}: {
+  startsAt?: string
+  endsAt?: string
+}) {
+  if (!startsAt && !endsAt) return null
+  const now = Date.now()
+  const start = startsAt ? new Date(startsAt).getTime() : null
+  const end = endsAt ? new Date(endsAt).getTime() : null
+  const startInFuture = start !== null && start > now
+  const endInPast = end !== null && end < now
+  const inWindow =
+    (start === null || start <= now) && (end === null || end >= now)
+
+  const fmt = (ms: number) =>
+    new Date(ms).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
+  const days = (ms: number) =>
+    Math.max(0, Math.ceil((ms - now) / (24 * 60 * 60 * 1000)))
+
+  let tone: "amber" | "primary" | "muted"
+  let label: string
+  if (startInFuture && start !== null) {
+    tone = "amber"
+    label = `Cohort begins in ${days(start)} day${days(start) === 1 ? "" : "s"} · ${fmt(start)}`
+  } else if (endInPast && end !== null) {
+    tone = "muted"
+    label = `Cohort wrapped on ${fmt(end)}`
+  } else if (inWindow && end !== null) {
+    tone = "primary"
+    label = `Cohort live · wraps in ${days(end)} day${days(end) === 1 ? "" : "s"} (${fmt(end)})`
+  } else {
+    tone = "primary"
+    label = startsAt
+      ? `Cohort live since ${fmt(start ?? now)}`
+      : `Cohort wraps on ${fmt(end ?? now)}`
+  }
+
+  const toneClasses =
+    tone === "amber"
+      ? "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+      : tone === "muted"
+        ? "border-muted-foreground/30 bg-muted/40 text-muted-foreground"
+        : "border-primary/30 bg-primary/10 text-primary"
+  return (
+    <div
+      className={`mt-2 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-xs font-medium ${toneClasses}`}
+    >
+      <CalendarClock className="h-3.5 w-3.5" />
+      <span>{label}</span>
     </div>
   )
 }
@@ -540,6 +964,11 @@ function BatchEditMenuItem({
   const [description, setDescription] = useState(batch.description ?? batch.purpose ?? "")
   const [courseId, setCourseId] = useState<string>(batch.courseId ?? "none")
   const [color, setColor] = useState<string>(batch.color ?? "#0a3024")
+  // Cohort dates use the native date input (YYYY-MM-DD). We strip
+  // any time portion off the stored ISO so the picker doesn't show
+  // a stale value, then re-stamp midnight UTC on save.
+  const [startsAt, setStartsAt] = useState(batch.startsAt ? batch.startsAt.slice(0, 10) : "")
+  const [endsAt, setEndsAt] = useState(batch.endsAt ? batch.endsAt.slice(0, 10) : "")
 
   function save() {
     onSave({
@@ -548,6 +977,8 @@ function BatchEditMenuItem({
       purpose: description.trim() || undefined,
       courseId: courseId !== "none" ? courseId : undefined,
       color,
+      startsAt: startsAt ? new Date(`${startsAt}T00:00:00Z`).toISOString() : undefined,
+      endsAt: endsAt ? new Date(`${endsAt}T23:59:59Z`).toISOString() : undefined,
       updatedAt: new Date().toISOString(),
     })
     setOpen(false)
@@ -611,6 +1042,33 @@ function BatchEditMenuItem({
                 onChange={(e) => setColor(e.target.value)}
                 className="h-9 w-16 cursor-pointer rounded border border-border bg-transparent"
               />
+            </div>
+            {/* Cohort window — both optional. Time-boxed cohorts set
+                both; rolling cohorts set just startsAt; always-on
+                groups leave both blank. The hero banner reacts to
+                whatever's filled. */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-batch-startsAt">Cohort starts</Label>
+                <Input
+                  id="edit-batch-startsAt"
+                  type="date"
+                  value={startsAt}
+                  onChange={(e) => setStartsAt(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-batch-endsAt">Cohort ends</Label>
+                <Input
+                  id="edit-batch-endsAt"
+                  type="date"
+                  value={endsAt}
+                  onChange={(e) => setEndsAt(e.target.value)}
+                />
+              </div>
+              <p className="col-span-2 text-[11px] text-muted-foreground">
+                Leave both blank for an always-on community. Set just &quot;starts&quot; for a rolling cohort.
+              </p>
             </div>
           </div>
           <DialogFooter>
@@ -785,7 +1243,7 @@ function CommunityAccessMenuItem({
                 className="mt-0.5"
               />
               <span className="text-sm">
-                <span className="font-medium">Teachers-only community</span>
+                <span className="font-medium">Instructors-only community</span>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   Only users with admin or instructor role can join. Use this for staff rooms — students are blocked even if visibility is open.
                 </p>
@@ -814,6 +1272,13 @@ function DirectoryTab({
   allStudents,
   getPostsForBatch,
   batchId,
+  // Sprint B Communities #5 — bulk invite needs the community name +
+  // invite URL to render the share message. tenantSlug + inviteCode
+  // build the URL; allUsers powers the email-to-known-user matching.
+  communityName,
+  tenantSlug,
+  inviteCode,
+  allUsers,
   onAdd,
   onRemove,
   isAdmin,
@@ -822,11 +1287,35 @@ function DirectoryTab({
   allStudents: DirectoryUser[]
   getPostsForBatch: ReturnType<typeof useLMS>["getPostsForBatch"]
   batchId: string
+    communityName: string
+    tenantSlug: string
+    inviteCode?: string
+    allUsers: DirectoryUser[]
   onAdd: (ids: string[]) => void
   onRemove: (ids: string[]) => void
   isAdmin: boolean
 }) {
   const [search, setSearch] = useState("")
+  // Sprint B Communities #7 — moderator promotion store. Per-
+  // community list of user ids tagged as moderators. Workspace
+  // admin/instructor remain implicit teachers (top tier).
+  const mods = useCommunityModerators(tenantSlug, batchId)
+  // Sprint B Communities #5 — bulk invite dialog state. Kept local
+  // to DirectoryTab (instead of bubbling up) because this is the
+  // only surface that opens it.
+  const [bulkInviteOpen, setBulkInviteOpen] = useState(false)
+  // Sprint B Communities #6 — active-in-last-7d filter. We compute
+  // a Set of authorIds with a post in the last 7 days once per
+  // render so per-card checks stay O(1).
+  const [activeOnly, setActiveOnly] = useState(false)
+  const recentActiveIds = useMemo(() => {
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const ids = new Set<string>()
+    for (const p of getPostsForBatch(batchId)) {
+      if (new Date(p.createdAt).getTime() >= sevenDaysAgo) ids.add(p.authorId)
+    }
+    return ids
+  }, [getPostsForBatch, batchId])
   const [locationFilter, setLocationFilter] = useState<string>("all")
   const [pickerOpen, setPickerOpen] = useState(false)
   const [profileMemberId, setProfileMemberId] = useState<string | null>(null)
@@ -845,8 +1334,12 @@ function DirectoryTab({
 
   const filtered = useMemo(() => {
     const base = members.filter((m) => {
-      if (locationFilter === "all") return true
-      return m.city === locationFilter || m.country === locationFilter
+      if (locationFilter !== "all" && m.city !== locationFilter && m.country !== locationFilter) {
+        return false
+      }
+      // Sprint B Communities #6 — active-in-last-7d filter.
+      if (activeOnly && !recentActiveIds.has(m.id)) return false
+      return true
     })
     return fuzzySearch(base, search, (m) => [
       m.name,
@@ -857,7 +1350,7 @@ function DirectoryTab({
       m.college ?? "",
       m.school ?? "",
     ])
-  }, [members, search, locationFilter])
+  }, [members, search, locationFilter, activeOnly, recentActiveIds])
 
   const profileMember = profileMemberId
     ? members.find((m) => m.id === profileMemberId) ?? null
@@ -891,10 +1384,36 @@ function DirectoryTab({
             </select>
           )}
         </div>
+        {/* Sprint B Communities #6 — active filter chip. Hidden when
+            no one's been active recently (filter would be useless). */}
+        {recentActiveIds.size > 0 && (
+          <button
+            type="button"
+            onClick={() => setActiveOnly((v) => !v)}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+              activeOnly
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80",
+            )}
+            title="Show only members who posted in the last 7 days"
+          >
+            Active 7d · {recentActiveIds.size}
+          </button>
+        )}
         {isAdmin && (
-          <Button onClick={() => setPickerOpen(true)}>
-            <UserPlus className="mr-1.5 h-4 w-4" /> Add students
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Sprint B Communities #5 — bulk invite. Sits beside
+                the existing one-at-a-time Add students button so
+                admins discover the bulk path without losing the
+                familiar single-add affordance. */}
+            <Button variant="outline" onClick={() => setBulkInviteOpen(true)}>
+              <UserPlus className="mr-1.5 h-4 w-4" /> Bulk invite
+            </Button>
+            <Button onClick={() => setPickerOpen(true)}>
+              <UserPlus className="mr-1.5 h-4 w-4" /> Add students
+            </Button>
+          </div>
         )}
       </div>
 
@@ -905,8 +1424,8 @@ function DirectoryTab({
             <p className="mt-3 text-sm font-semibold">No members yet</p>
             <p className="mt-1 max-w-sm text-xs text-muted-foreground">
               {isAdmin
-                ? "Add students from your roster to give this batch a Common Room people will actually visit."
-                : "This batch doesn't have any members yet."}
+                ? "Add students from your roster to give this community a Common Room people will actually visit."
+                : "This community doesn't have any members yet."}
             </p>
             {isAdmin && (
               <Button className="mt-4" onClick={() => setPickerOpen(true)}>
@@ -940,28 +1459,66 @@ function DirectoryTab({
                     <div className="flex items-start gap-3">
                       <Avatar user={m} size={44} />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{m.name}</p>
+                        <p className="truncate text-sm font-semibold flex items-center gap-1.5">
+                          {m.name}
+                          {/* Sprint B Communities #7 — moderator pill.
+                              Only renders for promoted members
+                              who aren't already workspace teachers
+                              (the "Instructor" label below conveys that
+                              tier). */}
+                          {mods.isModerator(m.id) && m.role !== "admin" && m.role !== "instructor" && (
+                            <span className="rounded-full bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-700 dark:text-purple-300">
+                              Mod
+                            </span>
+                          )}
+                        </p>
                         <p className="truncate text-xs text-muted-foreground">
                           {m.role === "admin" || m.role === "instructor"
-                            ? "Teacher"
-                            : "Member"}
+                            ? "Instructor"
+                            : mods.isModerator(m.id)
+                              ? "Moderator"
+                              : "Member"}
                           {(m.city || m.country) && (
                             <span> · {m.city || m.country}</span>
                           )}
                         </p>
                       </div>
                       {isAdmin && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onRemove([m.id])
-                          }}
-                          title="Remove from batch"
-                          className="rounded p-1 text-muted-foreground opacity-0 hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
-                        >
-                          <UserMinus className="h-3.5 w-3.5" />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-1 opacity-0 group-hover:opacity-100">
+                          {/* Sprint B Communities #7 — toggle moderator
+                              for non-Instructor members. Workspace
+                              teachers are already top-tier so we
+                              skip the affordance for them. */}
+                          {m.role !== "admin" && m.role !== "instructor" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                mods.toggle(m.id)
+                              }}
+                              title={mods.isModerator(m.id) ? "Demote moderator" : "Promote to moderator"}
+                              className={cn(
+                                "rounded p-1 text-muted-foreground hover:bg-purple-500/10 hover:text-purple-600",
+                                mods.isModerator(m.id) && "text-purple-600",
+                              )}
+                            >
+                              <span className="text-[10px] font-bold uppercase tracking-wider">
+                                {mods.isModerator(m.id) ? "Demote" : "Mod"}
+                              </span>
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onRemove([m.id])
+                            }}
+                            title="Remove from batch"
+                            className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          >
+                            <UserMinus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       )}
                     </div>
                     {m.bio && (
@@ -1017,6 +1574,23 @@ function DirectoryTab({
             ? getPostsForBatch(batchId).filter((p) => p.authorId === profileMember.id)
             : []
         }
+      />
+
+      {/* Sprint B Communities #5 — bulk invite dialog. Renders only
+          on demand; the existing per-batch invite-code lifecycle is
+          owned by the access-settings dialog and remains intact. */}
+      <CommunityBulkInviteDialog
+        open={bulkInviteOpen}
+        onOpenChange={setBulkInviteOpen}
+        communityName={communityName}
+        inviteUrl={
+          inviteCode
+            ? `${typeof window !== "undefined" ? window.location.origin : ""}/p/${tenantSlug}/join/${inviteCode}`
+            : `${typeof window !== "undefined" ? window.location.origin : ""}/p/${tenantSlug}/batches/${batchId}`
+        }
+        knownUsers={allUsers.map((u) => ({ id: u.id, email: u.email, name: u.name }))}
+        existingMemberIds={members.map((m) => m.id)}
+        onAddKnown={(ids) => onAdd(ids)}
       />
     </div>
   )
@@ -1097,9 +1671,9 @@ function MemberProfileSheet({
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   {member.role === "admin"
-                    ? "Teacher · workspace owner"
+                    ? "Instructor · workspace owner"
                     : member.role === "instructor"
-                      ? "Teacher"
+                      ? "Instructor"
                       : "Member"}
                   {member.city && ` · ${member.city}`}
                   {member.country && ` · ${member.country}`}
@@ -1162,14 +1736,14 @@ function MemberProfileSheet({
                   </div>
                 </div>
               )}
-              {/* Recent posts in this batch */}
+              {/* Recent posts in this community */}
               <div>
                 <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  Posts in this batch ({postsByThisMember.length})
+                  Posts in this community ({postsByThisMember.length})
                 </p>
                 {postsByThisMember.length === 0 ? (
                   <p className="rounded-md border border-dashed border-border p-3 text-center text-xs text-muted-foreground">
-                    Hasn&apos;t posted in this batch yet.
+                    Hasn&apos;t posted in this community yet.
                   </p>
                 ) : (
                   <ul className="space-y-2">
@@ -1268,7 +1842,7 @@ function AddMembersDialog({
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Add students to this batch</DialogTitle>
+          <DialogTitle>Add students to this community</DialogTitle>
         </DialogHeader>
         <div className="space-y-3 pt-2">
           <div className="relative">
@@ -1357,10 +1931,17 @@ function AddMembersDialog({
 // Common Room — left rail of Spaces + active space's feed.
 // ---------------------------------------------------------------
 type Attachment = NonNullable<ReturnType<typeof useLMS>["batchPosts"][number]["attachments"]>[number]
-type Mentionable = { id: string; name: string; role?: "teacher" | "member" }
+type Mentionable = { id: string; name: string; role?: "Instructor" | "member" }
 
 type CommonRoomProps = {
+  /** Tenant slug — scopes the member-prefs storage so different
+   *  workspaces in the same browser don't clobber each other's
+   *  onboarding state. */
+  tenantSlug: string
   batchId: string
+  /** Title of the linked course (if any). Used to localise starter
+   *  prompts so they reference the cohort the community belongs to. */
+  courseTitle?: string
   spaces: BatchSpace[]
   activeSpaceId: string
   onSpaceChange: (spaceId: string) => void
@@ -1369,7 +1950,7 @@ type CommonRoomProps = {
   isAdmin: boolean
   getUserById: ReturnType<typeof useLMS>["getUserById"]
   posts: ReturnType<typeof useLMS>["batchPosts"]
-  /** People available for @mention — teacher first, then members. */
+  /** People available for @mention — Instructor first, then members. */
   mentionables: Mentionable[]
   onAdd: (body: string, embedUrl?: string, attachments?: Attachment[]) => void
   onAddComment: (postId: string, body: string) => void
@@ -1382,18 +1963,739 @@ type CommonRoomProps = {
   onToggleCommentHidden: (postId: string, commentId: string, hidden: boolean) => void
 }
 
+// localStorage key for the composer draft. Scoped per (community,
+// space) so each space keeps its own in-progress post — switching
+// space mid-write doesn't clobber the other space's draft.
+/** Sprint C Communities #25 — per-channel composer prompt. The
+ *  placeholder shifts to match the channel's expected vibe. We key
+ *  on space id (stable for shipped defaults) and fall back to the
+ *  generic prompt for custom / renamed spaces — admins who renamed
+ *  "Q&A" to "Help" still get the question-shaped placeholder if
+ *  they kept the underlying space id. */
+function composerHintForSpace(spaceId: string | undefined, name: string | undefined): string {
+  const fallback = `Share something in ${name ?? "the room"}…`
+  if (!spaceId) return fallback
+  if (spaceId === "space-announcements") {
+    return "Pin an update — keep it under 280 characters so it reads at a glance."
+  }
+  if (spaceId === "space-qa") {
+    return "Ask a question. Be specific — paste the error, screenshot, or exact moment."
+  }
+  if (spaceId === "space-wins") {
+    return "Brag a little. Something you shipped, figured out, or got proud of this week."
+  }
+  if (spaceId === "space-resources") {
+    return "Drop a link — article, tool, video. Add one line on why it's worth a click."
+  }
+  if (spaceId === "space-off-topic") {
+    return "Anything goes here. Memes, life, the lounge."
+  }
+  return fallback
+}
+
+function draftKey(batchId: string, spaceId: string): string {
+  return `thebigclass.community.draft.${batchId}.${spaceId}.v1`
+}
+
+// Starter prompts shown when a space has zero posts. Each one drops
+// a pre-filled HTML draft into the composer; the user can edit or
+// post as-is. Course-linked communities get an extra prompt that
+// references the cohort's content. We keep the list short (4) on
+// purpose — too many "pick one" choices defeat the point.
+interface StarterPrompt {
+  label: string
+  emoji: string
+  hint: string
+  draft: string
+}
+function getStarterPrompts(courseTitle?: string): StarterPrompt[] {
+  const baseline: StarterPrompt[] = [
+    {
+      label: "Introduce yourself",
+      emoji: "👋",
+      hint: "Name, what you're learning, one goal — two sentences.",
+      draft:
+        "<p>Hey everyone — I&rsquo;m <strong>[your name]</strong>. I joined to <em>[your goal]</em>. Looking forward to learning with you all!</p>",
+    },
+    {
+      label: "Share a win",
+      emoji: "🎉",
+      hint: "Something small you shipped, learned, or figured out this week.",
+      draft:
+        "<p>Small win this week: <em>[what happened]</em>. Took me <em>[how long]</em>, learned <em>[what you learned]</em>.</p>",
+    },
+    {
+      label: "Ask a question",
+      emoji: "🤔",
+      hint: "Don't suffer alone — ask the room. Specifics help.",
+      draft:
+        "<p>Stuck on something — <em>[what you tried so far]</em>. Anyone hit this and figured it out?</p>",
+    },
+    {
+      label: "Drop a resource",
+      emoji: "🔗",
+      hint: "Article, video, tool — something the cohort would love.",
+      draft:
+        "<p>Found this useful: <em>[link or title]</em>.</p><p>Why it&rsquo;s good: <em>[one sentence]</em>.</p>",
+    },
+  ]
+  if (courseTitle) {
+    // Course-aware nudge replaces the generic "Drop a resource" slot
+    // because cohort-specific prompts get better engagement than
+    // generic ones (tested in the audit — see item C44).
+    baseline[3] = {
+      label: `What clicked in ${courseTitle}?`,
+      emoji: "💡",
+      hint: "One thing from the course that finally made sense — others will recognise it.",
+      draft: `<p>Something from <strong>${courseTitle}</strong> that clicked for me: <em>[the concept]</em>. The way it&rsquo;s framed makes <em>[your takeaway]</em> obvious.</p>`,
+    }
+  }
+  return baseline
+}
+interface ComposerDraft {
+  body: string
+  embedUrl: string
+  savedAt: string
+}
+
+/** Sprint C Communities #23 — admin bulk-moderation panel.
+ *  Collapsible. Four actions:
+ *    1. Bulk-hide stale unpinned (>30d, no comments) — sweep
+ *    2. Unpin all — when too many pins clutter the top
+ *    3. Bulk-hide by author — spam control. Picks a name, then
+ *       hides every visible post that user authored in this space.
+ *    4. (implicit) restore — admins can unhide from per-post kebab.
+ *  Each destructive action confirms before firing. */
+function AdminBulkModPanel({
+  posts,
+  onHideMany,
+  onUnpinAll,
+  getUserById,
+}: {
+  posts: ReturnType<typeof useLMS>["batchPosts"]
+  onHideMany: (ids: string[]) => void
+  onUnpinAll: (ids: string[]) => void
+  getUserById: ReturnType<typeof useLMS>["getUserById"]
+}) {
+  const [open, setOpen] = useState(false)
+  const [authorPickerOpen, setAuthorPickerOpen] = useState(false)
+  // Materialise the target sets once per render so the buttons can
+  // show counts ("Hide 12 stale posts") without recomputing on click.
+  const stalePostIds = useMemo(() => {
+    const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+    return posts
+      .filter((p) => !p.hidden && !p.pinned && (p.comments?.length ?? 0) === 0)
+      .filter((p) => new Date(p.createdAt).getTime() < cutoff)
+      .map((p) => p.id)
+  }, [posts])
+  const pinnedPostIds = useMemo(
+    () => posts.filter((p) => p.pinned).map((p) => p.id),
+    [posts],
+  )
+  // Per-author post counts among visible posts — drives the
+  // "Hide all from author" picker. Author rows are sorted by post
+  // count descending so the most active (= most spammy candidates)
+  // surface first.
+  const postsByAuthor = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const p of posts) {
+      if (p.hidden) continue
+      map.set(p.authorId, (map.get(p.authorId) ?? 0) + 1)
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([authorId, count]) => ({
+        authorId,
+        count,
+        name: getUserById(authorId)?.name ?? "Unknown",
+      }))
+  }, [posts, getUserById])
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="self-start rounded-md border border-dashed border-border bg-card px-2.5 py-1 text-[11.5px] font-semibold text-muted-foreground hover:border-primary/40 hover:text-foreground"
+      >
+        ⚙ Bulk mod tools
+      </button>
+    )
+  }
+  return (
+    <div className="rounded-lg border border-border bg-muted/30 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[12.5px] font-semibold">Bulk moderation</p>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Close mod panel"
+        >
+          ×
+        </button>
+      </div>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        Two-tap cleanup for the most common admin tasks.
+      </p>
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <button
+          type="button"
+          disabled={stalePostIds.length === 0}
+          onClick={() => {
+            if (
+              typeof window !== "undefined" &&
+              window.confirm(
+                `Hide ${stalePostIds.length} stale posts (no comments, not pinned, > 30 days old)?`,
+              )
+            ) {
+              onHideMany(stalePostIds)
+            }
+          }}
+          className={cn(
+            "rounded-md border px-2.5 py-1 text-[11.5px] font-semibold transition",
+            stalePostIds.length === 0
+              ? "border-border bg-card text-muted-foreground"
+              : "border-amber-500/40 bg-amber-500/5 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300",
+          )}
+        >
+          Hide {stalePostIds.length} stale posts
+        </button>
+        <button
+          type="button"
+          disabled={pinnedPostIds.length === 0}
+          onClick={() => {
+            if (
+              typeof window !== "undefined" &&
+              window.confirm(`Unpin all ${pinnedPostIds.length} pinned posts?`)
+            ) {
+              onUnpinAll(pinnedPostIds)
+            }
+          }}
+          className={cn(
+            "rounded-md border px-2.5 py-1 text-[11.5px] font-semibold transition",
+            pinnedPostIds.length === 0
+              ? "border-border bg-card text-muted-foreground"
+              : "border-border bg-card text-foreground hover:bg-muted",
+          )}
+        >
+          Unpin all {pinnedPostIds.length} pinned
+        </button>
+        {/* Sprint C Communities #23 — per-author bulk-hide. The
+            picker opens a small inline panel rather than a modal —
+            the candidates are typed-ahead-shortable and the action
+            is always the same (hide). Confirm dialog enforces a
+            deliberate-action gate. */}
+        <button
+          type="button"
+          disabled={postsByAuthor.length === 0}
+          onClick={() => setAuthorPickerOpen((v) => !v)}
+          className={cn(
+            "rounded-md border px-2.5 py-1 text-[11.5px] font-semibold transition",
+            postsByAuthor.length === 0
+              ? "border-border bg-card text-muted-foreground"
+              : authorPickerOpen
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-card text-foreground hover:bg-muted",
+          )}
+        >
+          Hide by author…
+        </button>
+      </div>
+      {authorPickerOpen && postsByAuthor.length > 0 && (
+        <div className="mt-2.5 max-h-48 overflow-y-auto rounded-md border border-border bg-card p-1.5">
+          <p className="px-2 py-1 text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+            Top posters · pick a name
+          </p>
+          {postsByAuthor.slice(0, 12).map((row) => (
+            <button
+              key={row.authorId}
+              type="button"
+              onClick={() => {
+                const idsToHide = posts
+                  .filter((p) => !p.hidden && p.authorId === row.authorId)
+                  .map((p) => p.id)
+                if (idsToHide.length === 0) return
+                if (
+                  typeof window !== "undefined" &&
+                  window.confirm(
+                    `Hide all ${idsToHide.length} posts from ${row.name}? Use "Mute" on the directory tab for ongoing suppression.`,
+                  )
+                ) {
+                  onHideMany(idsToHide)
+                  setAuthorPickerOpen(false)
+                }
+              }}
+              className="flex w-full items-center justify-between gap-2 rounded-sm px-2 py-1 text-left text-[12px] hover:bg-muted"
+            >
+              <span className="truncate font-medium">{row.name}</span>
+              <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums">
+                {row.count} {row.count === 1 ? "post" : "posts"}
+              </span>
+            </button>
+          ))}
+          {postsByAuthor.length > 12 && (
+            <p className="px-2 pt-1 text-[10.5px] text-muted-foreground">
+              +{postsByAuthor.length - 12} more — open Directory tab for full roster.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Sprint C Communities #24 — pending-tab trigger. Hidden when the
+ *  queue is empty so admins don't see a dead tab; visible with a
+ *  count badge when there's work. Mounted inside <TabsList> so it
+ *  participates in the same keyboard-arrow navigation as the others. */
+function PendingTabTrigger({
+  tenantSlug,
+  communityId,
+}: {
+  tenantSlug: string
+  communityId: string
+}) {
+  const { requests } = useJoinRequests(tenantSlug, communityId)
+  if (requests.length === 0) return null
+  return (
+    <TabsTrigger value="pending" className="gap-1.5">
+      <UserPlus className="h-3.5 w-3.5" />
+      Pending
+      <span className="ml-0.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-500/20 px-1 text-[10px] font-bold text-amber-700 dark:text-amber-300">
+        {requests.length}
+      </span>
+    </TabsTrigger>
+  )
+}
+
+/** Sprint C Communities #24 — pending requests panel. Lists pending
+ *  join requests with the user's "why I want to join" message;
+ *  individual approve/reject + bulk "approve all". Each approve
+ *  delegates membership to the parent so the existing addStudents
+ *  pipeline still owns the source of truth. */
+function PendingMembersPanel({
+  tenantSlug,
+  communityId,
+  communityName,
+  users,
+  onApprove,
+}: {
+  tenantSlug: string
+  communityId: string
+  communityName: string
+  users: ReturnType<typeof useLMS>["users"]
+  onApprove: (userId: string) => void
+}) {
+  const joins = useJoinRequests(tenantSlug, communityId)
+
+  if (joins.requests.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-10 text-center">
+          <Users2 className="h-8 w-8 text-muted-foreground" />
+          <p className="mt-3 text-sm font-semibold">All caught up</p>
+          <p className="mt-1 max-w-md text-xs text-muted-foreground">
+            No pending requests to join {communityName}.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Card>
+      <CardContent className="space-y-3 p-4">
+        <div className="flex items-center justify-between">
+          <p className="text-[12.5px] font-semibold">
+            {joins.requests.length} {joins.requests.length === 1 ? "person" : "people"}{" "}
+            waiting to join
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const ids = joins.approveAll()
+              for (const uid of ids) onApprove(uid)
+              toast.success(`Approved ${ids.length}.`)
+            }}
+          >
+            Approve all
+          </Button>
+        </div>
+        <ul className="space-y-2">
+          {joins.requests.map((r) => {
+            const u = users.find((x) => x.id === r.userId)
+            return (
+              <li
+                key={r.id}
+                className="flex items-start gap-3 rounded-md border border-border bg-card p-3"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                  {(u?.name ?? "?")
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")
+                    .slice(0, 2)
+                    .toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">{u?.name ?? "Unknown user"}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    {u?.email ?? r.userId} · {new Date(r.createdAt).toLocaleDateString()}
+                  </p>
+                  {r.message && (
+                    <p className="mt-1.5 line-clamp-3 text-[12.5px] text-foreground/90">
+                      &ldquo;{r.message}&rdquo;
+                    </p>
+                  )}
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const uid = joins.approve(r.id)
+                      if (uid) {
+                        onApprove(uid)
+                        toast.success(`${u?.name ?? "Member"} added.`)
+                      }
+                    }}
+                  >
+                    Approve
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => joins.reject(r.id)}>
+                    Reject
+                  </Button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </CardContent>
+    </Card>
+  )
+}
+
+/** Sprint C Communities #27 — insights panel. Compact metrics
+ *  visualisation. Pure derived data, no extra fetches: posts +
+ *  members already loaded for the community. */
+function CommunityInsightsPanel({
+  posts,
+  members,
+  getUserById,
+}: {
+  posts: ReturnType<typeof useLMS>["batchPosts"]
+  members: ReturnType<typeof useLMS>["users"]
+  getUserById: ReturnType<typeof useLMS>["getUserById"]
+}) {
+  // Posts per week (last 8 weeks) for the trend.
+  const weeklyPosts = useMemo(() => {
+    const now = Date.now()
+    const buckets: Array<{ label: string; count: number }> = []
+    for (let i = 7; i >= 0; i--) {
+      const start = now - (i + 1) * 7 * 24 * 3600 * 1000
+      const end = now - i * 7 * 24 * 3600 * 1000
+      const count = posts.filter((p) => {
+        const t = new Date(p.createdAt).getTime()
+        return t >= start && t < end
+      }).length
+      buckets.push({ label: `w-${i}`, count })
+    }
+    return buckets
+  }, [posts])
+  const maxWeek = Math.max(1, ...weeklyPosts.map((w) => w.count))
+
+  // Top 5 contributors by post + comment count.
+  const topContributors = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const p of posts) {
+      counts.set(p.authorId, (counts.get(p.authorId) ?? 0) + 1)
+      for (const c of p.comments ?? []) {
+        counts.set(c.authorId, (counts.get(c.authorId) ?? 0) + 0.5)
+      }
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([userId, score]) => ({
+        userId,
+        name: getUserById(userId)?.name ?? "Unknown",
+        score: Math.round(score * 2) / 2,
+      }))
+  }, [posts, getUserById])
+
+  // Median time-to-first-reply (in hours). We only consider posts
+  // that have at least one comment. Skip when N<3 to avoid a
+  // misleading "median" of 1.
+  const medianReplyHours = useMemo(() => {
+    const samples: number[] = []
+    for (const p of posts) {
+      const first = (p.comments ?? [])[0]
+      if (!first) continue
+      const ms = new Date(first.createdAt).getTime() - new Date(p.createdAt).getTime()
+      if (ms > 0) samples.push(ms / 3_600_000)
+    }
+    if (samples.length < 3) return null
+    samples.sort((a, b) => a - b)
+    return samples[Math.floor(samples.length / 2)]
+  }, [posts])
+
+  // Active-member rate over 14d.
+  const activeRate = useMemo(() => {
+    if (members.length === 0) return 0
+    const cutoff = Date.now() - 14 * 24 * 3600 * 1000
+    const active = new Set(
+      posts
+        .filter((p) => new Date(p.createdAt).getTime() >= cutoff)
+        .map((p) => p.authorId),
+    )
+    return active.size / members.length
+  }, [posts, members])
+
+  return (
+    <div className="space-y-4">
+      {/* Headline metrics */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Posts this week
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">
+              {weeklyPosts[weeklyPosts.length - 1]?.count ?? 0}
+            </p>
+            {weeklyPosts.length >= 2 && (
+              <p className="text-[11px] text-muted-foreground">
+                vs {weeklyPosts[weeklyPosts.length - 2]?.count ?? 0} last week
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Median reply time
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">
+              {medianReplyHours === null
+                ? "—"
+                : medianReplyHours < 1
+                  ? `${Math.round(medianReplyHours * 60)}m`
+                  : `${medianReplyHours.toFixed(1)}h`}
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {medianReplyHours === null
+                ? "Needs more replies"
+                : "Across posts that got at least one reply"}
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Active members (14d)
+            </p>
+            <p className="mt-1 text-2xl font-bold tabular-nums">
+              {(activeRate * 100).toFixed(0)}%
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              {Math.round(activeRate * members.length).toLocaleString()} of {members.length.toLocaleString()} members posted
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Posts-per-week bar chart — bare-bones, no chart lib */}
+      <Card>
+        <CardContent className="p-4">
+          <p className="text-[12.5px] font-semibold">Posts per week — last 8 weeks</p>
+          <div className="mt-3 flex items-end gap-1.5 h-32">
+            {weeklyPosts.map((w, i) => {
+              const h = Math.max(2, (w.count / maxWeek) * 100)
+              return (
+                <div key={i} className="flex flex-1 flex-col items-center justify-end gap-1">
+                  <span className="text-[10px] font-semibold tabular-nums text-muted-foreground">
+                    {w.count}
+                  </span>
+                  <div
+                    className="w-full rounded-t bg-primary/60"
+                    style={{ height: `${h}%` }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Top contributors */}
+      {topContributors.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <p className="text-[12.5px] font-semibold">Top contributors</p>
+            <ul className="mt-3 space-y-1.5">
+              {topContributors.map((c, i) => (
+                <li
+                  key={c.userId}
+                  className="flex items-center gap-3 text-[12.5px]"
+                >
+                  <span className="w-5 text-right text-muted-foreground tabular-nums">
+                    {i + 1}.
+                  </span>
+                  <span className="flex-1 font-semibold truncate">{c.name}</span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {c.score} {c.score === 1 ? "point" : "points"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[10.5px] text-muted-foreground">
+              Score: 1 per post + 0.5 per comment.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
 function CommonRoom(props: CommonRoomProps) {
+  // Sprint B Communities #47 — read-state. Stamp lastPostSeenAt the
+  // moment this component mounts (= the moment the user opens the
+  // community). The next visit's "X new since" computes off this
+  // stamp. Side-effect: also gives us a way to mark onboarding
+  // steps as completed from inside actions below.
+  const memberPrefs = useCommunityMemberPrefs({
+    tenantSlug: props.tenantSlug,
+    userId: props.currentUserId,
+    communityId: props.batchId,
+  })
+  useEffect(() => {
+    if (!props.currentUserId) return
+    // Don't stamp on every render — only once per mount. The
+    // empty-deps array is intentional; we also re-stamp when the
+    // community id changes (rare in this UI; safe extra trigger).
+    memberPrefs.markFeedSeen()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.batchId, props.currentUserId])
+
   const [body, setBody] = useState("")
   const [embedUrl, setEmbedUrl] = useState("")
   const [showEmbedInput, setShowEmbedInput] = useState(false)
+  // Sprint A Communities #11 — feed tab state. Three tabs:
+  //   "for-you" : smart-sorted (recency × engagement × pinned bonus)
+  //   "latest"  : strict newest-first chronological
+  //   "pinned"  : only pinned posts (when nothing pinned, tab is
+  //               hidden so the strip doesn't show a dead pill)
+  //
+  // Sprint D bugfix — default flipped to "latest". User report:
+  // "I want the posts to come in descending order". The smart sort
+  // is great when there's a lot of activity but for the majority
+  // of communities (small + recent) it can show a post from last
+  // week above one from this morning. Latest is the predictable
+  // default; for-you stays available as a one-click option for
+  // power members.
+  const [feedTab, setFeedTab] = useState<"for-you" | "latest" | "pinned">("latest")
+  // Search query for the community feed. "/" focuses the input from
+  // anywhere on the page (handled by SearchInput). Filtering happens
+  // client-side because the post set is bounded and already in scope;
+  // no need to round-trip to the server for a community of <500 posts.
+  const [postSearch, setPostSearch] = useState("")
+  // Draft auto-save banner state. Surfaces once on mount when a
+  // saved draft exists for this (community, space) — gives the
+  // Instructor a one-tap restore + a Discard escape hatch.
+  const [draftHint, setDraftHint] = useState<ComposerDraft | null>(null)
+  // Track if the user has interacted since mount; we only persist
+  // after their first edit so the act of opening a space doesn't
+  // wipe whatever was there with an empty save.
+  const dirtyRef = useRef(false)
   // Attachments queued for the current draft post. Cleared on submit.
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
   const [uploading, setUploading] = useState(false)
   const [mentionOpen, setMentionOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  // Drag-drop overlay state. We listen at window level so the user
+  // can drop a file anywhere on the community feed and have it land
+  // in the composer — much more forgiving than asking them to hit
+  // the small "Attach" button or drag exactly onto the composer.
+  // Counter-based isDraggingOver tracks nested enter/leave events
+  // accurately (dragleave fires when you move between child
+  // elements, so a naive boolean would flicker).
+  const [isDragging, setIsDragging] = useState(false)
+  const dragCountRef = useRef(0)
   const editorRef = useRef<Editor | null>(null)
-  const teachers = props.mentionables.filter((m) => m.role === "teacher")
-  const regularMembers = props.mentionables.filter((m) => m.role !== "teacher")
+  const teachers = props.mentionables.filter((m) => m.role === "Instructor")
+  const regularMembers = props.mentionables.filter((m) => m.role !== "Instructor")
+
+  // ----- Draft persistence -----
+  // On (batchId, activeSpaceId) change: reset dirty + check for a
+  // stashed draft. Don't auto-restore — pop a banner so the user
+  // explicitly opts in (avoids surprising re-inject after they
+  // already discarded the draft mentally).
+  useEffect(() => {
+    dirtyRef.current = false
+    setBody("")
+    setEmbedUrl("")
+    setDraftHint(null)
+    if (typeof window === "undefined") return
+    try {
+      const raw = window.localStorage.getItem(draftKey(props.batchId, props.activeSpaceId))
+      if (!raw) return
+      const parsed = JSON.parse(raw) as ComposerDraft
+      // Ignore empty / whitespace-only drafts — nothing to restore.
+      const hasBody = parsed.body && parsed.body.replace(/<[^>]+>/g, "").trim().length > 0
+      const hasEmbed = parsed.embedUrl && parsed.embedUrl.trim().length > 0
+      if (hasBody || hasEmbed) setDraftHint(parsed)
+    } catch { /* malformed draft — ignore */ }
+  }, [props.batchId, props.activeSpaceId])
+
+  // Debounced write of the in-progress draft. 800ms quiet period
+  // matches the portal-state mirror's cadence so we feel consistent
+  // without thrashing localStorage on every keystroke.
+  useEffect(() => {
+    if (!dirtyRef.current) return
+    if (typeof window === "undefined") return
+    const handle = setTimeout(() => {
+      const hasContent =
+        (body && body.replace(/<[^>]+>/g, "").trim().length > 0) ||
+        (embedUrl && embedUrl.trim().length > 0)
+      const key = draftKey(props.batchId, props.activeSpaceId)
+      try {
+        if (hasContent) {
+          const payload: ComposerDraft = {
+            body,
+            embedUrl,
+            savedAt: new Date().toISOString(),
+          }
+          window.localStorage.setItem(key, JSON.stringify(payload))
+        } else {
+          window.localStorage.removeItem(key)
+        }
+      } catch { /* quota / private mode — best-effort */ }
+    }, 800)
+    return () => clearTimeout(handle)
+  }, [body, embedUrl, props.batchId, props.activeSpaceId])
+
+  const clearDraft = () => {
+    if (typeof window === "undefined") return
+    try {
+      window.localStorage.removeItem(draftKey(props.batchId, props.activeSpaceId))
+    } catch { /* ignore */ }
+  }
+
+  const restoreDraft = () => {
+    if (!draftHint) return
+    setBody(draftHint.body)
+    setEmbedUrl(draftHint.embedUrl)
+    setDraftHint(null)
+    // Mark dirty so the autosave cycle starts immediately on edits.
+    dirtyRef.current = true
+  }
+
+  const discardDraft = () => {
+    setDraftHint(null)
+    clearDraft()
+  }
 
   async function handleFiles(list: FileList | null) {
     if (!list || list.length === 0) return
@@ -1417,6 +2719,62 @@ function CommonRoom(props: CommonRoomProps) {
     }
   }
 
+  // Window-level drag-drop listeners. We attach once on mount and
+  // bail when the current user can't post (no point dimming the
+  // page for visitors who couldn't drop a file anyway). The counter
+  // pattern tracks enter/leave correctly across nested elements —
+  // dragleave fires when moving between children, so a naive
+  // boolean would flicker the overlay constantly during normal
+  // mouse movement.
+  useEffect(() => {
+    if (!props.currentUserId) return
+    if (typeof window === "undefined") return
+    const hasFiles = (e: DragEvent) =>
+      Array.from(e.dataTransfer?.types ?? []).includes("Files")
+    const onEnter = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      dragCountRef.current++
+      if (dragCountRef.current === 1) setIsDragging(true)
+    }
+    const onOver = (e: DragEvent) => {
+      // Required for the drop event to fire. Without preventDefault
+      // here the browser interprets the file drop as a navigation
+      // attempt (opening the file in the tab).
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "copy"
+    }
+    const onLeave = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      dragCountRef.current = Math.max(0, dragCountRef.current - 1)
+      if (dragCountRef.current === 0) setIsDragging(false)
+    }
+    const onDrop = (e: DragEvent) => {
+      if (!hasFiles(e)) return
+      e.preventDefault()
+      dragCountRef.current = 0
+      setIsDragging(false)
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        void handleFiles(e.dataTransfer.files)
+      }
+    }
+    window.addEventListener("dragenter", onEnter)
+    window.addEventListener("dragover", onOver)
+    window.addEventListener("dragleave", onLeave)
+    window.addEventListener("drop", onDrop)
+    return () => {
+      window.removeEventListener("dragenter", onEnter)
+      window.removeEventListener("dragover", onOver)
+      window.removeEventListener("dragleave", onLeave)
+      window.removeEventListener("drop", onDrop)
+    }
+    // handleFiles is stable enough — its identity changes on every
+    // render but it only mutates local state, never causes the
+    // listener pattern to misbehave. We deliberately don't list it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.currentUserId])
+
   function insertMention(m: Mentionable) {
     // Insert via Tiptap's command API so the mention lands at the current
     // caret rather than being appended after the last paragraph (which
@@ -1439,24 +2797,93 @@ function CommonRoom(props: CommonRoomProps) {
   const activeSpace =
     props.spaces.find((s) => s.id === props.activeSpaceId) ?? props.spaces[0]
 
+  // Pinned-post count, scoped to the active space's posts. Drives
+  // the visibility of the "Pinned" tab — no tab when nothing is
+  // pinned so the strip doesn't show a dead pill.
+  const pinnedCount = useMemo(
+    () => (props.isAdmin ? props.posts : props.posts.filter((p) => !p.hidden)).filter((p) => p.pinned).length,
+    [props.posts, props.isAdmin],
+  )
+
   const orderedPosts = useMemo(() => {
-    // Pinned first (most recent pin at top of pinned block), then
-    // chronological for the rest. Featured posts get the highlighted
-    // card treatment but stay in place, so a featured-but-not-pinned
-    // post sits in chronological order with a glow rather than being
-    // shoved to the top.
+    // 1. Visibility filter (hidden posts only visible to admins).
     const visible = props.isAdmin ? props.posts : props.posts.filter((p) => !p.hidden)
-    const pinned = visible.filter((p) => p.pinned)
-    const rest = visible.filter((p) => !p.pinned)
-    return [
-      ...pinned.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      ),
-      ...rest.sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
-      ),
-    ]
-  }, [props.posts, props.isAdmin])
+    // 2. Search filter BEFORE any sort so pinned posts that don't
+    // match the query don't artificially float to the top and bury
+    // the actual hits. Case-insensitive substring across body,
+    // author, embed, attachments, comments.
+    const q = postSearch.trim().toLowerCase()
+    const matchPost = (p: typeof visible[number]): boolean => {
+      if (!q) return true
+      const author = props.getUserById(p.authorId)?.name ?? ""
+      const bodyText = (p.body ?? "").replace(/<[^>]+>/g, " ")
+      const haystacks: string[] = [
+        bodyText,
+        author,
+        p.embedUrl ?? "",
+        ...(p.attachments ?? []).map((a) => a.name ?? ""),
+      ]
+      for (const c of p.comments ?? []) {
+        haystacks.push(c.body ?? "")
+        const cauthor = props.getUserById(c.authorId)?.name
+        if (cauthor) haystacks.push(cauthor)
+      }
+      return haystacks.some((h) => h.toLowerCase().includes(q))
+    }
+    const filtered = visible.filter(matchPost)
+
+    // Sprint A Communities #11 — per-tab ordering.
+    if (feedTab === "pinned") {
+      return filtered
+        .filter((p) => p.pinned)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    }
+
+    if (feedTab === "latest") {
+      // Strict chronological. We still float pinned to the top of
+      // their own dates — without that, pinning becomes meaningless
+      // in the "Latest" view. Compromise: pinned-then-chrono inside
+      // each segment, same as the old behaviour.
+      const pinned = filtered.filter((p) => p.pinned)
+      const rest = filtered.filter((p) => !p.pinned)
+      return [
+        ...pinned.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        ),
+        ...rest.sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        ),
+      ]
+    }
+
+    // "for-you" — smart sort. Score formula:
+    //   recencyScore: 1 / (1 + hours_since_post / 24)  // half-weight per day
+    //   engagementBoost: 1 + (totalReactions * 0.1) + (commentCount * 0.15)
+    //   pinnedBoost: pinned ? 2.5 : 1
+    //   recentlyActiveBoost: 1 + (lastCommentHours < 24 ? 0.5 : 0)
+    //
+    // Multiplicative so a heavily-discussed week-old post can still
+    // outrank a fresh post with no engagement (which is what makes
+    // "For you" different from "Latest"). All multipliers are bounded
+    // so a single ultra-popular post can't permanently dominate.
+    const now = Date.now()
+    const score = (p: typeof visible[number]): number => {
+      const ageHours = Math.max(0.5, (now - new Date(p.createdAt).getTime()) / 3_600_000)
+      const recency = 1 / (1 + ageHours / 24)
+      const reactionCount = Object.values(p.reactions ?? {})
+        .reduce((sum, ids) => sum + ids.length, 0)
+      const commentCount = (p.comments ?? []).length
+      const engagement = 1 + reactionCount * 0.1 + commentCount * 0.15
+      const pinnedBoost = p.pinned ? 2.5 : 1
+      const lastComment = p.comments?.[p.comments.length - 1]
+      const lastCommentHours = lastComment
+        ? (now - new Date(lastComment.createdAt).getTime()) / 3_600_000
+        : Infinity
+      const activeBoost = lastCommentHours < 24 ? 1.5 : 1
+      return recency * engagement * pinnedBoost * activeBoost
+    }
+    return [...filtered].sort((a, b) => score(b) - score(a))
+  }, [props.posts, props.isAdmin, props.getUserById, postSearch, feedTab])
 
   function submit() {
     // Allow posts with only attachments — the body can be empty if the user
@@ -1471,10 +2898,39 @@ function CommonRoom(props: CommonRoomProps) {
     setEmbedUrl("")
     setShowEmbedInput(false)
     setPendingAttachments([])
+    // Draft is now redundant — purge it so reopening this space
+    // doesn't offer to "restore" the post that just shipped.
+    dirtyRef.current = false
+    clearDraft()
+    setDraftHint(null)
+    // Sprint B Communities #4 — first-post tick on the onboarding
+    // checklist. Idempotent (the hook no-ops on re-marks).
+    memberPrefs.markOnboardingDone("intro")
   }
 
   return (
     <div className="grid gap-5 lg:grid-cols-[220px_1fr] lg:items-start">
+      {/* Drag-drop overlay. Pinned full-viewport with a dashed
+          inner border so it reads as a clear "drop target." Click-
+          through disabled via pointer-events-none on the children
+          so the overlay container catches the drop while children
+          don't block tile interaction during normal use. */}
+      {isDragging && (
+        <div
+          className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-primary/10 backdrop-blur-sm"
+          aria-hidden
+        >
+          <div className="pointer-events-none flex flex-col items-center gap-3 rounded-2xl border-2 border-dashed border-primary bg-card/95 px-12 py-8 shadow-2xl">
+            <Paperclip className="h-8 w-8 text-primary" />
+            <p className="text-lg font-semibold text-foreground">
+              Drop to attach
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Images, video, PDFs, audio — anything works
+            </p>
+          </div>
+        </div>
+      )}
       {/* Spaces rail */}
       <SpacesRail
         spaces={props.spaces}
@@ -1486,14 +2942,14 @@ function CommonRoom(props: CommonRoomProps) {
 
       {/* Active space feed */}
       <div className="space-y-4">
-        {/* Teachers + moderators card. Always rendered so members can see at
+        {/* Instructors + moderators card. Always rendered so members can see at
             a glance who's in charge of the batch. */}
         {teachers.length > 0 && (
           <Card data-tour="batch-teachers" className="border-primary/30 bg-primary/5">
             <CardContent className="flex flex-wrap items-center gap-3 p-3">
               <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
                 <Shield className="h-3.5 w-3.5" />
-                Teachers
+                Instructors
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {teachers.map((t) => (
@@ -1515,6 +2971,76 @@ function CommonRoom(props: CommonRoomProps) {
           </Card>
         )}
 
+        {/* Sprint C Communities #23 — admin bulk-moderation panel.
+            Most-common bulk needs surfaced as one-tap actions
+            instead of forcing per-post checkbox selection (which
+            would require a big PostCard refactor). Each action
+            confirms before firing because they're destructive. */}
+        {props.isAdmin && (
+          <AdminBulkModPanel
+            posts={props.posts}
+            getUserById={props.getUserById}
+            onHideMany={async (ids) => {
+              for (const id of ids) {
+                props.onToggleHide(id, true)
+              }
+            }}
+            onUnpinAll={async (ids) => {
+              for (const id of ids) {
+                props.onTogglePin(id)
+              }
+            }}
+          />
+        )}
+
+        {/* Sprint B Communities #17 — community health widget.
+            Admin-only; hides itself when health ≥ 70 so healthy
+            communities don't see the strip. Routes its action
+            buttons into the local composer / invite affordances. */}
+        {props.isAdmin && (
+          <CommunityHealthWidget
+            posts={props.posts}
+            members={props.mentionables.map((m) => ({ id: m.id, role: m.role === "Instructor" ? "instructor" : "student" }))}
+            onPostPrompt={() => {
+              const el = document.querySelector<HTMLTextAreaElement>(
+                "[data-tour='community-composer']",
+              )
+              el?.scrollIntoView({ behavior: "smooth", block: "center" })
+              el?.focus()
+            }}
+            onInvitePrompt={() => {
+              const el = document.querySelector<HTMLElement>("[data-tour='invite-link']")
+              el?.scrollIntoView({ behavior: "smooth", block: "center" })
+            }}
+          />
+        )}
+
+        {/* Sprint B Communities #4 / #16 / #47 — member toolkit.
+            Onboarding checklist + notification preset + read-state
+            badge in a single strip. Self-hides when the checklist
+            is done/dismissed and shows minimal "all caught up" copy
+            otherwise. We pass post createdAts so unread counts are
+            scoped to the active space. */}
+        {props.currentUserId && (
+          <CommunityMemberToolkit
+            tenantSlug={props.tenantSlug}
+            userId={props.currentUserId}
+            communityId={props.batchId}
+            postCreatedAts={props.posts.map((p) => p.createdAt)}
+            onStepAction={(step) => {
+              // Light-touch routing: most steps have no global UI to
+              // jump to (post composer is right below). We rely on
+              // the member tapping the checkmark to ack — except
+              // "invite" which has its own affordance further up the
+              // page.
+              if (step === "invite") {
+                const el = document.querySelector<HTMLElement>("[data-tour='invite-link']")
+                el?.scrollIntoView({ behavior: "smooth", block: "center" })
+              }
+            }}
+          />
+        )}
+
         {/* Active space header */}
         {activeSpace && (
           <div className="flex items-baseline justify-between gap-3 border-b border-border pb-3">
@@ -1530,20 +3056,114 @@ function CommonRoom(props: CommonRoomProps) {
               )}
             </div>
             <Badge variant="outline" className="text-[10px]">
-              {orderedPosts.length} post{orderedPosts.length === 1 ? "" : "s"}
+              {postSearch.trim()
+                ? `${orderedPosts.length} match${orderedPosts.length === 1 ? "" : "es"}`
+                : `${orderedPosts.length} post${orderedPosts.length === 1 ? "" : "s"}`}
             </Badge>
+          </div>
+        )}
+
+        {/* Search across this space's posts. "/" focuses the input
+            from anywhere on the page (handled by SearchInput). Hides
+            when there are no posts at all — searching an empty feed
+            adds noise without value. */}
+        {orderedPosts.length > 0 || postSearch.trim() ? (
+          <SearchInput
+            pageId={`community-${props.batchId}-${props.activeSpaceId}`}
+            value={postSearch}
+            onChange={setPostSearch}
+            placeholder={`Search posts in ${activeSpace?.name ?? "this space"}…`}
+            ariaLabel="Search community posts"
+            shortcutDescription="Focus community search"
+          />
+        ) : null}
+
+        {/* Sprint A Communities #11 — feed tabs. Pill strip sits
+            between search and the post list. "For you" = smart sort
+            (recency × engagement × pinned). "Latest" = pure chrono.
+            "Pinned" renders only when at least one post is pinned.
+            Hidden entirely when the feed has zero posts (otherwise
+            the strip looks like dead navigation). */}
+        {props.posts.length > 0 && (
+          <div
+            role="tablist"
+            aria-label="Feed sort"
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-background p-0.5 text-[12px] font-semibold"
+          >
+            {(
+              [
+                { id: "for-you" as const, label: "For you", hint: "Smart sort by recency + engagement" },
+                { id: "latest" as const, label: "Latest", hint: "Newest first, pinned floated" },
+                ...(pinnedCount > 0
+                  ? [{ id: "pinned" as const, label: `Pinned · ${pinnedCount}`, hint: "Only pinned posts" }]
+                  : []),
+              ]
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={feedTab === tab.id}
+                title={tab.hint}
+                onClick={() => setFeedTab(tab.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 transition-colors",
+                  feedTab === tab.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         )}
 
         {/* Composer */}
         <Card data-tour="batch-composer">
           <CardContent className="space-y-3 p-4">
+            {draftHint && (
+              <div className="flex items-center justify-between gap-2 rounded-md border border-primary/30 bg-primary/[0.04] px-3 py-2 text-xs">
+                <span className="text-muted-foreground">
+                  You have an unfinished post in this space — restore it?
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[11px]"
+                    onClick={restoreDraft}
+                  >
+                    Restore draft
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-[11px] text-muted-foreground"
+                    onClick={discardDraft}
+                  >
+                    Discard
+                  </Button>
+                </div>
+              </div>
+            )}
             <RichTextEditor
               value={body}
-              onChange={setBody}
+              onChange={(v) => {
+                dirtyRef.current = true
+                setBody(v)
+              }}
+              // Sprint C Communities #25 — per-channel composer
+              // hint. The placeholder shifts to match the channel
+              // norm (Announcements expects Instructor-only; Q&A
+              // expects a specific question, etc). Falls back to
+              // the generic prompt for community-defined custom
+              // spaces (admins who renamed the defaults).
               placeholder={
                 props.currentUserId
-                  ? `Share something in ${activeSpace?.name ?? "the room"}…`
+                  ? composerHintForSpace(activeSpace?.id, activeSpace?.name)
                   : "Sign in to post in the Common Room"
               }
               minHeight={120}
@@ -1555,7 +3175,10 @@ function CommonRoom(props: CommonRoomProps) {
             {showEmbedInput && (
               <Input
                 value={embedUrl}
-                onChange={(e) => setEmbedUrl(e.target.value)}
+                onChange={(e) => {
+                  dirtyRef.current = true
+                  setEmbedUrl(e.target.value)
+                }}
                 placeholder="https://www.youtube.com/watch?v=… or vimeo.com/…"
                 className="text-sm"
               />
@@ -1642,7 +3265,7 @@ function CommonRoom(props: CommonRoomProps) {
                       {teachers.length > 0 && (
                         <>
                           <p className="px-2 pb-1 pt-2 text-[10px] uppercase tracking-wide text-muted-foreground">
-                            Teachers
+                            Instructors
                           </p>
                           {teachers.map((t) => (
                             <button
@@ -1707,17 +3330,79 @@ function CommonRoom(props: CommonRoomProps) {
         </Card>
 
         {orderedPosts.length === 0 ? (
-          <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <MessageCircle className="h-8 w-8 text-muted-foreground" />
-              <p className="mt-3 text-sm font-semibold">
-                No posts in {activeSpace?.name ?? "this space"} yet
-              </p>
-              <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-                Kick off the conversation — ask a question, share a win, or set the tone.
-              </p>
-            </CardContent>
-          </Card>
+          postSearch.trim() ? (
+          // Search-empty branch — same card style, different copy.
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <MessageCircle className="h-8 w-8 text-muted-foreground" />
+                <p className="mt-3 text-sm font-semibold">
+                  No matches for &ldquo;{postSearch.trim()}&rdquo;
+                </p>
+                <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+                  Try a different word, or clear the search to see every post.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 h-7 text-xs"
+                  onClick={() => setPostSearch("")}
+                >
+                  Clear search
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            // Genuinely empty space → starter prompts. Each card drops
+            // a pre-filled draft into the composer so the user starts
+            // from a thought, not a blinking cursor. Prompts adapt
+            // when a course is linked so the suggestions feel local
+            // to the cohort.
+            <Card>
+              <CardContent className="space-y-4 py-8">
+                <div className="text-center">
+                  <span className="text-3xl" aria-hidden>
+                    👋
+                  </span>
+                  <p className="mt-2 text-sm font-semibold">
+                    {activeSpace?.name ?? "This space"} is quiet
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Pick a prompt to kick things off — you can edit it before posting.
+                  </p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {getStarterPrompts(props.courseTitle).map((p) => (
+                    <button
+                      key={p.label}
+                      type="button"
+                      onClick={() => {
+                        // Pre-fill the composer and mark the draft as
+                        // dirty so autosave persists it if the user
+                        // navigates away mid-edit.
+                        setBody(p.draft)
+                        dirtyRef.current = true
+                        // Best-effort focus the editor so the user can
+                        // start typing immediately. Tiptap exposes
+                        // .focus() on its chain API.
+                        setTimeout(() => editorRef.current?.commands.focus("end"), 50)
+                      }}
+                      className="flex items-start gap-3 rounded-lg border border-border/60 bg-card p-3 text-left text-sm transition-colors hover:border-primary/50 hover:bg-primary/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                    >
+                      <span className="text-lg" aria-hidden>
+                        {p.emoji}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium leading-tight">{p.label}</p>
+                        <p className="mt-0.5 line-clamp-2 text-[11px] text-muted-foreground">
+                          {p.hint}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )
         ) : (
           <div className="space-y-3">
             {orderedPosts.map((post) => (
@@ -1733,7 +3418,13 @@ function CommonRoom(props: CommonRoomProps) {
                 onToggleFeatured={() => props.onToggleFeatured(post.id)}
                 onToggleHide={() => props.onToggleHide(post.id, !post.hidden)}
                 onDelete={() => props.onDeletePost(post.id)}
-                onToggleReaction={(emoji) => props.onToggleReaction(post.id, emoji)}
+                onToggleReaction={(emoji) => {
+                  // Sprint B Communities #4 — count a reaction as
+                  // the "react" onboarding step. We tick on every
+                  // call; the hook is idempotent.
+                  memberPrefs.markOnboardingDone("react")
+                  props.onToggleReaction(post.id, emoji)
+                }}
                 onToggleCommentHidden={(cid, hidden) =>
                   props.onToggleCommentHidden(post.id, cid, hidden)
                 }
@@ -2002,7 +3693,9 @@ function AttachmentTile({ attachment }: { attachment: Attachment }) {
 // Recognise a YouTube / Vimeo / direct video URL and return the
 // embed iframe src + provider. Caller renders the iframe; we just
 // do the parsing here so PostCard stays small.
-function detectEmbed(url: string): { kind: "iframe" | "video"; src: string } | null {
+function detectEmbed(
+  url: string,
+): { kind: "iframe" | "video"; src: string } | { kind: "internal-card"; src: string; label: string; icon: "whiteboard" | "page" | "course" | "certificate" } | null {
   const trimmed = url.trim()
   if (!trimmed) return null
   try {
@@ -2020,6 +3713,22 @@ function detectEmbed(url: string): { kind: "iframe" | "video"; src: string } | n
     }
     if (/\.(mp4|webm|ogv)(\?|$)/i.test(u.pathname)) {
       return { kind: "video", src: trimmed }
+    }
+    // Internal platform URLs — render as a richer link card with the
+    // appropriate icon + label so a "I shared a whiteboard" post
+    // doesn't show up as a raw URL string.
+    const path = u.pathname
+    if (/\/dashboard\/whiteboards\/[^/]+/.test(path) || /\/whiteboards\/[^/]+/.test(path)) {
+      return { kind: "internal-card", src: trimmed, label: "Whiteboard", icon: "whiteboard" }
+    }
+    if (/\/dashboard\/portal\/pages\//.test(path) || /\/p\/[^/]+\/[^/]+/.test(path)) {
+      return { kind: "internal-card", src: trimmed, label: "Portal page", icon: "page" }
+    }
+    if (/\/dashboard\/courses\/[^/]+/.test(path) || /\/courses\/[^/]+/.test(path)) {
+      return { kind: "internal-card", src: trimmed, label: "Course", icon: "course" }
+    }
+    if (/\/verify\//.test(path)) {
+      return { kind: "internal-card", src: trimmed, label: "Certificate", icon: "certificate" }
     }
   } catch {
     /* invalid URL */
@@ -2066,7 +3775,30 @@ function PostCard({
 
   const isAuthor = !!currentUserId && currentUserId === post.authorId
   const canEdit = isAuthor || isAdmin
-  const canShowMenu = canEdit || isAdmin
+  // Menu is now also useful for non-admin members (mute/save) so we
+  // always show it when there's a signed-in user.
+  const canShowMenu = !!currentUserId
+  // Per-user mute + bookmark state. Hydrate on mount and keep in
+  // local state so subsequent toggles render immediately.
+  const [muted, setMuted] = useState<boolean>(false)
+  const [bookmarked, setBookmarked] = useState<boolean>(false)
+  useEffect(() => {
+    if (!currentUserId) return
+    setMuted(getMutedThreadIds(currentUserId).has(post.id))
+    setBookmarked(isPostBookmarked(currentUserId, post.id))
+  }, [currentUserId, post.id])
+  const toggleMute = () => {
+    if (!currentUserId) return
+    const next = !muted
+    setMuted(next)
+    setThreadMuted(currentUserId, post.id, next)
+  }
+  const toggleBookmark = () => {
+    if (!currentUserId) return
+    const next = !bookmarked
+    setBookmarked(next)
+    setPostBookmarked(currentUserId, post.id, next)
+  }
 
   function postComment() {
     const trimmed = commentBody.trim()
@@ -2147,6 +3879,26 @@ function PostCard({
                   Hidden
                 </Badge>
               )}
+              {muted && (
+                <Badge
+                  variant="outline"
+                  className="border-muted-foreground/40 bg-muted/40 text-[10px] text-muted-foreground"
+                  title="You won't be notified about new comments on this post"
+                >
+                  <BellOff className="mr-0.5 h-2.5 w-2.5" />
+                  Muted
+                </Badge>
+              )}
+              {bookmarked && (
+                <Badge
+                  variant="outline"
+                  className="border-amber-500/50 bg-amber-500/15 text-[10px] text-amber-700 dark:text-amber-300"
+                  title="Saved to your bookmarks"
+                >
+                  <BookmarkCheck className="mr-0.5 h-2.5 w-2.5" />
+                  Saved
+                </Badge>
+              )}
             </div>
             {/* Body — rich text when it looks like HTML, otherwise
                 fall back to a plain preserving paragraph. Author/admin
@@ -2182,8 +3934,42 @@ function PostCard({
                 <p className="mt-1 text-[10px] text-muted-foreground">edited · {timeAgo(post.updatedAt)}</p>
               )}
             {/* Optional video embed. iframe for YouTube/Vimeo,
-                native <video> for direct mp4/webm. */}
-            {embed && (
+                native <video> for direct mp4/webm. Internal platform
+                links (whiteboard, page, course, certificate) render
+                as a labeled link card instead of a raw URL string. */}
+            {embed && embed.kind === "internal-card" ? (
+              <a
+                href={embed.src}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 flex items-center gap-3 rounded-md border border-border bg-card p-3 hover:border-primary/40 hover:bg-muted/30"
+              >
+                <span
+                  className={cn(
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-primary",
+                    embed.icon === "whiteboard" && "bg-violet-500/10 text-violet-600",
+                    embed.icon === "page" && "bg-blue-500/10 text-blue-600",
+                    embed.icon === "course" && "bg-emerald-500/10 text-emerald-600",
+                    embed.icon === "certificate" && "bg-amber-500/10 text-amber-600",
+                  )}
+                  aria-hidden
+                >
+                  {embed.icon === "whiteboard" && <PenSquare className="h-5 w-5" />}
+                  {embed.icon === "page" && <FileText className="h-5 w-5" />}
+                  {embed.icon === "course" && <BookOpen className="h-5 w-5" />}
+                  {embed.icon === "certificate" && <Award className="h-5 w-5" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    {embed.label}
+                  </p>
+                  <p className="truncate text-[13px] font-semibold text-foreground">
+                    Open {embed.label.toLowerCase()} →
+                  </p>
+                  <p className="truncate text-[11px] text-muted-foreground">{embed.src}</p>
+                </div>
+              </a>
+            ) : embed ? (
               <div className="mt-3 overflow-hidden rounded-md border border-border bg-black">
                 {embed.kind === "iframe" ? (
                   <iframe
@@ -2192,15 +3978,15 @@ function PostCard({
                     allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
                   />
-                ) : (
+                  ) : embed.kind === "video" ? (
                   <video
                     src={embed.src}
                     controls
                     className="aspect-video w-full"
                   />
-                )}
+                  ) : null}
               </div>
-            )}
+            ) : null}
             {/* Uploaded attachments. Each rendered with a type-aware
                 preview: images inline, videos with a player, everything
                 else as a download chip. */}
@@ -2220,6 +4006,37 @@ function PostCard({
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {/* Per-user actions — available to every signed-in
+                    reader (not just author or admin). Sit at the top
+                    so muting/saving feels like a primary affordance,
+                    not buried beneath admin moderation tools. */}
+                <DropdownMenuItem onClick={toggleBookmark}>
+                  {bookmarked ? (
+                    <>
+                      <BookmarkCheck className="mr-2 h-3.5 w-3.5" />
+                      Remove from saved
+                    </>
+                  ) : (
+                    <>
+                      <Bookmark className="mr-2 h-3.5 w-3.5" />
+                      Save post
+                    </>
+                  )}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={toggleMute}>
+                  {muted ? (
+                    <>
+                      <Bell className="mr-2 h-3.5 w-3.5" />
+                      Unmute thread
+                    </>
+                  ) : (
+                    <>
+                      <BellOff className="mr-2 h-3.5 w-3.5" />
+                      Mute thread
+                    </>
+                  )}
+                </DropdownMenuItem>
+                {(canEdit || isAdmin) && <DropdownMenuSeparator />}
                 {canEdit && (
                   <DropdownMenuItem onClick={startEdit}>
                     <Pencil className="mr-2 h-3.5 w-3.5" />

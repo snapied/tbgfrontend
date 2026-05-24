@@ -72,7 +72,7 @@ export default function PortalCourseDetailPage({
             <p className="mt-4 text-sm text-muted-foreground">
               Taught by{" "}
               <Link
-                href={`/p/${tenant}/teachers/${instructor.id}`}
+                href={`/p/${tenant}/instructors/${instructor.id}`}
                 className="font-medium text-primary hover:underline"
               >
                 {instructor.name}

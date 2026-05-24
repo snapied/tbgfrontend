@@ -66,7 +66,7 @@ function layout({
                   <tr>
                     <td bgcolor="${PRIMARY}" style="border-radius:8px;">
                       <a href="${escape(cta.url)}" style="display:inline-block;padding:12px 22px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:8px;">
-                        ${escape(cta.label)} &nbsp;→
+                        ${escape(cta.label)} &nbsp;
                       </a>
                     </td>
                   </tr>

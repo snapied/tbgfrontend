@@ -10,9 +10,9 @@
 // the host page didn't need code edits: { status, start, stop, error, recording }.
 //
 // Flow:
-//   1. Teacher clicks "Start recording" → POST /recording/start (no browser prompt).
+//   1. Instructor clicks "Start recording" → POST /recording/start (no browser prompt).
 //   2. Backend asks LiveKit to start a room composite egress to R2.
-//   3. Teacher clicks "Stop" → POST /recording/stop.
+//   3. Instructor clicks "Stop" → POST /recording/stop.
 //   4. We poll /state every 5s until recording_url shows up, then mark "done".
 
 import { useCallback, useEffect, useRef, useState } from "react"

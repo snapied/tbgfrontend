@@ -8,7 +8,6 @@ import {
   Mail,
   MoreHorizontal,
   RefreshCw,
-  Search,
   Send,
   Shield,
   ShieldOff,
@@ -19,6 +18,8 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
+import { fuzzySearch } from "@/lib/fuzzy-search"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -49,12 +50,16 @@ import { useConfirm } from "@/lib/use-confirm"
 import { toast } from "sonner"
 import { toastUndoableDelete } from "@/lib/toast-undo"
 import { PhoneInput } from "@/components/forms/phone-input"
+import Link from "next/link"
+import { usePlan } from "@/lib/use-plan"
+import { PlanLimitHint, PlanLimitWarning } from "@/components/dashboard/plan-lock"
 
 type TeamRole = "admin" | "instructor"
 
 export default function UsersPage() {
   const { users, addUser, updateUser, deleteUser } = useLMS()
   const confirm = useConfirm()
+  const { usageRemaining, limits } = usePlan()
   const [search, setSearch] = useState("")
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [resetPasswordFor, setResetPasswordFor] = useState<User | null>(null)
@@ -65,15 +70,20 @@ export default function UsersPage() {
     () => users.filter((u) => u.role === "admin" || u.role === "instructor"),
     [users],
   )
-  const filteredUsers = useMemo(() => {
-    if (!search) return team
-    const q = search.toLowerCase()
-    return team.filter(
-      (u) =>
-        u.name.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q),
-    )
-  }, [team, search])
+
+  // Plan-cap state for the "Add team member" CTA. Counted against
+  // the `teachers` limit (Starter 1 → Pro 2 → Studio 5 → Institute
+  // ∞). Without this gate, anyone could keep adding seats and the
+  // pricing copy would be a lie — the bigger problem the user
+  // flagged: "people are very smart, if we leave these things they
+  // will not upgrade." Now Add turns into Upgrade at cap.
+  const teamSeatsRemaining = usageRemaining("teachers", team.length)
+  const atTeamCap = teamSeatsRemaining !== Infinity && teamSeatsRemaining <= 0
+  const teamCap = limits.teachers
+  const filteredUsers = useMemo(
+    () => fuzzySearch(team, search, (u) => [u.name, u.email]),
+    [team, search],
+  )
 
   const handleResetPassword = async (user: User) => {
     setResetPasswordFor(user)
@@ -118,43 +128,74 @@ export default function UsersPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Manage team</h1>
           <p className="text-muted-foreground">Admins and instructors who can run classes, grade work, and manage students.</p>
+          <PlanLimitWarning metric="teachers" current={team.length} className="mt-2" />
         </div>
-        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-          <Button onClick={() => setIsCreateOpen(true)}>
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add team member
-          </Button>
-          <AddTeamMemberDialog
-            open={isCreateOpen}
-            onClose={() => setIsCreateOpen(false)}
-            onAdd={(user) => {
-              addUser(user)
-              setIsCreateOpen(false)
-              // Send invite email through the existing password-reset flow —
-              // the new user clicks the link and sets their password.
-              fetch("/api/auth/reset-request", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: user.email, name: user.name }),
-              }).catch(() => { /* logged server-side */ })
-            }}
-          />
-        </Dialog>
+        <div className="flex items-center gap-2">
+          {/* Always-visible "X/Y on Starter" pill so teachers see the
+              cap before they ever click Add. Auto-hides on unlimited
+              tiers. */}
+          <PlanLimitHint metric="teachers" current={team.length} noun="Seat" />
+          {atTeamCap ? (
+            <Button
+              asChild
+              variant="outline"
+              title={`You're at the ${teamCap}-seat cap on your current plan. Upgrade to add another.`}
+            >
+              <Link href="/dashboard/billing">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Upgrade to add seats
+              </Link>
+            </Button>
+          ) : (
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <Button onClick={() => setIsCreateOpen(true)}>
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add team member
+              </Button>
+              <AddTeamMemberDialog
+                open={isCreateOpen}
+                onClose={() => setIsCreateOpen(false)}
+                onAdd={(user) => {
+                  // Belt-and-braces: the dialog can only open when we're
+                  // under the cap, but a race (another tab adding a seat
+                  // before this dialog closed) would let it through.
+                  // Re-check at submit and refuse if we're now at cap.
+                  const stillAllowed =
+                    teamSeatsRemaining === Infinity || team.length < teamCap
+                  if (!stillAllowed) {
+                    toast.error(
+                      `You're at the ${teamCap}-seat cap. Upgrade your plan to add another team member.`,
+                    )
+                    setIsCreateOpen(false)
+                    return
+                  }
+                  addUser(user)
+                  setIsCreateOpen(false)
+                  fetch("/api/auth/reset-request", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ email: user.email, name: user.name }),
+                  }).catch(() => { /* logged server-side */ })
+                }}
+              />
+            </Dialog>
+          )}
+        </div>
       </div>
 
       {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search by name or email…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
-      </div>
+      <SearchInput
+        pageId="team-users"
+        value={search}
+        onChange={setSearch}
+        placeholder="Search by name or email…"
+        ariaLabel="Search team members"
+        shortcutDescription="Focus team search"
+        className="max-w-sm"
+      />
 
       {/* Users table */}
       <Card>

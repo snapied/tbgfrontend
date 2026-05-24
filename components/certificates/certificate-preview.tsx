@@ -706,7 +706,7 @@ export function CertificateFull({
             <p className="mt-1 font-serif text-4xl font-black text-slate-900">{name}</p>
             <p className="mt-4 max-w-md text-slate-600">
               in recognition of outstanding performance in{" "}
-              <span className="font-bold text-purple-700">{course}</span>, completed on {date}.
+              &nbsp;<span className="font-bold text-purple-700">{course}</span>&nbsp;, completed on {date}.
             </p>
             <div className="mt-6 flex items-center gap-8 text-sm">
               <div className="text-center">
@@ -816,7 +816,7 @@ export function CertificateFull({
           <p className="mt-2 font-serif text-4xl font-semibold text-amber-100">{name}</p>
           <div className="mt-3 h-px w-64 bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
           <p className="mt-4 max-w-md text-center font-serif text-base italic text-amber-200/80">
-            in recognition of the honourable completion of <span className="font-bold not-italic text-amber-300">{course}</span>.
+            in recognition of the honourable completion of &nbsp;<span className="font-bold not-italic text-amber-300">{course}</span>&nbsp;.
           </p>
           <p className="mt-6 font-mono text-[10px] tracking-widest text-amber-300/60">{certificateId}</p>
         </div>

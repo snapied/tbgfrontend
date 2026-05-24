@@ -10,6 +10,7 @@ import {
   CalendarClock,
   CheckCircle2,
   ChevronDown,
+  Copy,
   Download,
   Eye,
   Key,
@@ -47,6 +48,8 @@ import { ThumbnailField } from "@/components/upload/thumbnail-field"
 import { RichTextEditor } from "@/components/editor/rich-text-editor"
 import { AIGenerateButton } from "@/components/ai/ai-generate-button"
 import { aiProductDescription } from "@/lib/ai-client"
+import { generateCoverDataUrl, dataUrlToFile } from "@/lib/generate-cover"
+import { Wand2, Shuffle } from "lucide-react"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
 
 const PRODUCT_NEW_TOUR: TourStep[] = [
@@ -152,9 +155,14 @@ const KIND_OPTIONS: Array<{
 
 interface ProductEditorProps {
   productId?: string
+  /** When set on the /new route, the editor opens with this kind
+   *  pre-selected — the quick-start cards on /dashboard/store
+   *  deep-link with ?kind= so beginners skip the picker. Ignored
+   *  on edit (we always trust the saved product). */
+  initialKind?: ProductKind
 }
 
-export function ProductEditor({ productId }: ProductEditorProps) {
+export function ProductEditor({ productId, initialKind }: ProductEditorProps) {
   const { hydrated } = useStore()
   // Gate the form behind hydration. The state below derives its
   // initial values from `existing` via useState(...); if we mount
@@ -171,10 +179,10 @@ export function ProductEditor({ productId }: ProductEditorProps) {
       </div>
     )
   }
-  return <ProductEditorForm productId={productId} />
+  return <ProductEditorForm productId={productId} initialKind={initialKind} />
 }
 
-function ProductEditorForm({ productId }: ProductEditorProps) {
+function ProductEditorForm({ productId, initialKind }: ProductEditorProps) {
   const router = useRouter()
   const {
     products,
@@ -195,7 +203,11 @@ function ProductEditorForm({ productId }: ProductEditorProps) {
   const isNew = !existing
 
   // ---- form state ----
-  const [kind, setKind] = useState<ProductKind>(existing?.kind ?? "download")
+  // Edit always trusts the saved product. New trusts ?kind= when the
+  // caller passed one (quick-start cards); otherwise we default to
+  // "download" because it's the lowest-friction first product
+  // (upload a file, set a price, done — no course-builder dependency).
+  const [kind, setKind] = useState<ProductKind>(existing?.kind ?? initialKind ?? "download")
   const [title, setTitle] = useState(existing?.title ?? "")
   const [subtitle, setSubtitle] = useState(existing?.subtitle ?? "")
   const [slug, setSlug] = useState(existing?.slug ?? "")
@@ -257,6 +269,13 @@ function ProductEditorForm({ productId }: ProductEditorProps) {
   const [showPolish, setShowPolish] = useState(false)
   const [saving, setSaving] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  // Cover-image generator state. variantSeed cycles when the user
+  // clicks "Shuffle" — the cover lib hashes it to pick a palette, so
+  // re-clicking with the same product produces predictable but
+  // distinct variants. Buster forces a re-render of the cover preview
+  // when the data URL is the same length as before but different.
+  const [generatingCover, setGeneratingCover] = useState(false)
+  const [coverSeed, setCoverSeed] = useState(0)
   // Bubble up storage warnings. We distinguish two cases:
   //   • recovered=true → save SUCCEEDED but we had to drop the cover
   //     image / preview video because they were too large for browser
@@ -385,6 +404,41 @@ function ProductEditorForm({ productId }: ProductEditorProps) {
     }
   }
 
+  // Duplicate the current product into a fresh draft. We deep-copy
+  // every editable field but reset the storefront-visible bits that
+  // shouldn't carry over: status → draft, sales counters → zero,
+  // publishedAt → null, slug → "<slug>-copy" (so the link doesn't
+  // collide with the original). The user lands in the new editor
+  // immediately so they can tweak before publishing.
+  const handleDuplicate = async () => {
+    if (!existing) return
+    const baseSlug = existing.slug ? `${existing.slug}-copy` : ""
+    // Bump the suffix (-copy, -copy-2, -copy-3, ...) until we hit an
+    // unused slug. Cheap loop — collisions are rare and bounded by
+    // the product count.
+    let candidate = baseSlug
+    let n = 2
+    while (candidate && !isSlugAvailable(candidate)) {
+      candidate = `${existing.slug}-copy-${n}`
+      n++
+    }
+    const now = new Date().toISOString()
+    const copy: Product = {
+      ...existing,
+      id: generateId("prod"),
+      title: `${existing.title} (copy)`,
+      slug: candidate,
+      status: "draft",
+      publishedAt: undefined,
+      inventorySold: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    addProduct(copy)
+    toast.success("Duplicated.", { description: `Editing "${copy.title}" — it's a draft.` })
+    router.push(`/dashboard/store/${copy.id}`)
+  }
+
   const handleDelete = async () => {
     if (!existing) return
     const ok = await confirm({
@@ -399,6 +453,42 @@ function ProductEditorForm({ productId }: ProductEditorProps) {
   }
 
   const selectedMeta = KIND_OPTIONS.find(o => o.value === kind)!
+
+  // One-click branded cover. Renders a 1200×630 canvas, encodes as
+  // PNG, uploads to the asset CDN, and sets the URL on the product.
+  // Skipping the upload step (data: URL straight in state) would
+  // blow up localStorage on the next save — so we eat the upload
+  // latency now (1–2s) in exchange for a permanent CDN URL the
+  // public storefront can serve. Title is mandatory; we don't try
+  // to invent a placeholder.
+  async function handleGenerateCover(shuffle?: boolean) {
+    if (!title.trim()) {
+      toast.error("Add a product title first — that's the headline on the cover.")
+      return
+    }
+    if (shuffle) setCoverSeed((s) => s + 1)
+    setGeneratingCover(true)
+    try {
+      const dataUrl = await generateCoverDataUrl({
+        title,
+        kind,
+        workspaceName: currentTenant?.name,
+        priceLabel: pricing.type !== "free" ? formatPrice(pricing) : undefined,
+        variantSeed: shuffle ? `${title}-${coverSeed + 1}` : undefined,
+      })
+      const file = dataUrlToFile(dataUrl, `cover-${slug || "product"}.png`)
+      const uploaded = await uploadAsset(file, "storefront")
+      setCoverImageUrl(uploaded.url)
+      toast.success(shuffle ? "Shuffled — new palette." : "Cover generated.", {
+        description: "Click Shuffle to try another palette.",
+      })
+    } catch (err) {
+      console.error(err)
+      toast.error("Couldn't generate cover. Try uploading one instead.")
+    } finally {
+      setGeneratingCover(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -440,6 +530,11 @@ function ProductEditorForm({ productId }: ProductEditorProps) {
                 >
                   <Eye className="mr-2 h-4 w-4" /> View live
                 </Link>
+              </Button>
+            )}
+            {!isNew && (
+              <Button variant="ghost" onClick={handleDuplicate} title="Create a draft copy of this product">
+                <Copy className="mr-2 h-4 w-4" /> Duplicate
               </Button>
             )}
             {!isNew && (
@@ -600,6 +695,20 @@ function ProductEditorForm({ productId }: ProductEditorProps) {
                 Was <span className="line-through">{money(parseFloat(comparePrice), currency)}</span>
               </p>
             )}
+            {/* Auto-computed bundle / membership savings. For a
+                bundle we sum the child products' prices; for a
+                membership we sum the included products' annual-
+                equivalent prices. When the buyer is paying less
+                than the standalone total, we surface the savings in
+                two formats — % off and absolute amount — because
+                conversion testing consistently favours showing both.
+                Renders inline so the teacher sees the savings
+                update as they pick the right children. */}
+            <BundleSavingsHint
+              kind={kind}
+              pricing={pricing}
+              childProductIds={kind === "bundle" ? childProductIds : kind === "membership" ? includedProductIds : []}
+            />
           </div>
         </Section>
 
@@ -614,8 +723,46 @@ function ProductEditorForm({ productId }: ProductEditorProps) {
         >
           <div className="space-y-4">
             <Field label="Cover image (1200×630 works best)">
-              {/* Same ThumbnailField the course editor uses — Upload /
-                  Unsplash / Design tabs. Auto-compresses on upload. */}
+              {/* One-click "Generate cover" — renders a branded
+                  1200×630 PNG from the title + kind + price + tenant
+                  name, uploads to CDN, and sets the URL. Shuffle
+                  cycles the palette seed for users who want a
+                  different look without re-typing anything.
+                  Sits above ThumbnailField so it's the first thing
+                  teachers without a designer reach for. */}
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => handleGenerateCover(false)}
+                  disabled={generatingCover || !title.trim()}
+                  title={!title.trim() ? "Add a title first" : "Generate a branded cover from your title + kind + price"}
+                >
+                  {generatingCover ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Wand2 className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  {generatingCover ? "Generating…" : "Generate cover"}
+                </Button>
+                {coverImageUrl && !generatingCover && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => handleGenerateCover(true)}
+                    disabled={generatingCover}
+                    title="New palette, same title"
+                  >
+                    <Shuffle className="mr-1.5 h-3.5 w-3.5" />
+                    Shuffle palette
+                  </Button>
+                )}
+                <span className="text-[11px] text-muted-foreground">
+                  Or upload / pick from Unsplash below.
+                </span>
+              </div>
               <ThumbnailField
                 value={coverImageUrl}
                 onChange={setCoverImageUrl}
@@ -1102,6 +1249,62 @@ function ListEditor({ items, onChange, placeholder }: { items: string[]; onChang
         </Button>
       </div>
     </div>
+  )
+}
+
+// Live "Save $X (Y% off)" callout for bundles + memberships.
+// Compares the bundle's own price to the sum of its children's
+// stand-alone one-time prices. Skipped when:
+//   • kind isn't bundle / membership
+//   • bundle is free or pricing type is non-numeric (PWYW)
+//   • no children selected yet (nothing to compare against)
+//   • children use mixed currencies (we don't fake FX here — too
+//     easy to mislead the buyer)
+function BundleSavingsHint({
+  kind,
+  pricing,
+  childProductIds,
+}: {
+  kind: ProductKind
+  pricing: PricingModel
+  childProductIds: string[]
+}) {
+  const { products } = useStore()
+  if (kind !== "bundle" && kind !== "membership") return null
+  if (pricing.type === "free" || pricing.type === "pay-what-you-want") return null
+  if (childProductIds.length === 0) return null
+
+  const children = childProductIds
+    .map((id) => products.find((p) => p.id === id))
+    .filter((p): p is Product => !!p)
+
+  // Only count children with a concrete one-time price (those have an
+  // unambiguous standalone total). Subscriptions + free children are
+  // skipped so the math reflects what the buyer would actually pay
+  // buying them separately as one-shots.
+  const priced = children
+    .map((c) => (c.pricing.type === "one-time" ? c.pricing : null))
+    .filter((p): p is Extract<PricingModel, { type: "one-time" }> => !!p)
+  if (priced.length < Math.max(2, children.length)) return null
+
+  const ccy = priced[0].currency
+  if (priced.some((p) => p.currency !== ccy)) return null  // mixed currencies — bail
+
+  const standalone = priced.reduce((acc, p) => acc + p.amount, 0)
+  const bundlePrice =
+    pricing.type === "one-time" ? pricing.amount :
+    pricing.type === "subscription" ? pricing.amount :
+    0
+  if (bundlePrice <= 0 || standalone <= bundlePrice) return null  // not actually saving
+
+  const saved = standalone - bundlePrice
+  const pct = Math.round((saved / standalone) * 100)
+
+  return (
+    <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+      <Sparkles className="h-3 w-3" />
+      Buyers save {money(saved, ccy)} ({pct}% off vs buying separately)
+    </p>
   )
 }
 

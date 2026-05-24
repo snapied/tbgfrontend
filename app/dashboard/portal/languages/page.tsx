@@ -398,6 +398,103 @@ function LanguagesAdminPageInner() {
         </CardContent>
       </Card>
 
+      {/* Translation coverage — quick per-locale "how much have I
+          actually translated?" widget. Shows two ratios: tenant-string
+          overrides (your CTAs, page nav labels, footer headings) and
+          platform-chrome overrides (overrides on top of the built-in
+          dictionary you've taken away from the default). Built-in
+          ready locales start at 100% chrome coverage because every key
+          ships hand-translated; the override count is purely about
+          the strings YOU want to deviate from. Tenant strings start at
+          0% because nothing ships with translations for your custom
+          copy. */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Coverage</CardTitle>
+          <CardDescription>
+            Per-locale view of what&apos;s translated. Tenant strings need a per-locale override
+            from you; platform chrome ships translated for ready languages — the override count
+            is just strings you&apos;ve customised on top of the defaults.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-left text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <th className="py-2 pr-3">Language</th>
+                  <th className="py-2 pr-3 text-right">Tenant strings</th>
+                  <th className="py-2 pr-3 text-right">Chrome overrides</th>
+                  <th className="py-2 pl-3">Translation status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {READY_LOCALES.filter((l) => draft.enabledLocales.includes(l.code)).map((l) => {
+                  const overrides = draft.overrides?.[l.code] ?? {}
+                  const overrideKeys = Object.keys(overrides)
+                  const tenantKeys = new Set(tenantStrings.map((s) => s.key))
+                  const tenantOverrides = overrideKeys.filter((k) => tenantKeys.has(k)).length
+                  const chromeOverrides = overrideKeys.filter((k) => !tenantKeys.has(k)).length
+                  const tenantTotal = tenantStrings.length
+                  const tenantPct = tenantTotal === 0 ? 1 : tenantOverrides / tenantTotal
+                  const isDefault = l.code === draft.defaultLocale
+                  return (
+                    <tr key={l.code} className="border-b border-border/50">
+                      <td className="py-2.5 pr-3">
+                        <span className="font-semibold">{l.flag} {l.label}</span>
+                        {isDefault && (
+                          <span className="ml-2 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider text-primary">
+                            Default
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-3 text-right tabular-nums">
+                        {l.code === draft.defaultLocale ? (
+                          <span className="text-muted-foreground" title="Default locale renders the source directly — no overrides needed">
+                            n/a
+                          </span>
+                        ) : (
+                          <>
+                            {tenantOverrides} / {tenantTotal}
+                          </>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-3 text-right tabular-nums">
+                        {chromeOverrides}
+                      </td>
+                      <td className="py-2.5 pl-3">
+                        {l.code === draft.defaultLocale ? (
+                          <span className="text-[11px] text-muted-foreground">Source language</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="h-1.5 max-w-[120px] flex-1 overflow-hidden rounded-full bg-muted">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full",
+                                  tenantPct >= 0.9
+                                    ? "bg-emerald-500"
+                                    : tenantPct >= 0.5
+                                      ? "bg-amber-500"
+                                      : "bg-rose-500",
+                                )}
+                                style={{ width: `${Math.round(tenantPct * 100)}%` }}
+                              />
+                            </div>
+                            <span className="text-[11px] font-semibold tabular-nums">
+                              {Math.round(tenantPct * 100)}%
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Content browser */}
       <Card>
         <CardHeader>

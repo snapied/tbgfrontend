@@ -396,9 +396,18 @@ export default function PayoutsPage() {
       <div className="rounded-md border border-success/20 bg-success/5 p-3 text-xs text-muted-foreground">
         <ShieldCheck className="mr-1 inline h-3 w-3 text-success" />
         Money never sits in our accounts. Razorpay deducts their gateway
-        fee at checkout and settles the rest directly to your bank on
-        their schedule. Our cut is 0% — verifiable against your Razorpay
-        dashboard.{" "}
+        fee at checkout (it varies by payment method — see{" "}
+        <a
+          href="https://razorpay.com/pricing/"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="text-primary hover:underline"
+        >
+          Razorpay&apos;s pricing
+        </a>{" "}
+        for the exact, up-to-date rate) and settles the rest directly to
+        your bank on their schedule. Our cut is 0% — verifiable against
+        your Razorpay dashboard.{" "}
         <Link href="/help/payouts" className="text-primary hover:underline">
           How payouts work →
         </Link>
@@ -462,9 +471,9 @@ function MoneyFlowDiagram() {
             <ArrowRight className="h-5 w-5 -rotate-0 sm:rotate-0" />
           </div>
           <FlowBox
-            title="Razorpay deducts ~2%"
-            amount="−₹10"
-            note="Standard gateway fee"
+            title="Razorpay's gateway fee"
+            amount="−₹X"
+            note="Approx. — varies by payment method"
             tone="muted"
           />
           <div className="flex items-center justify-center text-muted-foreground">
@@ -472,17 +481,28 @@ function MoneyFlowDiagram() {
           </div>
           <FlowBox
             title="Your bank"
-            amount="₹490"
+            amount="≈ ₹485–490"
             note="Settles in T+2 working days"
             tone="success"
           />
         </div>
-        <p className="mt-4 flex items-center gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+        <p className="mt-4 flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
           <Info className="h-3.5 w-3.5 shrink-0 text-primary" />
           Our cut is{" "}
           <span className="font-bold text-success">₹0</span>. Money never
           touches our accounts — Razorpay routes the net amount straight
-          to the bank account you registered.
+          to the bank account you registered. Gateway fees vary by method
+          (cards / UPI / netbanking / international) —{" "}
+          <a
+            href="https://razorpay.com/pricing/"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+          >
+            see Razorpay's pricing
+            <ArrowRight className="h-3 w-3 -rotate-45" />
+          </a>{" "}
+          for the latest rates.
         </p>
       </CardContent>
     </Card>

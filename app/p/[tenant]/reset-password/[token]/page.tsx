@@ -21,6 +21,7 @@ import {
   MIN_PASSWORD_SCORE,
 } from "@/components/forms/password-strength-input"
 import { useTenantBrand } from "@/lib/tenant-brand"
+import { AuthRedirectGate } from "@/components/auth/auth-redirect-gate"
 
 type Phase =
   | { kind: "checking" }
@@ -121,6 +122,7 @@ export default function PortalResetPasswordPage({
 
   return (
     <div className="mx-auto max-w-md px-6 py-12 lg:px-8">
+      <AuthRedirectGate tenantSlug={tenant} />
       {phase.kind === "checking" && (
         <Card>
           <CardContent className="flex items-center justify-center gap-3 p-8 text-sm text-muted-foreground">

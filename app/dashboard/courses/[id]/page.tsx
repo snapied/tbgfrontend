@@ -1,12 +1,13 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
   Archive,
   Award,
   Check,
+  ChevronDown,
   ClipboardList,
   Clock,
   Users,
@@ -17,7 +18,9 @@ import {
   Globe,
   Lock,
   Loader2,
+  Megaphone,
   Pencil,
+  Share2,
   Tag,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -27,6 +30,7 @@ import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { useLMS } from "@/lib/lms-store"
 import { useConfirm } from "@/lib/use-confirm"
+import { classifyStudents, STAGE_META } from "@/lib/engagement-score"
 import { CourseCoverImage } from "@/components/courses/course-cover-image"
 import { formatMoney } from "@/lib/currency"
 import { RichTextContent, isRichTextEmpty } from "@/components/editor/rich-text-content"
@@ -41,15 +45,45 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DashboardBreadcrumbs } from "@/components/dashboard/dashboard-breadcrumbs"
 import { Separator } from "@/components/ui/separator"
 import { MonetizePublishDialog } from "@/components/course/monetize-publish-dialog"
+import { useTenant } from "@/lib/tenant-store"
+import { tenantPublicUrl } from "@/lib/tenant-resolver"
+import { usePlan } from "@/lib/use-plan"
+import { PlanGatedCard } from "@/components/dashboard/plan-lock"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { ShareMenu } from "@/components/share/share-menu"
+import { stripRichTextTags } from "@/components/editor/rich-text-content"
+import { CourseAnnouncementDialog } from "@/components/courses/course-announcement-dialog"
+import { TestPurchaseDialog } from "@/components/courses/test-purchase-dialog"
+import { DuplicateCourseDialog } from "@/components/courses/duplicate-course-dialog"
+import { useStore } from "@/lib/store-store"
+import { Copy, FlaskConical } from "lucide-react"
 
 export default function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { getCourseById, getCourseEnrollments, getUserById, getAssignmentsForCourse, updateCourse } = useLMS()
+  const { getCourseById, getCourseEnrollments, getUserById, getAssignmentsForCourse, updateCourse, getEnrolledCount } = useLMS()
+  const { currentTenant } = useTenant()
+  const { isAllowed } = usePlan()
+  const versioningAllowed = isAllowed("courseVersioning")
   const confirm = useConfirm()
   // Monetize wizard fires in place of the publish confirm dialog. We
   // open it only on the publish path; restoring an archived course
   // keeps the simpler confirm.
   const [monetizeOpen, setMonetizeOpen] = useState(false)
+  const [announceOpen, setAnnounceOpen] = useState(false)
+  const [testPurchaseOpen, setTestPurchaseOpen] = useState(false)
+  const [duplicateOpen, setDuplicateOpen] = useState(false)
+  const { products: storeProducts } = useStore()
+  // Inline paid-feature dialog for the Versions button on free plans.
+  // No navigation, no half-rendered page — the upgrade card opens
+  // over the course detail page and the visitor closes it to keep
+  // working.
+  const [versionsUpgradeOpen, setVersionsUpgradeOpen] = useState(false)
   // (instructorLive resolved below — needs `course` first)
   
   const course = getCourseById(id)
@@ -66,9 +100,41 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
     )
   }
 
-  const completedEnrollments = enrollments.filter(e => e.progress === 100).length
-  const averageProgress = enrollments.length > 0
-    ? Math.round(enrollments.reduce((acc, e) => acc + e.progress, 0) / enrollments.length)
+  // Resolve the underlying storefront product for this course
+  // (1:1 mapping when the publish wizard ran). Used by the test-
+  // purchase affordance below.
+  const courseStoreProduct = storeProducts.find(
+    (p) =>
+      p.delivery.kind === "course-access" &&
+      p.delivery.courseId === course.id,
+  )
+
+  // Live totals derived from the course's CURRENT module/lesson set
+  // instead of the denormalized `totalLessons` / `totalDuration` fields,
+  // which can drift after curriculum edits.
+  const liveLessonTotal = course.modules.reduce(
+    (acc, m) => acc + m.lessons.length,
+    0,
+  )
+  const liveDurationMinutes = course.modules.reduce(
+    (acc, m) => acc + m.lessons.reduce((la, l) => la + (l.duration || 0), 0),
+    0,
+  )
+  // Live progress per enrollment — derived from the CURRENT lesson
+  // set, so a deleted lesson doesn't keep contributing to 100%s.
+  const liveLessonIds = new Set(
+    course.modules.flatMap((m) => m.lessons.map((l) => l.id)),
+  )
+  const enrollmentsWithLiveProgress = enrollments.map((e) => {
+    const done = e.completedLessons.filter((id) => liveLessonIds.has(id)).length
+    const pct = liveLessonIds.size === 0
+      ? 0
+      : Math.min(100, Math.round((done / liveLessonIds.size) * 100))
+    return { ...e, liveProgress: pct }
+  })
+  const completedEnrollments = enrollmentsWithLiveProgress.filter((e) => e.liveProgress === 100).length
+  const averageProgress = enrollmentsWithLiveProgress.length > 0
+    ? Math.round(enrollmentsWithLiveProgress.reduce((acc, e) => acc + e.liveProgress, 0) / enrollmentsWithLiveProgress.length)
     : 0
 
   // Course-level assignment totals, broken down by kind. Surfaced both as
@@ -86,10 +152,22 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
   const getStatusColor = (status: string) => {
     switch (status) {
       case "published": return "bg-success/10 text-success"
-      case "draft": return "bg-muted text-muted-foreground"
-      case "archived": return "bg-destructive/10 text-destructive"
-      default: return "bg-muted text-muted-foreground"
+      case "draft":     return "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      case "archived":  return "bg-slate-500/10 text-slate-700 dark:text-slate-300"
+      default:          return "bg-muted text-muted-foreground"
     }
+  }
+
+  // Pretty-print a minutes-based duration so a 25-minute course shows
+  // "25m" instead of the prior "0h" — the previous version floor-
+  // divided by 60 and showed "0h" for anything under an hour.
+  const formatDuration = (totalMinutes: number): string => {
+    if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return "0m"
+    const h = Math.floor(totalMinutes / 60)
+    const m = Math.round(totalMinutes % 60)
+    if (h === 0) return `${m}m`
+    if (m === 0) return `${h}h`
+    return `${h}h ${m}m`
   }
 
   // "Course details" accordion — collects intro video, learning outcomes,
@@ -252,6 +330,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                   )}>
                     {course.status}
                   </span>
+                  <VisibilityChip visibility={course.visibility ?? "public"} hasPassword={!!course.accessPassword} />
                   <span className="rounded bg-muted px-2 py-0.5 text-[11px] capitalize text-muted-foreground">
                     {course.level}
                   </span>
@@ -297,12 +376,168 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                       )}
                     </Link>
                   </Button>
-                  <Button variant="outline" asChild>
-                    <Link href={`/courses/${course.slug}`} target="_blank" rel="noreferrer">
-                      <Eye className="mr-1.5 h-4 w-4" />
-                      Preview
-                    </Link>
+                  {/* Versions — gated. On a plan that includes
+                      `courseVersioning` we render a normal Link so
+                      the page navigates straight in. On a free plan
+                      we render a plain Button that opens the upgrade
+                      dialog inline (no navigation, no half-rendered
+                      page); the lock chip on the right tells the
+                      user this is a paid feature before they click. */}
+                  {versioningAllowed ? (
+                    <Button
+                      variant="outline"
+                      asChild
+                      title="Browse + restore past published versions"
+                    >
+                      <Link href={`/dashboard/courses/${course.id}/versions`}>
+                        <Clock className="mr-1.5 h-4 w-4" />
+                        Versions
+                        {(course.versions?.length ?? 0) > 0 && (
+                          <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                            {course.versions!.length}
+                          </span>
+                        )}
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => setVersionsUpgradeOpen(true)}
+                      title="Course version history is a paid feature — click to learn more"
+                      className="relative"
+                    >
+                      <Clock className="mr-1.5 h-4 w-4" />
+                      Versions
+                      <span
+                        className="ml-1.5 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300"
+                        aria-label="Paid feature"
+                      >
+                        <Lock className="h-2.5 w-2.5" />
+                        Pro
+                      </span>
+                    </Button>
+                  )}
+                  {/* Preview-as dropdown. Three modes lets the
+                      teacher see exactly what each audience sees
+                      without faking a logout. Each opens /learn in
+                      a new tab with the ?as= flag the page reads
+                      to swap synthetic enrollment state. */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline">
+                        <Eye className="mr-1.5 h-4 w-4" />
+                        Preview
+                        <ChevronDown className="ml-1.5 h-3 w-3 opacity-60" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem asChild>
+                        <Link
+                          href={`/learn/${course.slug}?as=visitor`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium">As public visitor</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              Logged-out / not enrolled
+                            </span>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link
+                          href={`/learn/${course.slug}?as=enrolled`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium">As fresh student</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              Day 1, zero progress
+                            </span>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link
+                          href={`/learn/${course.slug}?as=halfway`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-medium">As halfway student</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              ~50% complete, drip gates open
+                            </span>
+                          </div>
+                        </Link>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {/* Share menu — replaces the old "Copy URL" with a
+                      full Copy / QR / WhatsApp / Email / Embed /
+                      Share-to-community popover. */}
+                  <ShareMenu
+                    artifact={{
+                      kind: "course",
+                      title: course.title,
+                      description: course.description ? stripRichTextTags(course.description).slice(0, 140) : undefined,
+                      url: (() => {
+                        const root = currentTenant
+                          ? tenantPublicUrl(
+                              currentTenant.slug,
+                              currentTenant.customDomain,
+                              currentTenant.customDomainStatus,
+                            )
+                          : (typeof window !== "undefined" ? window.location.origin : "")
+                        return `${root}/courses/details/${course.slug}`
+                      })(),
+                      thumbnailUrl: course.thumbnail,
+                      source: course.instructor?.name,
+                    }}
+                    hideEmbed
+                    trigger={
+                      <Button variant="outline">
+                        <Share2 className="mr-1.5 h-4 w-4" />
+                        Share
+                      </Button>
+                    }
+                  />
+                  {/* Announce — opens a dedicated composer that fans
+                      out to in-app + email + WhatsApp + the linked
+                      community in one shot. Only enabled on
+                      published courses (announcing a draft means
+                      announcing to nobody). */}
+                  <Button
+                    variant="outline"
+                    onClick={() => setAnnounceOpen(true)}
+                    disabled={course.status !== "published"}
+                    title={
+                      course.status === "published"
+                        ? "Send an update to every enrolled student"
+                        : "Publish the course first — drafts have no audience"
+                    }
+                  >
+                    <Megaphone className="mr-1.5 h-4 w-4" />
+                    Announce
                   </Button>
+                  {/* Test purchase — admin-only dry-run of the
+                      full buyer flow. Only renders when there's an
+                      underlying storefront product to checkout
+                      against (i.e. the publish wizard already
+                      minted one). Disabled with explainer copy
+                      until the course is published. */}
+                  {courseStoreProduct && (
+                    <Button
+                      variant="outline"
+                      onClick={() => setTestPurchaseOpen(true)}
+                      title="Walk the buyer's checkout flow without real money or webhooks"
+                    >
+                      <FlaskConical className="mr-1.5 h-4 w-4" />
+                      Test purchase
+                    </Button>
+                  )}
                   {/* Publish / Unpublish toggle. Always asks first
                       because the action is visible to students:
                       publishing exposes the course on the public
@@ -355,6 +590,19 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                       Edit
                     </Link>
                   </Button>
+                  {/* Duplicate — opens a small wizard. We don't put
+                      this behind a "more" menu because cloning is
+                      common enough mid-cohort + the wizard prevents
+                      the most common mistakes (live status carryover,
+                      enrollment co-mingling). */}
+                  <Button
+                    variant="outline"
+                    onClick={() => setDuplicateOpen(true)}
+                    title="Make a fresh draft copy of this course"
+                  >
+                    <Copy className="mr-1.5 h-4 w-4" />
+                    Duplicate
+                  </Button>
                 </div>
               </div>
 
@@ -363,9 +611,9 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
               {/* Meta strip — students / duration / lessons / assessments
                   / rating. Single row so the eye picks it up at a glance. */}
               <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
-                <Stat icon={Users} label="Students" value={course.enrolledCount.toLocaleString()} />
-                <Stat icon={Clock} label="Duration" value={`${Math.round(course.totalDuration / 60) || 0}h`} />
-                <Stat icon={BookOpen} label="Lessons" value={course.totalLessons.toString()} />
+                <Stat icon={Users} label="Students" value={getEnrolledCount(course.id).toLocaleString()} />
+                <Stat icon={Clock} label="Duration" value={formatDuration(liveDurationMinutes)} />
+                <Stat icon={BookOpen} label="Lessons" value={liveLessonTotal.toString()} />
                 <Stat
                   icon={ClipboardList}
                   label="Assessments"
@@ -382,8 +630,12 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                 <Stat
                   icon={Star}
                   label="Rating"
-                  value={course.rating ? `${course.rating} (${course.reviewCount})` : "—"}
-                  iconClassName="fill-accent text-accent"
+                  value={
+                    course.rating
+                      ? `${course.rating.toFixed(1)} (${course.reviewCount})`
+                      : "—"
+                  }
+                  iconClassName={course.rating ? "fill-accent text-accent" : ""}
                 />
               </div>
             </CardContent>
@@ -393,7 +645,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
               (modules + lessons). Keeps the page shape predictable and
               moves the long-form content behind a deliberate click. */}
           <Tabs defaultValue="overview" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="curriculum">
                 Curriculum
@@ -401,7 +653,17 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                   {course.totalLessons}
                 </span>
               </TabsTrigger>
+              <TabsTrigger value="students">
+                Students
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-normal text-muted-foreground">
+                  {enrollments.length}
+                </span>
+              </TabsTrigger>
             </TabsList>
+
+            <TabsContent value="students" className="space-y-4">
+              <CourseStudentsRoster courseId={course.id} />
+            </TabsContent>
 
             <TabsContent value="overview" className="space-y-4">
               {!isRichTextEmpty(course.description) && (
@@ -576,7 +838,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
             <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total Enrolled</span>
-                <span className="font-semibold">{course.enrolledCount}</span>
+                <span className="font-semibold">{getEnrolledCount(course.id)}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Active Students</span>
@@ -637,15 +899,165 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
         course={course}
         instructorId={course.instructor.id}
         onPublish={(patch) => {
+          // `publishAt` is the scheduled-publish field that the edit
+          // form exposes as "Auto-publish at" — a *future* time. A
+          // manual publish here happens NOW, so we just flip status
+          // and leave publishAt alone (its job is done by the status
+          // change). If the course had a future schedule sitting in
+          // publishAt, clear it so the cron doesn't try to "publish"
+          // an already-live course later.
+          const courseNow = getCourseById(course.id)
+          const pendingSchedule =
+            !!courseNow?.publishAt &&
+            new Date(courseNow.publishAt).getTime() > Date.now()
           updateCourse(course.id, {
             ...patch,
             status: "published",
-            publishAt: new Date().toISOString(),
+            ...(pendingSchedule ? { publishAt: undefined } : {}),
           })
           toast.success(`"${course.title}" is now live.`)
         }}
       />
+
+      {/* Inline upgrade dialog for the Versions button on free plans.
+          Renders the standard PlanGatedCard inside a Dialog so the
+          user can read the upgrade case without leaving the course
+          detail page. Closing the dialog drops them back where they
+          were — they can't accidentally trigger a Restore because
+          the actual restore controls only exist on the versions
+          page, which is itself gated. */}
+      <Dialog open={versionsUpgradeOpen} onOpenChange={setVersionsUpgradeOpen}>
+        <DialogContent className="sm:max-w-md">
+          <PlanGatedCard feature="courseVersioning" />
+        </DialogContent>
+      </Dialog>
+      <CourseAnnouncementDialog
+        open={announceOpen}
+        onOpenChange={setAnnounceOpen}
+        course={course}
+      />
+      <TestPurchaseDialog
+        open={testPurchaseOpen}
+        onOpenChange={setTestPurchaseOpen}
+        productId={courseStoreProduct?.id}
+        productTitle={course.title}
+      />
+      <DuplicateCourseDialog
+        open={duplicateOpen}
+        onOpenChange={setDuplicateOpen}
+        source={course}
+      />
     </div>
+  )
+}
+
+// Per-course student roster with lifecycle stage chips. Reuses
+// `classifyStudents` from lib/engagement-score.ts (the same
+// classifier the workspace-wide /dashboard/students/engagement
+// table uses), but scoped to just this course's enrolled
+// population so the stage reflects in-course behaviour.
+function CourseStudentsRoster({ courseId }: { courseId: string }) {
+  const {
+    students,
+    enrollments,
+    attendance,
+    quizAttempts,
+    submissions,
+    doubts,
+  } = useLMS()
+  // Hoist these so we can pass into the classifier without
+  // re-running compute on every nav. ENGAGEMENT_LIB import sits
+  // at the top of the file.
+  const courseEnrollments = useMemo(
+    () => enrollments.filter((e) => e.courseId === courseId),
+    [enrollments, courseId],
+  )
+  const courseStudentIds = useMemo(
+    () => new Set(courseEnrollments.map((e) => e.studentId)),
+    [courseEnrollments],
+  )
+  const courseStudents = useMemo(
+    () => students.filter((u) => courseStudentIds.has(u.id)),
+    [students, courseStudentIds],
+  )
+  const rows = useMemo(
+    () =>
+      classifyStudents({
+        students: courseStudents,
+        enrollments: courseEnrollments,
+        attendance,
+        attempts: quizAttempts,
+        submissions,
+        doubts,
+      }),
+    [courseStudents, courseEnrollments, attendance, quizAttempts, submissions, doubts],
+  )
+
+  if (rows.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <Users className="mx-auto h-10 w-10 text-muted-foreground" />
+          <p className="mt-3 font-medium">No students enrolled yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            When a student enrolls, they&apos;ll show up here with a lifecycle stage.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+  return (
+    <Card>
+      <CardContent className="p-0">
+        <ul className="divide-y divide-border">
+          {rows.map((row) => {
+            const meta = STAGE_META[row.stage]
+            const last =
+              row.daysSinceLastActive === null
+                ? "Never active"
+                : row.daysSinceLastActive === 0
+                  ? "Active today"
+                  : row.daysSinceLastActive === 1
+                    ? "Yesterday"
+                    : `${row.daysSinceLastActive}d ago`
+            return (
+              <li
+                key={row.student.id}
+                className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/40"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{row.student.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {row.student.email}
+                  </p>
+                </div>
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                    meta.tone === "emerald" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                    meta.tone === "blue" && "border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+                    meta.tone === "slate" && "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
+                    meta.tone === "amber" && "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                    meta.tone === "rose" && "border-rose-500/30 bg-rose-500/10 text-rose-700 dark:text-rose-300",
+                    meta.tone === "destructive" && "border-destructive/40 bg-destructive/10 text-destructive",
+                  )}
+                >
+                  {meta.label}
+                </span>
+                <span className="hidden w-24 text-right text-xs text-muted-foreground sm:inline-block">
+                  {last}
+                </span>
+                <Button asChild variant="ghost" size="sm" className="h-8 px-2">
+                  <Link href={`/dashboard/students/${row.student.id}`}>
+                    Open
+                  </Link>
+                </Button>
+              </li>
+            )
+          })}
+        </ul>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -670,5 +1082,46 @@ function Stat({
         <p className="truncate text-sm font-medium text-foreground">{value}</p>
       </div>
     </div>
+  )
+}
+
+// Tiny chip telling the teacher which access mode the course is on.
+// Colour-coded so "Private" pops red and "Public" stays calm; the
+// password chip surfaces a warning when the toggle is set to
+// `password` but no password has actually been typed in.
+function VisibilityChip({
+  visibility,
+  hasPassword,
+}: {
+  visibility: "public" | "unlisted" | "password" | "private"
+  hasPassword: boolean
+}) {
+  const meta = {
+    public:   { Icon: Globe,  label: "Public",   cls: "bg-success/10 text-success" },
+    unlisted: { Icon: EyeOff, label: "Unlisted", cls: "bg-slate-500/10 text-slate-700 dark:text-slate-300" },
+    password: { Icon: Lock,   label: "Password", cls: "bg-amber-500/10 text-amber-700 dark:text-amber-300" },
+    private:  { Icon: Lock,   label: "Private",  cls: "bg-destructive/10 text-destructive" },
+  }[visibility]
+  const passwordMissing = visibility === "password" && !hasPassword
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium",
+        meta.cls,
+      )}
+      title={
+        passwordMissing
+          ? "Password mode enabled but no password is set — anyone with the link gets in."
+          : `Access: ${meta.label}`
+      }
+    >
+      <meta.Icon className="h-3 w-3" />
+      Access: {meta.label}
+      {passwordMissing && (
+        <span className="ml-1 rounded-full bg-destructive px-1.5 py-0 text-[9px] font-bold uppercase tracking-wide text-destructive-foreground">
+          set password
+        </span>
+      )}
+    </span>
   )
 }

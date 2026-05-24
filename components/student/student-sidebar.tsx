@@ -122,7 +122,7 @@ export function StudentSidebar() {
     ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)
     : "Guest"
 
-  // Teachers/admins previewing the student view get a footer link back
+  // Instructors/admins previewing the student view get a footer link back
   // to their main dashboard. True students never see this.
   const isPreviewingTeacher =
     !!currentUser && currentUser.role !== "student"

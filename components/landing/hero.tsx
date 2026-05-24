@@ -10,7 +10,6 @@ import {
   ShoppingBag,
   Sparkles,
   Trophy,
-  Users,
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -69,13 +68,13 @@ export function LandingHero() {
             </h1>
 
             <p className="mt-6 text-lg leading-relaxed text-muted-foreground text-balance">
-              Run cohorts, courses, a storefront, and a student community from{" "}
-              <span className="font-semibold text-foreground">one workspace</span> — under{" "}
-              <span className="font-semibold text-foreground">your own domain</span>.
-              UPI checkout, WhatsApp reminders, GST invoices done for you.{" "}
-              <span className="font-semibold text-foreground">Zero commission</span> on what you
-              earn — and one click takes your students, content, and revenue history out the
-              door the day you want to leave.
+              Sell a course, run a cohort, drop a community.{" "}
+              <span className="font-semibold text-foreground">One workspace</span>, your domain,
+              your storefront. Live classes with WhatsApp reminders, drip-released
+              modules, an instructor view that flags{" "}
+              <span className="font-semibold text-foreground">who&apos;s about to churn</span>{" "}
+              — before they do. <span className="font-semibold text-foreground">Zero commission</span>{" "}
+              on what you earn, one click to export everything the day you decide to leave.
             </p>
 
             <div className="mt-8 flex flex-col items-start gap-3 sm:flex-row">
@@ -98,7 +97,7 @@ export function LandingHero() {
                 reversals. Same shape, sharper words. */}
             <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted-foreground">
               <Trust label="Zero % on your revenue" />
-              <Trust label="One-click data export" />
+              <Trust label="Your students, your data — exportable any day" />
               <Trust label="30-day refund, no fine print" />
             </div>
 

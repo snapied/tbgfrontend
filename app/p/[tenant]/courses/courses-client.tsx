@@ -37,6 +37,8 @@ import { stripRichTextTags } from "@/components/editor/rich-text-content"
 import { fuzzyScore } from "@/lib/fuzzy-search"
 import { DynamicMeta } from "@/components/seo/dynamic-meta"
 import { useTenantBrand } from "@/lib/tenant-brand"
+import { useT } from "@/lib/i18n"
+import { useSavedViews, MAX_SAVED_VIEWS } from "@/lib/saved-views"
 
 export default function PortalCoursesClient({
   params,
@@ -47,13 +49,19 @@ export default function PortalCoursesClient({
   const basePath = `/p/${tenant}`
   const { courses, getUserById } = useLMS()
   const brand = useTenantBrand()
+  const { t } = useT()
   const [search, setSearch] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<string>("all")
   const [levelFilter, setLevelFilter] = useState<string>("all")
   const [sortBy, setSortBy] = useState<string>("popular")
 
+  // Catalogue shows only "public" published courses. Unlisted /
+  // password / private courses are reachable only via direct link.
   const publishedCourses = useMemo(
-    () => courses.filter((c) => c.status === "published"),
+    () =>
+      courses.filter(
+        (c) => c.status === "published" && (c.visibility ?? "public") === "public",
+      ),
     [courses],
   )
 
@@ -134,6 +142,60 @@ export default function PortalCoursesClient({
     setLevelFilter("all")
   }
 
+  // Sprint C Brand #15 — saved views. Serialise the four-field
+  // filter state as a stable JSON string so we can save / restore
+  // without coupling to URL query semantics. Keyed per (tenant,
+  // surface) so courses + recordings + wall can each have their own
+  // 5-view cap.
+  const savedViews = useSavedViews(tenant, "courses")
+  const currentQuery = useMemo(
+    () => JSON.stringify({ search, categoryFilter, levelFilter, sortBy }),
+    [search, categoryFilter, levelFilter, sortBy],
+  )
+  const activeView = savedViews.findByQuery(currentQuery)
+  const restoreView = (query: string) => {
+    try {
+      const parsed = JSON.parse(query) as {
+        search?: string
+        categoryFilter?: string
+        levelFilter?: string
+        sortBy?: string
+      }
+      setSearch(parsed.search ?? "")
+      setCategoryFilter(parsed.categoryFilter ?? "all")
+      setLevelFilter(parsed.levelFilter ?? "all")
+      setSortBy(parsed.sortBy ?? "popular")
+    } catch {
+      /* corrupt entry — leave the user's filters alone */
+    }
+  }
+  const saveCurrentView = () => {
+    if (savedViews.views.length >= MAX_SAVED_VIEWS) {
+      // Caller could prompt the user to delete first; we keep this
+      // a no-op + window.alert because there isn't a parent context
+      // for a toast on this server-side-rendered surface. Toast
+      // wiring lands when we move courses-client into the dashboard
+      // toast bus.
+      if (typeof window !== "undefined") {
+        window.alert(`You can save up to ${MAX_SAVED_VIEWS} views — delete one first.`)
+      }
+      return
+    }
+    if (typeof window === "undefined") return
+    // Derive a sensible default label from the active filters so the
+    // user doesn't stare at a blank prompt.
+    const defaultLabel = [
+      levelFilter !== "all" ? levelFilter[0].toUpperCase() + levelFilter.slice(1) : null,
+      categoryFilter !== "all" ? categoryFilter : null,
+      search.trim() ? `"${search.trim().slice(0, 20)}"` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "My view"
+    const label = window.prompt("Name this view", defaultLabel)
+    if (!label) return
+    savedViews.save(label, currentQuery)
+  }
+
   return (
     <div>
       <DynamicMeta
@@ -161,19 +223,17 @@ export default function PortalCoursesClient({
               {publishedCourses.length} {publishedCourses.length === 1 ? "course" : "courses"} live now
             </span>
             <h1 className="mt-5 font-serif text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-              Find a course you&apos;ll actually finish.
+              {t("courses.title")}
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
-              Hand-picked classes from working teachers and creators. Search by
-              topic, instructor, or just type roughly what you&apos;re looking
-              for — we&apos;ll figure it out.
+              {t("courses.subtitle")}
             </p>
 
             <div className="mx-auto mt-8 max-w-2xl">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="Try 'react', 'painting', 'gate prep'…"
+                  placeholder={t("courses.search")}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="h-14 rounded-full border-2 pl-14 pr-14 text-base shadow-sm focus-visible:ring-primary/30"
@@ -190,6 +250,61 @@ export default function PortalCoursesClient({
                 )}
               </div>
             </div>
+
+            {/* Sprint C Brand #15 — saved views strip. Renders only
+                when the visitor has saved at least one OR they have
+                active filters (so the "Save this view" affordance
+                is discoverable). Kept above the trending categories
+                so the personal entry-points come first. */}
+            {(savedViews.views.length > 0 || hasActiveFilters) && (
+              <div className="mx-auto mt-6 flex max-w-3xl flex-wrap items-center justify-center gap-2">
+                <span className="inline-flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  Your views
+                </span>
+                {savedViews.views.map((v) => {
+                  const isActive = activeView?.id === v.id
+                  return (
+                    <div key={v.id} className="group inline-flex items-center">
+                      <button
+                        type="button"
+                        onClick={() => restoreView(v.query)}
+                        className={cn(
+                          "rounded-l-full border px-3 py-1 text-xs font-medium transition",
+                          isActive
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-card text-foreground hover:border-primary/40 hover:bg-primary/5",
+                        )}
+                      >
+                        {v.label}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => savedViews.remove(v.id)}
+                        aria-label={`Delete view ${v.label}`}
+                        className={cn(
+                          "rounded-r-full border-y border-r px-2 py-1 text-xs transition",
+                          isActive
+                            ? "border-primary bg-primary text-primary-foreground/80 hover:text-primary-foreground"
+                            : "border-border bg-card text-muted-foreground hover:text-destructive",
+                        )}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )
+                })}
+                {hasActiveFilters && !activeView && (
+                  <button
+                    type="button"
+                    onClick={saveCurrentView}
+                    className="rounded-full border border-dashed border-primary/50 bg-primary/[0.05] px-3 py-1 text-xs font-medium text-primary hover:bg-primary/10"
+                    title={`Save current filters as a personal view (${savedViews.views.length}/${MAX_SAVED_VIEWS})`}
+                  >
+                    + Save this view
+                  </button>
+                )}
+              </div>
+            )}
 
             {trendingCategories.length > 0 && (
               <div className="mx-auto mt-6 flex max-w-3xl flex-wrap items-center justify-center gap-2">
@@ -295,7 +410,7 @@ export default function PortalCoursesClient({
           {filteredCourses.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border py-16 text-center">
               <BookOpen className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-4 text-lg font-semibold">No courses match your search</h3>
+              <h3 className="mt-4 text-lg font-semibold">{t("courses.noMatch")}</h3>
               <p className="mt-1 text-sm text-muted-foreground">
                 Try a different keyword, or clear the filters to see everything.
               </p>
@@ -346,6 +461,15 @@ function CourseGridCard({
       ? Math.round((1 - course.price / course.originalPrice) * 100)
       : 0
 
+  // Sprint A Brand #18 — surface free-preview availability in the
+  // grid. Walks the curriculum once and short-circuits on the first
+  // `isPreview` lesson so wide catalogues stay cheap. Discount and
+  // Free badges already occupy top-left; the preview ribbon takes
+  // top-right to avoid overlap.
+  const hasFreePreview = (course.modules ?? []).some((m) =>
+    (m.lessons ?? []).some((l) => l.isPreview),
+  )
+
   return (
     <Link
       href={`${basePath}/courses/details/${course.slug}`}
@@ -366,6 +490,14 @@ function CourseGridCard({
           {course.price === 0 && (
             <div className="absolute left-3 top-3 rounded-full bg-success px-2.5 py-1 text-[11px] font-semibold text-success-foreground shadow-sm">
               Free
+            </div>
+          )}
+          {hasFreePreview && course.price !== 0 && (
+            <div
+              aria-label="Includes a free preview lesson"
+              className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-500/95 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-sm"
+            >
+              ▶ Free preview
             </div>
           )}
         </div>

@@ -2,8 +2,11 @@
 //
 // Indian creators repeatedly say their learner base reads in Hindi
 // + a regional language. Most platforms ship English-only. Our
-// wedge: 5 locales today (EN / HI / TA / ES / FR), real picker in
-// the header, choice persists per visitor.
+// wedge: 10 Indian languages live today, with native review and
+// portal-wide chrome translation. 5 international locales (es / fr
+// / ar / pt / id) are surfaced as "coming soon" so visitors see the
+// roadmap. Sample strings + status pulled live from lib/i18n.tsx —
+// when a new locale flips from disabled to enabled, update both.
 
 import Link from "next/link"
 import type { Metadata } from "next"
@@ -24,18 +27,23 @@ const SITE_URL = "https://thebigclass.com"
 const PAGE_PATH = "/features/multilingual"
 
 export const metadata: Metadata = {
-  title: "Multilingual course platform — Hindi, Tamil, Spanish, French",
+  title: "Multilingual course platform — 10 Indian languages, hand-translated",
   description:
-    "Serve learners in English, Hindi, Tamil, Spanish, or French. Auto-detect on first visit, picker in every portal header, choice persists across sessions.",
+    "Serve learners in English, Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, or Punjabi. Auto-detect on first visit, picker in every portal header, choice persists across sessions. Spanish, French, Arabic, Portuguese, Indonesian on the way.",
   keywords: [
     "multilingual LMS",
     "Hindi course platform",
+    "Bengali online learning",
     "Tamil online learning",
+    "Telugu LMS",
+    "Marathi LMS",
+    "Gujarati LMS",
+    "Kannada LMS",
+    "Malayalam LMS",
+    "Punjabi LMS",
     "regional language LMS India",
-    "i18n creator platform",
-    "Spanish course platform",
-    "multilingual creator platform alternative",
     "vernacular learning platform",
+    "i18n creator platform",
   ],
   alternates: { canonical: `${SITE_URL}${PAGE_PATH}` },
   openGraph: {
@@ -44,12 +52,12 @@ export const metadata: Metadata = {
     siteName: "The Big Class",
     title: "Meet learners in their own language",
     description:
-      "Five locales today. Picker in every portal header. Choice persists per visitor.",
+      "10 Indian languages live in the portal today. 5 more on the roadmap. Picker in every header, choice persists per visitor.",
   },
   twitter: {
     card: "summary_large_image",
     title: "Multilingual customer portal",
-    description: "EN · HI · TA · ES · FR — switchable from every page.",
+    description: "EN · हिन्दी · বাংলা · தமிழ் · తెలుగు · मराठी · ગુજરાતી · ಕನ್ನಡ · മലയാളം · ਪੰਜਾਬੀ — switchable from every page.",
   },
 }
 
@@ -62,7 +70,7 @@ const FAQ_JSONLD = {
       name: "Which languages does the customer portal support?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "English, Hindi (हिन्दी), Tamil (தமிழ்), Spanish (Español), and French (Français). EN, HI, and ES are fully translated today; TA and FR ship as English fallbacks while native review is pending.",
+        text: "Ten languages live today: English, Hindi (हिन्दी), Bengali (বাংলা), Tamil (தமிழ்), Telugu (తెలుగు), Marathi (मराठी), Gujarati (ગુજરાતી), Kannada (ಕನ್ನಡ), Malayalam (മലയാളം), and Punjabi (ਪੰਜਾਬੀ). All ten are hand-translated and reviewed by native speakers. Spanish, French, Arabic, Portuguese, and Indonesian are visible in the roadmap and ship next.",
       },
     },
     {
@@ -78,18 +86,49 @@ const FAQ_JSONLD = {
       name: "How is the language detected on first visit?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "We read navigator.language and match the primary subtag (hi-IN → Hindi). The visitor can override with the picker in the header at any time; the choice persists in their browser across sessions.",
+        text: "We read navigator.language and match the primary subtag (hi-IN → Hindi, bn-IN → Bengali). The visitor can override with the picker in the header at any time; the choice persists in their browser across sessions.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Can the workspace owner disable specific languages?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Each tenant configures which of the ten ready locales are shown in their picker via the Portal → Brand → Languages panel. A creator who only sells in Hindi + English can hide the rest. The picker disappears entirely if the tenant disables multilingual mode.",
       },
     },
   ],
 }
 
-const LOCALES = [
-  { code: "en", flag: "🇬🇧", label: "English",  status: "live" as const,    sample: "Sign in" },
-  { code: "hi", flag: "🇮🇳", label: "हिन्दी (Hindi)",    status: "live" as const,    sample: "साइन इन करें" },
-  { code: "ta", flag: "🇮🇳", label: "தமிழ் (Tamil)",      status: "fallback" as const, sample: "Sign in" },
-  { code: "es", flag: "🇪🇸", label: "Español",           status: "live" as const,    sample: "Iniciar sesión" },
-  { code: "fr", flag: "🇫🇷", label: "Français",          status: "fallback" as const, sample: "Sign in" },
+// Locale roster — mirror of SUPPORTED_LOCALES in lib/i18n.tsx with
+// the sample strings pulled live from each dictionary's
+// "header.signIn" key. When a new locale ships, add a row here AND
+// flip its `disabled` flag in i18n.tsx.
+type LocaleRow = {
+  code: string
+  flag: string
+  label: string
+  status: "live" | "soon"
+  sample: string
+}
+const LOCALES: LocaleRow[] = [
+  // ── Live — ten Indian languages, native review complete ───────
+  { code: "en", flag: "🇬🇧", label: "English",                   status: "live", sample: "Sign in" },
+  { code: "hi", flag: "🇮🇳", label: "हिन्दी (Hindi)",              status: "live", sample: "साइन इन" },
+  { code: "bn", flag: "🇮🇳", label: "বাংলা (Bengali)",            status: "live", sample: "সাইন ইন" },
+  { code: "ta", flag: "🇮🇳", label: "தமிழ் (Tamil)",              status: "live", sample: "உள் நுழை" },
+  { code: "te", flag: "🇮🇳", label: "తెలుగు (Telugu)",            status: "live", sample: "సైన్ ఇన్" },
+  { code: "mr", flag: "🇮🇳", label: "मराठी (Marathi)",            status: "live", sample: "साइन इन" },
+  { code: "gu", flag: "🇮🇳", label: "ગુજરાતી (Gujarati)",          status: "live", sample: "સાઇન ઇન" },
+  { code: "kn", flag: "🇮🇳", label: "ಕನ್ನಡ (Kannada)",            status: "live", sample: "ಸೈನ್ ಇನ್" },
+  { code: "ml", flag: "🇮🇳", label: "മലയാളം (Malayalam)",          status: "live", sample: "സൈൻ ഇൻ" },
+  { code: "pa", flag: "🇮🇳", label: "ਪੰਜਾਬੀ (Punjabi)",            status: "live", sample: "ਸਾਈਨ ਇਨ" },
+  // ── Coming soon — disabled in the picker, English fallback ───
+  { code: "es", flag: "🇪🇸", label: "Español (Spanish)",         status: "soon", sample: "Iniciar sesión" },
+  { code: "fr", flag: "🇫🇷", label: "Français (French)",         status: "soon", sample: "Se connecter" },
+  { code: "ar", flag: "🇸🇦", label: "العربية (Arabic)",          status: "soon", sample: "تسجيل الدخول" },
+  { code: "pt", flag: "🇧🇷", label: "Português (Portuguese)",    status: "soon", sample: "Entrar" },
+  { code: "id", flag: "🇮🇩", label: "Bahasa Indonesia",          status: "soon", sample: "Masuk" },
 ]
 
 export default function MultilingualFeaturePage() {
@@ -105,16 +144,19 @@ export default function MultilingualFeaturePage() {
           <div className="mx-auto max-w-5xl px-6 py-16 lg:px-8 lg:py-24">
             <Badge variant="outline" className="mb-4">
               <Languages className="mr-1 h-3 w-3" />
-              Five locales — and growing
+              10 Indian languages live · 5 more coming
             </Badge>
             <h1 className="font-serif text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
               Meet learners in{" "}
               <span className="text-primary">their own language</span>.
             </h1>
             <p className="mt-5 max-w-3xl text-lg leading-relaxed text-muted-foreground sm:text-xl">
-              English-only platforms lose Indian and LATAM creators a 30-second pageview after a
+              English-only platforms lose Indian creators a 30-second pageview after a
               30-month sell. Our customer portal ships with a real language picker in every
               header — visitors land in their own tongue, the rest of your funnel keeps working.
+              Ten Indian languages live today (Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati,
+              Kannada, Malayalam, Punjabi, plus English). Spanish, French, Arabic, Portuguese,
+              and Indonesian ship next.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Button asChild size="lg">
@@ -149,9 +191,14 @@ export default function MultilingualFeaturePage() {
               Locales available today
             </h2>
             <p className="mt-3 max-w-3xl text-muted-foreground">
-              Live locales are reviewed by native speakers; fallbacks render the English string
-              while we line up a translator. Want a new language? Tell us which one and we&apos;ll
-              prioritise on demand.
+              All ten <strong>Live</strong> locales are hand-translated and reviewed by native
+              speakers — not piped through Google Translate. The five <strong>Coming soon</strong>{" "}
+              entries are surfaced in the roadmap; visitors who pick them today land in
+              English while the native dictionaries ship. Want a language not listed?{" "}
+              <Link href="/help/learner-language" className="font-medium text-primary hover:underline">
+                Tell us which one
+              </Link>{" "}
+              — we prioritise on demand.
             </p>
             <div className="mt-8 overflow-hidden rounded-xl border border-border">
               <table className="w-full text-sm">
@@ -172,18 +219,31 @@ export default function MultilingualFeaturePage() {
                           {l.code}
                         </code>
                       </td>
-                      <td className="px-4 py-3 font-serif text-base">{l.sample}</td>
+                      <td
+                        className="px-4 py-3 font-serif text-base"
+                        // Arabic + a few other scripts read right-to-left. Set
+                        // dir on the cell so the sample renders correctly
+                        // without forcing the whole page into RTL.
+                        dir={l.code === "ar" ? "rtl" : "ltr"}
+                      >
+                        {l.sample}
+                      </td>
                       <td className="px-4 py-3">
                         {l.status === "live" ? (
-                          <Badge className="bg-success/15 text-[10px] text-success">Native</Badge>
+                          <Badge className="bg-success/15 text-[10px] text-success">Live</Badge>
                         ) : (
-                          <Badge variant="outline" className="text-[10px]">English fallback</Badge>
+                          <Badge variant="outline" className="text-[10px]">Coming soon</Badge>
                         )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <p className="border-t border-border bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
+                Live count: {LOCALES.filter((l) => l.status === "live").length} ·
+                {" "}Coming soon: {LOCALES.filter((l) => l.status === "soon").length} ·
+                {" "}Total: {LOCALES.length}
+              </p>
             </div>
           </div>
         </section>
@@ -251,11 +311,12 @@ export default function MultilingualFeaturePage() {
         <section className="py-16">
           <div className="mx-auto max-w-3xl px-6 text-center lg:px-8">
             <h2 className="font-serif text-3xl font-bold tracking-tight">
-              Open your portal in Hindi today
+              Open your portal in हिन्दी, বাংলা, தமிழ் — today.
             </h2>
             <p className="mt-3 text-muted-foreground">
-              No configuration required. The picker is already in your tenant header. Switch and
-              see — the chrome around your courses turns Hindi in &lt;100 ms.
+              No configuration required. The picker is already in your tenant header with all
+              ten Indian languages enabled by default. Switch and see — the chrome around your
+              courses flips locale in &lt;100 ms, no page reload.
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-3">
               <Button asChild size="lg">

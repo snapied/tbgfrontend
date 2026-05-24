@@ -8,7 +8,8 @@
 //     become a wall of cards.
 //   • Sidebar: learning stats, quiz performance, certificates.
 
-import { use, useState } from "react"
+import { Suspense, use, useEffect, useMemo, useState } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import {
   Award,
@@ -18,6 +19,7 @@ import {
   History,
   Mail,
   MessageCircleQuestion,
+  MessageSquare,
   Pencil,
   Phone,
   Receipt,
@@ -30,6 +32,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useLMS } from "@/lib/lms-store"
+import { touchRecentStudent } from "@/lib/recently-viewed-students"
+import { StudentPrivateNotesPanel } from "@/components/students/student-private-notes"
+import { StudentTagsEditor } from "@/components/students/student-tags"
 import { DashboardBreadcrumbs } from "@/components/dashboard/dashboard-breadcrumbs"
 import { StudentPerformance } from "@/components/dashboard/student-performance"
 import { StudentEnrollWidget } from "@/components/students/student-enroll-widget"
@@ -37,9 +42,48 @@ import { StudentActivityTimeline } from "@/components/students/student-activity-
 import { StudentDoubtsPanel } from "@/components/students/student-doubts"
 import { StudentInvoices } from "@/components/students/student-invoices"
 import { MessageComposer } from "@/components/messages/message-composer"
+import { NudgePreviewDialog, type NudgeKind } from "@/components/dashboard/engagement-nudge-dialog"
+import { buildNotifications, type DispatchPayload } from "@/lib/notifications"
+import {
+  partitionByCooldown,
+  markNudged,
+  relativeFromNow,
+} from "@/lib/nudge-cooldown"
+import { useConfirm } from "@/lib/use-confirm"
+import { useTenant } from "@/lib/tenant-store"
+import { tenantPublicUrl } from "@/lib/tenant-resolver"
+import { toast } from "sonner"
 
 export default function StudentDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={null}>
+      <StudentDetailPageInner params={params} />
+    </Suspense>
+  )
+}
+
+function StudentDetailPageInner({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
+  const router = useRouter()
+  const pathname = usePathname() ?? ""
+  const searchParams = useSearchParams()
+  // Tab state via URL so a refresh — or a deep-link from inbox /
+  // doubts / messages — lands on the same tab. Whitelisted; falls
+  // back to "overview" on a missing / unknown value.
+  const TAB_VALUES = ["overview", "activity", "doubts", "invoices", "messages"] as const
+  type StudentTab = (typeof TAB_VALUES)[number]
+  const tabFromUrl = (searchParams?.get("tab") ?? "") as StudentTab | ""
+  const activeTab: StudentTab = (TAB_VALUES as readonly string[]).includes(tabFromUrl)
+    ? (tabFromUrl as StudentTab)
+    : "overview"
+  const setActiveTab = (next: string) => {
+    const params2 = new URLSearchParams(searchParams?.toString() ?? "")
+    if (next === "overview") params2.delete("tab")
+    else params2.set("tab", next)
+    const q = params2.toString()
+    router.replace(q ? `${pathname}?${q}` : pathname)
+  }
+
   const {
     getUserById,
     enrollments,
@@ -47,11 +91,121 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
     quizAttempts,
     quizzes,
     getMessagesForRecipient,
-    getUserById: lookup,
+    getEnrollmentProgress,
+    addNotifications,
+    currentUser,
   } = useLMS()
+  const { currentTenant } = useTenant()
+  const confirm = useConfirm()
 
   const student = getUserById(id)
+  // Touch the "recently viewed" log on every detail-page mount so
+  // the roster's quick-switch strip reflects the teacher's latest
+  // hop. Keyed off the visiting user so two co-teachers don't
+  // pollute each other's recents.
+  useEffect(() => {
+    if (!student) return
+    touchRecentStudent(currentUser?.id, student.id)
+  }, [student, currentUser?.id])
   const [messageOpen, setMessageOpen] = useState(false)
+  // Nudge state — per-student preview dialog. Same dialog the
+  // engagement page uses; recipients are locked to this single student.
+  const [nudgeOpen, setNudgeOpen] = useState(false)
+  const [nudgeKind, setNudgeKind] = useState<NudgeKind>("checkin")
+  const openNudge = (kind: NudgeKind) => {
+    setNudgeKind(kind)
+    setNudgeOpen(true)
+  }
+  const studentHomeUrl = currentTenant
+    ? `${tenantPublicUrl(currentTenant.slug)}/my`
+    : "/my"
+  const fireNudgeConfirmed = async (payload: {
+    type: string
+    title: string
+    body: string
+    url: string
+    channels: { inApp: boolean; email: boolean; whatsApp: boolean }
+  }) => {
+    if (!student) return
+    // Single-recipient cooldown gate. If we nudged this student
+    // recently, ask before stacking another ping on top.
+    const kind = payload.type as "checkin" | "comeback"
+    const { recent } = partitionByCooldown(kind, [student.id])
+    if (recent.length === 1) {
+      const labelForKind = kind === "checkin" ? "check-in" : "come-back"
+      const stamp = relativeFromNow(recent[0].lastNudgedAt)
+      const ok = await confirm({
+        title: `Send another ${labelForKind}?`,
+        description: `You already sent ${student.name} a ${labelForKind} ${stamp}. Sending again now risks looking like spam.`,
+        confirmLabel: "Send anyway",
+        cancelLabel: "Don't send",
+      })
+      if (!ok) {
+        setNudgeOpen(false)
+        return
+      }
+    }
+    const dispatch: DispatchPayload = {
+      type: payload.type,
+      title: payload.title,
+      body: payload.body,
+      url: payload.url,
+      meta: { kind: payload.type },
+    }
+    const channels: ("in-app" | "email" | "whatsapp")[] = []
+    if (payload.channels.inApp) channels.push("in-app")
+    if (payload.channels.email) channels.push("email")
+    if (payload.channels.whatsApp) channels.push("whatsapp")
+    const entries = buildNotifications([student], dispatch, { channels })
+    addNotifications(entries)
+    markNudged(kind, [student.id])
+    toast.success(`Sent to ${student.name}.`, {
+      description: `Via ${channels.join(" · ") || "no channels"}`,
+    })
+    setNudgeOpen(false)
+  }
+
+  // Derive once instead of three separate `.filter` passes inline in
+  // the JSX — same data, but stable identity across renders and one
+  // pass over the array instead of three.
+  const studentEnrollments = useMemo(
+    () => enrollments.filter((e) => e.studentId === id),
+    [enrollments, id],
+  )
+  const studentQuizAttempts = useMemo(
+    () => quizAttempts.filter((a) => a.studentId === id),
+    [quizAttempts, id],
+  )
+  // Live progress for each enrollment — recomputed against the
+  // course's CURRENT lessons so a curriculum edit reflects here
+  // immediately, and a deleted lesson no longer counts toward 100%.
+  const liveProgressById = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const e of studentEnrollments) m.set(e.id, getEnrollmentProgress(e.id))
+    return m
+  }, [studentEnrollments, getEnrollmentProgress])
+  const completedCourses = useMemo(
+    () => [...liveProgressById.values()].filter((p) => p === 100).length,
+    [liveProgressById],
+  )
+  const inProgressCourses = useMemo(
+    () => [...liveProgressById.values()].filter((p) => p > 0 && p < 100).length,
+    [liveProgressById],
+  )
+  const averageProgress = useMemo(() => {
+    const ps = [...liveProgressById.values()]
+    return ps.length === 0 ? 0 : Math.round(ps.reduce((a, b) => a + b, 0) / ps.length)
+  }, [liveProgressById])
+  const averageQuizScore = useMemo(
+    () =>
+      studentQuizAttempts.length > 0
+        ? Math.round(studentQuizAttempts.reduce((acc, a) => acc + a.score, 0) / studentQuizAttempts.length)
+        : 0,
+    [studentQuizAttempts],
+  )
+
+  const messages = student ? getMessagesForRecipient(id) : []
+  const certificateEnrollments = studentEnrollments.filter((e) => e.certificateId)
 
   if (!student) {
     return (
@@ -63,20 +217,6 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
       </div>
     )
   }
-
-  const studentEnrollments = enrollments.filter((e) => e.studentId === id)
-  const studentQuizAttempts = quizAttempts.filter((a) => a.studentId === id)
-  const completedCourses = studentEnrollments.filter((e) => e.progress === 100).length
-  const inProgressCourses = studentEnrollments.filter((e) => e.progress > 0 && e.progress < 100).length
-  const averageProgress = studentEnrollments.length > 0
-    ? Math.round(studentEnrollments.reduce((acc, e) => acc + e.progress, 0) / studentEnrollments.length)
-    : 0
-  const averageQuizScore = studentQuizAttempts.length > 0
-    ? Math.round(studentQuizAttempts.reduce((acc, a) => acc + a.score, 0) / studentQuizAttempts.length)
-    : 0
-
-  const messages = getMessagesForRecipient(id)
-  const certificateEnrollments = studentEnrollments.filter((e) => e.certificateId)
 
   return (
     <div className="space-y-6">
@@ -144,7 +284,7 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
         <div className="lg:col-span-2 space-y-6">
           <StudentPerformance studentId={student.id} />
 
-          <Tabs defaultValue="overview">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="overview"><UserIcon className="mr-1.5 h-3.5 w-3.5" /> Overview</TabsTrigger>
               <TabsTrigger value="activity"><History className="mr-1.5 h-3.5 w-3.5" /> Activity</TabsTrigger>
@@ -224,28 +364,34 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
                   ) : (
                     <ul className="space-y-2">
                       {messages.map((m) => {
-                        const sender = lookup(m.senderId)
+                        const sender = getUserById(m.senderId)
                         return (
                           <li
                             key={m.id}
                             className="rounded-md border border-border bg-card p-3"
                           >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="font-semibold">{m.subject}</p>
-                              <span className="text-[11px] text-muted-foreground">
+                            <div className="flex items-start justify-between gap-2 min-w-0">
+                              <p className="min-w-0 truncate font-semibold" title={m.subject}>
+                                {m.subject}
+                              </p>
+                              <span className="shrink-0 text-[11px] text-muted-foreground">
                                 {new Date(m.createdAt).toLocaleString()}
                               </span>
                             </div>
                             <p className="mt-0.5 text-[11px] text-muted-foreground">
-                              From {sender?.name ?? "Teacher"} via {m.channels.join(", ")}
+                              From {sender?.name ?? "Instructor"} via {m.channels.join(", ")}
                               {m.attachments && m.attachments.length > 0
                                 ? ` · ${m.attachments.length} attachment${m.attachments.length === 1 ? "" : "s"}`
                                 : ""}
                             </p>
-                            <div
-                              className="mt-2 line-clamp-3 text-sm text-foreground/90"
-                              dangerouslySetInnerHTML={{ __html: m.body }}
-                            />
+                            {/* Stripped to plain text — message bodies can carry
+                                arbitrary HTML (teacher's rich-text drafts, AI-
+                                generated snippets, third-party paste). Rendering
+                                raw HTML on this page would let any of that
+                                inject script tags or load remote trackers. */}
+                            <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-foreground/90">
+                              {stripTagsForPreview(m.body)}
+                            </p>
                           </li>
                         )
                       })}
@@ -259,20 +405,45 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
 
         {/* Sidebar */}
         <div className="space-y-6">
+          {/* Private notes — teacher's working notebook on this
+              student. Renders at the top of the sidebar because it's
+              the surface the teacher will reach for most often, and
+              hiding it below stats / certificates would bury the
+              actual workhorse panel. */}
+          {/* Tags — shared across teachers, used as roster filters
+              and quick visual scanners. Placed above private notes
+              because tags are the cheap action; notes is the deep
+              one. */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Tags</CardTitle>
+              <CardDescription>
+                Quick labels for filtering and scanning the roster.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StudentTagsEditor studentId={student.id} studentName={student.name} />
+            </CardContent>
+          </Card>
+          <StudentPrivateNotesPanel
+            studentId={student.id}
+            studentName={student.name}
+            authorId={currentUser?.id}
+          />
           <Card>
             <CardHeader>
               <CardTitle>Learning stats</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Row icon={<BookOpen className="h-4 w-4 text-muted-foreground" />} label="Enrolled" value={`${studentEnrollments.length} courses`} />
-              <Row icon={<Award className="h-4 w-4 text-success" />} label="Completed" value={`${completedCourses} courses`} valueClassName="text-success" />
-              <Row icon={<TrendingUp className="h-4 w-4 text-accent" />} label="In progress" value={`${inProgressCourses} courses`} valueClassName="text-accent" />
+              <Row icon={<BookOpen className="h-4 w-4 text-muted-foreground" />} label="Enrolled" value={`${studentEnrollments.length} course${studentEnrollments.length === 1 ? "" : "s"}`} />
+              <Row icon={<Award className="h-4 w-4 text-success" />} label="Completed" value={`${completedCourses} course${completedCourses === 1 ? "" : "s"}`} valueClassName="text-success" />
+              <Row icon={<TrendingUp className="h-4 w-4 text-accent" />} label="In progress" value={`${inProgressCourses} course${inProgressCourses === 1 ? "" : "s"}`} valueClassName="text-accent" />
               <div className="border-t border-border pt-4">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Overall progress</span>
-                  <span className="font-semibold">{averageProgress}%</span>
+                  <span className="font-semibold tabular-nums">{averageProgress}%</span>
                 </div>
-                <Progress value={averageProgress} />
+                <Progress value={averageProgress} aria-label={`${averageProgress}% overall progress`} />
               </div>
             </CardContent>
           </Card>
@@ -306,13 +477,25 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
                 <div className="space-y-2">
                   {certificateEnrollments.map((enrollment) => {
                     const course = getCourseById(enrollment.courseId)
+                    const courseTitle = course?.title ?? "Removed course"
                     return (
                       <div
                         key={enrollment.id}
                         className="flex items-center justify-between rounded bg-muted/40 p-2"
                       >
-                        <span className="truncate text-sm font-medium">{course?.title}</span>
-                        <Button variant="ghost" size="sm" asChild>
+                        <span
+                          className={`min-w-0 flex-1 truncate text-sm font-medium ${course ? "" : "text-muted-foreground italic"}`}
+                          title={courseTitle}
+                        >
+                          {courseTitle}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          asChild
+                          aria-label={`Open certificate for ${courseTitle}`}
+                          title={`Open certificate for ${courseTitle}`}
+                        >
                           <Link href={`/verify/${enrollment.certificateId}`}>
                             <ExternalLink className="h-4 w-4" />
                           </Link>
@@ -327,14 +510,85 @@ export default function StudentDetailPage({ params }: { params: Promise<{ id: st
         </div>
       </div>
 
+      {/* Per-student nudge bar. Mirrors the persistent nudge CTA on
+          the roster + the per-row buttons on the engagement page —
+          scoped to JUST this student. Lets the teacher fire a
+          check-in / come-back without first switching to the bulk
+          engagement table. */}
+      <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/[0.04] to-accent/[0.04] p-5">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="font-serif text-lg font-bold">Ready to nudge {student.name.split(" ")[0]}?</h2>
+            <p className="text-xs text-muted-foreground">
+              Preview + send in-app, email, or WhatsApp. They&apos;ll land back on their dashboard.
+            </p>
+          </div>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Button
+              variant="outline"
+              onClick={() => openNudge("checkin")}
+              title="Preview and send a warm check-in"
+              className="flex-1 sm:flex-none"
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              Send check-in
+            </Button>
+            <Button
+              onClick={() => openNudge("comeback")}
+              title="Preview and send a come-back nudge"
+              className="flex-1 sm:flex-none"
+            >
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Send come-back
+            </Button>
+          </div>
+        </div>
+      </div>
+
       {/* Dialogs */}
       <MessageComposer
         open={messageOpen}
         onOpenChange={setMessageOpen}
         recipients={[student]}
       />
+      <NudgePreviewDialog
+        open={nudgeOpen}
+        onOpenChange={setNudgeOpen}
+        kind={nudgeKind}
+        recipients={[student]}
+        destinationUrl={studentHomeUrl}
+        fromName={currentTenant?.name}
+        onSend={(p) =>
+          fireNudgeConfirmed({
+            type: p.type,
+            title: p.title,
+            body: p.body,
+            url: p.url,
+            channels: p.channels,
+          })
+        }
+      />
     </div>
   )
+}
+
+// Tiny tag stripper used by the Messages tab so we never render
+// arbitrary instructor-drafted HTML in this page. Decodes a handful
+// of common entities so the preview reads naturally.
+function stripTagsForPreview(html: string): string {
+  if (!html) return ""
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 function Row({

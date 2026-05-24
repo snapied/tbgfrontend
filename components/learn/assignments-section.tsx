@@ -118,7 +118,7 @@ function AssignmentRow({
                 ? `Due ${new Date(assignment.dueAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
                 : "No due date"}
               {" · "}
-              {assignment.maxScore} pts
+              {assignment.maxScore > 0 ? `${assignment.maxScore} pts` : "Ungraded"}
             </p>
           </div>
         </div>

@@ -13,14 +13,17 @@
 //   • payment.captured fires on each successful renewal; our webhook
 //     route logs it for the reconciler to bump Entitlement.expiresAt.
 //
-// We cache Plans on the local .portal-state directory so repeat
-// subscribes don't churn through Razorpay's create-plan endpoint.
-// The plan cache is keyed by `{amount}-{currency}-{period}-{interval}`
-// and survives server restarts (file-backed).
+// We cache Plans in Postgres (table portal_state, slug=_system,
+// key=razorpay.plans.v1) so repeat subscribes don't churn through
+// Razorpay's create-plan endpoint. Survives server restarts and
+// scales across multiple Next processes hitting the same backend.
 
 import { NextResponse, type NextRequest } from "next/server"
-import { promises as fs } from "fs"
-import path from "path"
+import {
+  SYSTEM_SLUG,
+  loadPortalKey,
+  upsertPortalKey,
+} from "@/lib/portal-state-client"
 
 export const runtime = "nodejs"
 
@@ -34,6 +37,11 @@ interface CreateRequest {
    *  open-ended (Razorpay caps at 12 unless you set this).
    *  Match this to whatever the buyer agreed to. */
   totalCount?: number
+  /** Free-trial length in days. When set, Razorpay defers the first
+   *  charge to `now + trialDays` via the Subscription's `start_at`
+   *  field; the buyer authorises the card now and isn't billed
+   *  until the trial ends. Defaults to 0 (no trial). */
+  trialDays?: number
   customerEmail?: string
   customerName?: string
   productId?: string
@@ -57,29 +65,18 @@ interface RazorpayErrorBody {
   error?: { code?: string; description?: string }
 }
 
-function plansCachePath(): string {
-  return path.join(process.cwd(), ".portal-state", "razorpay-plans.json")
-}
+const PLANS_CACHE_KEY = "razorpay.plans.v1"
 
 type PlansCache = Record<string, string> // cacheKey → razorpay_plan_id
 
 async function loadPlansCache(): Promise<PlansCache> {
-  try {
-    const raw = await fs.readFile(plansCachePath(), "utf8")
-    const parsed = JSON.parse(raw) as unknown
-    if (parsed && typeof parsed === "object") return parsed as PlansCache
-  } catch {
-    // First-time call — empty cache.
-  }
-  return {}
+  return (
+    (await loadPortalKey<PlansCache>(SYSTEM_SLUG, PLANS_CACHE_KEY)) ?? {}
+  )
 }
 
 async function savePlansCache(cache: PlansCache): Promise<void> {
-  const file = plansCachePath()
-  await fs.mkdir(path.dirname(file), { recursive: true })
-  const tmp = `${file}.${process.pid}.tmp`
-  await fs.writeFile(tmp, JSON.stringify(cache, null, 2), "utf8")
-  await fs.rename(tmp, file)
+  await upsertPortalKey(SYSTEM_SLUG, PLANS_CACHE_KEY, cache)
 }
 
 // Map our intervalDays into Razorpay's {period, interval} pair.
@@ -183,6 +180,14 @@ export async function POST(req: NextRequest) {
   if (body.customerEmail) subNotes.customerEmail = body.customerEmail
   if (body.customerName) subNotes.customerName = body.customerName
 
+  // Trial — defer the first charge by `trialDays`. Razorpay uses
+  // unix-seconds for `start_at`. Zero / unset = charge immediately.
+  const trialDays = Number(body.trialDays)
+  const startAt =
+    Number.isFinite(trialDays) && trialDays > 0
+      ? Math.floor(Date.now() / 1000) + trialDays * 24 * 60 * 60
+      : undefined
+
   let subRes: Response
   try {
     subRes = await fetch("https://api.razorpay.com/v1/subscriptions", {
@@ -193,6 +198,7 @@ export async function POST(req: NextRequest) {
         total_count: totalCount,
         customer_notify: 1,
         notes: subNotes,
+        ...(startAt ? { start_at: startAt } : {}),
       }),
     })
   } catch (err) {

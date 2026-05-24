@@ -498,7 +498,7 @@ function SubmissionPanel({
         <CardContent className="space-y-3">
           {existing!.feedback && (
             <p className="whitespace-pre-wrap rounded-md border border-border/60 bg-background/60 p-3 text-sm">
-              <span className="font-semibold">Teacher feedback: </span>
+              <span className="font-semibold">Instructor feedback: </span>
               {existing!.feedback}
             </p>
           )}

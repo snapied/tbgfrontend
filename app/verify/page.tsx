@@ -8,20 +8,36 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
+// Certificate IDs look like `CERT-<YYYY>-<6+ alphanumeric>` — match
+// loosely so legitimate variations (longer suffixes, mixed case)
+// still pass while obvious garbage gets caught at the input gate
+// instead of bouncing through a 404 on the detail page.
+const CERT_ID_RE = /^CERT-\d{4}-[A-Z0-9]{4,}$/
+
 export default function VerifyPage() {
   const [certificateId, setCertificateId] = useState("")
   const [isSearching, setIsSearching] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!certificateId.trim()) return
+    const id = certificateId.trim().toUpperCase()
+    if (!id) return
 
+    // Pre-flight format check so the user gets an inline error
+    // instead of a 404. The detail page's lookup still handles the
+    // case where the format is valid but the ID isn't in the system.
+    if (!CERT_ID_RE.test(id)) {
+      setError(
+        "That doesn't look like a certificate ID. The format is CERT-YYYY-XXXXXXXX (year, then 8 letters/digits).",
+      )
+      return
+    }
+    setError(null)
     setIsSearching(true)
-    // Simulate search delay
+    // Brief delay so the spinner registers — pure UX nicety, no real work.
     await new Promise((resolve) => setTimeout(resolve, 500))
-    
-    // Navigate to the specific certificate page
-    window.location.href = `/verify/${certificateId.trim().toUpperCase()}`
+    window.location.href = `/verify/${id}`
   }
 
   return (
@@ -39,7 +55,7 @@ export default function VerifyPage() {
       </header>
 
       {/* Main Content */}
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-12">
+      <main id="main-content" className="flex flex-1 flex-col items-center justify-center px-6 py-12">
         <div className="w-full max-w-md text-center">
           {/* Icon */}
           <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
@@ -60,10 +76,22 @@ export default function VerifyPage() {
               <Input
                 id="certificate-id"
                 value={certificateId}
-                onChange={(e) => setCertificateId(e.target.value)}
+                onChange={(e) => {
+                  setCertificateId(e.target.value)
+                  // Clear the prior error as soon as the user starts editing —
+                  // re-validation happens on next submit.
+                  if (error) setError(null)
+                }}
                 placeholder="e.g., CERT-2026-A1B2C3D4"
                 className="text-center font-mono uppercase"
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? "verify-error" : undefined}
               />
+              {error && (
+                <p id="verify-error" role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-left text-xs text-destructive">
+                  {error}
+                </p>
+              )}
             </div>
             <Button type="submit" className="w-full" disabled={isSearching || !certificateId.trim()}>
               {isSearching ? (

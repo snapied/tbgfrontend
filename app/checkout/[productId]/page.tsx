@@ -149,7 +149,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
   // path (no gateway involved) and the Razorpay path (where we've
   // already verified the signature server-side and just need to
   // persist the order with the real paymentReference).
-  const finalisePurchase = (paymentReference?: string): boolean => {
+  const finalisePurchase = (
+    paymentReference?: string,
+    gatewaySubscriptionId?: string,
+  ): boolean => {
     const customerId = currentUser?.id ?? `cust-${hashId(email.toLowerCase())}`
     const result = checkout({
       productId: product.id,
@@ -162,6 +165,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
       ...(paymentReference
         ? { paymentReference, paymentMethod: "razorpay" as const }
         : {}),
+      ...(gatewaySubscriptionId ? { gatewaySubscriptionId } : {}),
     })
     if (!result.ok) {
       setError(result.error)
@@ -211,10 +215,16 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
             amount: product.pricing.amount,
             currency: product.pricing.currency,
             intervalDays: product.pricing.intervalDays,
+            ...(product.pricing.trialDays
+              ? { trialDays: product.pricing.trialDays }
+              : {}),
             productId: product.id,
             customerEmail: email.trim().toLowerCase(),
             customerName: name.trim(),
-            notes: { productTitle: product.title },
+            notes: {
+              productTitle: product.title,
+              ...(currentTenant?.slug ? { tenant: currentTenant.slug } : {}),
+            },
           }),
         })
         const subJson = (await subRes.json().catch(() => null)) as
@@ -244,6 +254,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
             customerName: name.trim(),
             notes: {
               productTitle: product.title,
+              ...(currentTenant?.slug ? { tenant: currentTenant.slug } : {}),
             },
           }),
         })
@@ -288,7 +299,7 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
         body: JSON.stringify(modalResponse),
       })
       const verifyJson = (await verifyRes.json().catch(() => null)) as
-        | { ok: true; paymentId: string }
+        | { ok: true; paymentId: string; subscriptionId: string | null; orderId: string | null; flow: "order" | "subscription" }
         | { ok: false; error: string }
         | null
       if (!verifyJson || !verifyJson.ok) {
@@ -301,7 +312,10 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
         return
       }
 
-      finalisePurchase(verifyJson.paymentId)
+      finalisePurchase(
+        verifyJson.paymentId,
+        verifyJson.subscriptionId ?? undefined,
+      )
     } catch (err) {
       setError((err as Error).message || "Payment failed.")
       setSubmitting(false)
@@ -405,14 +419,35 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
                 </div>
               )}
 
-              <div className="rounded-md border border-dashed border-border/60 p-3 text-xs text-muted-foreground">
-                <ShieldCheck className="mr-1 inline h-3.5 w-3.5" />
-                {useRazorpay ? (
-                  <>Secured by <span className="font-semibold">Razorpay</span>. Cards, UPI, netbanking, and wallets are accepted. Set <code className="rounded bg-muted px-1 font-mono">NEXT_PUBLIC_PAYMENTS_STUB=1</code> to bypass this flow locally.</>
-                ) : (
-                  <>Payment is currently <span className="font-semibold">in stub mode</span> — no charge will be made. Set <code className="rounded bg-muted px-1 font-mono">RAZORPAY_KEY_ID</code> + <code className="rounded bg-muted px-1 font-mono">NEXT_PUBLIC_RAZORPAY_KEY_ID</code> and unset <code className="rounded bg-muted px-1 font-mono">NEXT_PUBLIC_PAYMENTS_STUB</code> to enable real charges.</>
-                )}
-              </div>
+              {/* Trust badge — customer-facing trust signal. Production
+                  visitors only see the polished message; the env-var
+                  hint stays gated to the stub-mode (developer) path so
+                  it never leaks into a real payment context. */}
+              {useRazorpay ? (
+                <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <div className="flex items-start gap-2">
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                    <div className="space-y-1">
+                      <p className="font-semibold text-foreground">
+                        Securely processed by Razorpay
+                      </p>
+                      <p>
+                        PCI-DSS certified · 256-bit TLS · we never see or store your card details. Pay with cards, UPI, netbanking, or wallets.
+                      </p>
+                      <p className="flex flex-wrap gap-x-3 gap-y-0.5 pt-0.5 text-[11px]">
+                        <Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link>
+                        <Link href="/terms" className="underline-offset-2 hover:underline">Terms</Link>
+                        <Link href="/refund-policy" className="underline-offset-2 hover:underline">Refund policy</Link>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-md border border-dashed border-border/60 p-3 text-xs text-muted-foreground">
+                  <ShieldCheck className="mr-1 inline h-3.5 w-3.5" />
+                  Payment is currently <span className="font-semibold">in stub mode</span> — no charge will be made. Set <code className="rounded bg-muted px-1 font-mono">RAZORPAY_KEY_ID</code> + <code className="rounded bg-muted px-1 font-mono">NEXT_PUBLIC_RAZORPAY_KEY_ID</code> and unset <code className="rounded bg-muted px-1 font-mono">NEXT_PUBLIC_PAYMENTS_STUB</code> to enable real charges.
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">

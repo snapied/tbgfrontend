@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Logo } from "@/components/brand/logo"
 import { PasswordStrengthInput, MIN_PASSWORD_SCORE } from "@/components/forms/password-strength-input"
+import { AuthRedirectGate } from "@/components/auth/auth-redirect-gate"
 
 type Phase =
   | { kind: "checking" }
@@ -91,6 +92,7 @@ export default function ResetPasswordPage({ params }: { params: Promise<{ token:
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6 py-12">
+      <AuthRedirectGate />
       <div className="mx-auto w-full max-w-sm">
         <div className="mb-6 flex justify-center"><Logo size="md" /></div>
 

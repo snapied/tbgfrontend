@@ -11,6 +11,8 @@ import {
   NotebookPen,
   Search,
   Trophy,
+  Users as UsersIcon,
+  X,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -133,16 +135,27 @@ export default function LeaderboardPage() {
             <CardContent className="p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="relative flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                   <Input
                     placeholder="Search students…"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="pl-9"
+                    className="pl-9 pr-9"
+                    aria-label="Search leaderboard"
                   />
+                  {search && (
+                    <button
+                      type="button"
+                      onClick={() => setSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
                 <Select value={courseFilter} onValueChange={setCourseFilter}>
-                  <SelectTrigger className="w-full sm:w-56">
+                  <SelectTrigger className="w-full sm:w-56" aria-label="Filter by course">
                     <SelectValue placeholder="Course" />
                   </SelectTrigger>
                   <SelectContent>
@@ -153,7 +166,7 @@ export default function LeaderboardPage() {
                   </SelectContent>
                 </Select>
                 <Select value={timeRange} onValueChange={(v) => setTimeRange(v as typeof timeRange)}>
-                  <SelectTrigger className="w-full sm:w-44">
+                  <SelectTrigger className="w-full sm:w-44" aria-label="Time range">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -193,7 +206,9 @@ export default function LeaderboardPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   <ul className="divide-y divide-border">
-                    {visibleEntries.map((e) => <RankRow key={e.student.id} entry={e} />)}
+                    {visibleEntries.map((e) => (
+                      <RankRow key={e.student.id} entry={e} totalCohort={entries.length} />
+                    ))}
                   </ul>
                 </CardContent>
               </Card>
@@ -217,6 +232,12 @@ export default function LeaderboardPage() {
               <RuleRow icon={<NotebookPen className="h-4 w-4" />} label="Assignment scored ≥ 80% (bonus)" pts={DEFAULT_SCORE_RULES.assignmentHighScoreBonus} suffix="bonus" />
               <RuleRow icon={<BookOpen className="h-4 w-4" />} label="Lesson completed" pts={DEFAULT_SCORE_RULES.lessonCompleted} />
               <RuleRow icon={<Crown className="h-4 w-4" />} label="Course completed" pts={DEFAULT_SCORE_RULES.courseCompleted} />
+              <RuleRow icon={<Award className="h-4 w-4" />} label="Welcome bonus" pts={DEFAULT_SCORE_RULES.welcomeBonus} suffix="one-time" />
+              <RuleRow icon={<Trophy className="h-4 w-4" />} label="Profile complete (avatar + phone)" pts={DEFAULT_SCORE_RULES.profileComplete} suffix="one-time" />
+              <RuleRow icon={<UsersIcon className="h-4 w-4" />} label="Joined a community" pts={DEFAULT_SCORE_RULES.perCommunityJoined} />
+              <RuleRow icon={<ClipboardCheck className="h-4 w-4" />} label="Asked a doubt" pts={DEFAULT_SCORE_RULES.perDoubtAsked} />
+              <RuleRow icon={<NotebookPen className="h-4 w-4" />} label="Wall of Love entry" pts={DEFAULT_SCORE_RULES.perWallEntry} />
+              <RuleRow icon={<CalendarCheck className="h-4 w-4" />} label="Day active (capped)" pts={DEFAULT_SCORE_RULES.perDayActive} suffix={`max ${DEFAULT_SCORE_RULES.daysActiveCap}d`} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -258,8 +279,12 @@ function PodiumCard({ entry }: { entry: LeaderboardEntry }) {
   )
 }
 
-function RankRow({ entry }: { entry: LeaderboardEntry }) {
-  const tier = tierForRank(entry.rank, 100)
+function RankRow({ entry, totalCohort }: { entry: LeaderboardEntry; totalCohort: number }) {
+  // tierForRank's second argument is the cohort size — "top 10%"
+  // of 100 ≠ "top 10%" of 12. The prior hardcoded 100 made every
+  // small-cohort leaderboard tier the top 10 students "Top 10%",
+  // which is meaningless.
+  const tier = tierForRank(entry.rank, totalCohort)
   return (
     <li className="flex items-center gap-3 px-4 py-3">
       <span className="w-8 shrink-0 text-center font-mono text-sm font-semibold tabular-nums text-muted-foreground">

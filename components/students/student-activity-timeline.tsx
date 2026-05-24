@@ -89,14 +89,22 @@ export function StudentActivityTimeline({ studentId }: Props) {
         // but not per-lesson timestamps — fall back to the
         // enrollment's lastAccessedAt (good enough as an upper
         // bound for "when most recently active in this course").
+        //
+        // We compute the figures against the course's CURRENT lesson
+        // set, so a teacher who removed a lesson the student already
+        // ticked won't see an inflated "12/10 lessons done" badge.
         if (e.completedLessons.length > 0 && c) {
+          const currentIds = new Set(c.modules.flatMap((m) => m.lessons.map((l) => l.id)))
+          const liveDone = e.completedLessons.filter((id) => currentIds.has(id)).length
+          const liveTotal = currentIds.size
+          const livePct = liveTotal > 0 ? Math.min(100, Math.round((liveDone / liveTotal) * 100)) : 0
           out.push({
             id: `prog-${e.id}`,
             at: e.lastAccessedAt,
             icon: CheckCircle2,
             color: "success",
-            title: `${e.completedLessons.length}/${c.totalLessons} lessons done in ${c.title}`,
-            body: `${e.progress}% complete`,
+            title: `${liveDone}/${liveTotal} lessons done in ${c.title}`,
+            body: `${livePct}% complete`,
             href: `/dashboard/courses/${c.id}`,
           })
         }

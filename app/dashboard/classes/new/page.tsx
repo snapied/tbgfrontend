@@ -175,7 +175,7 @@ export default function NewClassPage() {
   const [description, setDescription] = useState("")
   const [meetingUrl, setMeetingUrl] = useState("")
   // Default to in-house — that's our hosted video room, no external
-  // link required. Teachers who prefer Zoom/Meet/Teams just override.
+  // link required. Instructors who prefer Zoom/Meet/Teams just override.
   const [providerOverride, setProviderOverride] = useState<LiveSession["provider"] | null>(
     "in-house",
   )

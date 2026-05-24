@@ -5,7 +5,7 @@
 // under /p/[tenant]/my/* renders through this layout.
 //
 // Gating: if no user is signed in, redirect to /p/<tenant>/login with
-// a `?next=` so they come back. Teachers/admins are allowed through
+// a `?next=` so they come back. Instructors/admins are allowed through
 // (they're "previewing" the student view) — the sidebar shows them a
 // "Back to teacher dashboard" footer.
 
@@ -15,6 +15,7 @@ import { StudentSidebar, StudentHeader } from "@/components/student/student-side
 import { ShortcutsProvider } from "@/components/dashboard/shortcuts-provider"
 import { CommandPalette } from "@/components/dashboard/command-palette"
 import { ReminderPoller } from "@/components/dashboard/reminder-poller"
+import { TokenRefresher } from "@/components/dashboard/token-refresher"
 import { StudentWelcomeModal } from "@/components/student/welcome-modal"
 import { useLMS } from "@/lib/lms-store"
 
@@ -76,6 +77,10 @@ export default function StudentDashboardLayout({
           student-flavoured palette with /my targets, but the
           existing one works as a search-everything affordance. */}
       <CommandPalette />
+      {/* Keep the backend access token fresh — re-mint from the
+          refresh cookie every 45 min and on tab return so students
+          don't get the "Session expired" hop after stepping away. */}
+      <TokenRefresher />
       {/* Pings /api/cron/class-reminders every 60s so T-3h / T-1h /
           T-15m reminders go out while the student has the dashboard
           open. Idempotent — markers on each session prevent dupes. */}

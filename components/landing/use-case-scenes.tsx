@@ -200,7 +200,7 @@ export function SchoolScene() {
         </span>
       </div>
 
-      {/* Teacher grid */}
+      {/* Instructor grid */}
       <div className="absolute inset-x-4 top-14 grid grid-cols-3 gap-1.5">
         {teachers.map((t, i) => (
           <div key={i} className="overflow-hidden rounded-md border border-border bg-card p-1.5">

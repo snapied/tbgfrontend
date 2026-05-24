@@ -12,8 +12,7 @@
 // Returns { ok, sent: { inApp, email }, preview: { subject, html, text, recipients } }.
 
 import { NextResponse, type NextRequest } from "next/server"
-import { promises as fs } from "fs"
-import path from "path"
+import { loadPortalState, upsertPortalKey } from "@/lib/portal-state-client"
 import { sendEmail } from "@/lib/zepto"
 import {
   REMINDER_WINDOWS,
@@ -33,9 +32,6 @@ import type {
 
 export const runtime = "nodejs"
 
-function dataDir(): string {
-  return path.join(process.cwd(), ".portal-state")
-}
 function appBase(): string {
   return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "")
 }
@@ -66,16 +62,12 @@ export async function POST(req: NextRequest) {
     )
   }
 
-  const filePath = path.join(dataDir(), `${tenant}.json`)
-  let blob: Record<string, unknown>
-  try {
-    const raw = await fs.readFile(filePath, "utf8")
-    blob = JSON.parse(raw) as Record<string, unknown>
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return NextResponse.json({ ok: false, error: `No data for tenant ${tenant}` }, { status: 404 })
-    }
-    return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 })
+  const blob = await loadPortalState(tenant)
+  if (Object.keys(blob).length === 0) {
+    return NextResponse.json(
+      { ok: false, error: `No data for tenant ${tenant}` },
+      { status: 404 },
+    )
   }
 
   const sessions = (blob["lms.liveSessions.v1"] as LiveSession[] | undefined) ?? []
@@ -177,10 +169,7 @@ export async function POST(req: NextRequest) {
   // Persist the in-app notifications back so the bell + /my/inbox
   // light up on next client poll. Deliberately do NOT touch
   // session.remindersSent — the real schedule must still fire.
-  blob["lms.notifications.v1"] = notifications
-  const tmp = `${filePath}.${process.pid}.tmp`
-  await fs.writeFile(tmp, JSON.stringify(blob, null, 2), "utf8")
-  await fs.rename(tmp, filePath)
+  await upsertPortalKey(tenant, "lms.notifications.v1", notifications)
 
   return NextResponse.json({
     ok: true,

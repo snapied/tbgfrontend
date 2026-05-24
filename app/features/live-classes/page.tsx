@@ -93,12 +93,12 @@ export default function LiveClassesFeaturePage() {
         <FeatureSplit
           reverse
           title="Reminders that actually land."
-          body="Every scheduled session sends invites across the channels you pick — in-app bell, email, WhatsApp. Re-send a reminder with one click from the session card. We stamp notifiedAt so accidental double-pings don't happen."
+          body="Three windows fire automatically — T-3h, T-1h, T-15m — across the channels each student opted into. In-app bell, email, WhatsApp. Each delivery shows up in the student's inbox under the right channel tab so they can see we tried even if their inbox was full. Re-send manually from the session card; we stamp markers so you can't accidentally double-ping."
           bullets={[
-            "Per-channel toggles (in-app / email / WhatsApp)",
-            "Resend reminder from the session card",
-            "Bulk-notify across a filtered set of classes",
-            "Email transport is real — wire your sender once",
+            "Automatic T-3h / T-1h / T-15m windows (no cron to configure)",
+            "Channel-respecting — honours each student's notification prefs",
+            "Every dispatch is logged to the student inbox (in-app + email + WhatsApp tabs)",
+            "Resend or bulk-notify from the session card",
           ]}
           mockup={<MultiChannelRemindersMockup />}
         />

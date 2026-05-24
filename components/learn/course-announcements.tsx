@@ -195,7 +195,7 @@ export function CourseAnnouncements({ courseId, variant = "card" }: Props) {
                     {a.content}
                   </p>
                   <p className="mt-2 text-[11px] text-muted-foreground">
-                    {author?.name ?? "Teacher"} · {when.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                    {author?.name ?? "Instructor"} · {when.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
                     {!a.courseId && " · Workspace announcement"}
                   </p>
                 </div>

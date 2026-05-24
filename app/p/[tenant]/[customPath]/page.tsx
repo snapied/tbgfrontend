@@ -1,7 +1,7 @@
 "use client"
 
 // Catch-all for user-created pages on the portal. `/about`, `/contact`,
-// `/blog`, `/teachers`, `/courses` all have dedicated routes; anything
+// `/blog`, `/instructors`, `/courses` all have dedicated routes; anything
 // else (e.g. /privacy, /terms, /cookies, /refund, or any custom page
 // the teacher made via /dashboard/portal/pages) routes through here.
 

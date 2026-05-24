@@ -8,7 +8,7 @@
 //                                  caller's onGenerate.
 //   2. configured but plan-locked → "lock" button styled as Pro+ teaser.
 //                                  Clicking routes to /dashboard/billing.
-//                                  Teachers on Starter see the feature
+//                                  Instructors on Starter see the feature
 //                                  exists and what they'd unlock by
 //                                  upgrading. (The pricing-rule memory
 //                                  applies: the upgrade nudge is the

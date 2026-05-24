@@ -48,6 +48,13 @@ export type SectionKind =
   | "video"
   | "image-gallery"
   | "logos-strip"
+  // Author-controlled trust badges. Replaces the hardcoded
+  // "Secure payment · 30-day refund · Email support in 24h" row
+  // that used to ship inside the Hero — teachers had no way to
+  // change those claims to match their actual policy. Now it's a
+  // configurable section the admin drops anywhere on the page
+  // with editable icon + label pairs.
+  | "trust-badges"
 
 // Per-section config is intentionally a loose `Record<string, unknown>`
 // rather than a discriminated union: each section renderer reads what it
@@ -87,6 +94,12 @@ export interface PortalPage {
   // Lets the editor know whether the page was authored from a template
   // (so "reset to template" makes sense) — purely informational.
   fromTemplate?: string
+  // Soft-delete marker. Pages with `deletedAt` set are hidden from
+  // the public portal AND from the default index, but live in a
+  // dedicated Trash tab for 7 days where they can be restored or
+  // permanently removed. A nightly job purges entries older than
+  // the retention window — handled outside this store.
+  deletedAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -126,6 +139,13 @@ export interface PortalBrand {
   // (see lib/portal-layout-presets.ts).
   headerLayout?: string   // e.g. "centered-minimal", "split-classic"
   footerLayout?: string   // e.g. "multi-column", "compact-mono"
+
+  // Social share card. 1200x630 PNG/JPG used as the `og:image` for
+  // every public portal page. Can be auto-generated from logo +
+  // siteName + primary colour via the OgImageGenerator component on
+  // the Brand page, or uploaded directly. Per-page SEO overrides can
+  // still set their own; this is the workspace-wide fallback.
+  ogImage?: string
 
   // Page background. Three mutually-exclusive options drive the
   // <body> of every /p/[tenant]/* page via the PortalThemeProvider.
@@ -232,10 +252,10 @@ export interface PortalNavConfig {
   // Curated list of nav links. When non-empty, REPLACES the
   // auto-generated nav from pages + built-in tiles. When empty (the
   // default), the header falls back to:
-  //   pages.filter(showInNav) + built-in Courses/Teachers/Blog
+  //   pages.filter(showInNav) + built-in Courses/Instructors/Blog
   // controlled by showBuiltIns below.
   items?: { label: string; href: string }[]
-  // Toggle visibility of the auto-included Courses / Teachers / Blog
+  // Toggle visibility of the auto-included Courses / Instructors / Blog
   // links — useful when a teacher doesn't sell courses publicly, or
   // doesn't have a blog yet and wants to hide the empty link.
   showCourses?: boolean
@@ -284,6 +304,12 @@ export interface PortalConfig {
   // existing tenants without this field fall back to the i18n built-in
   // defaults (English default, all "ready" Indian locales enabled).
   i18n?: PortalI18nConfig
+  // When true, course reviews of 4 or 5 stars are auto-mirrored into
+  // the testimonials store with status="pending" so the teacher can
+  // review and feature without re-typing. Idempotent — the testimonial
+  // is keyed by source review id and won't re-import after the
+  // teacher rejects it.
+  testimonialAutoImportFiveStar?: boolean
 }
 
 // Locale codes shipped by lib/i18n.tsx. Kept as a stringly-typed
@@ -327,11 +353,18 @@ export interface PortalFacultyMember {
   userId?: string
   name: string
   role?: string                  // "Head of Mathematics", "Guest Faculty"
+  // Two-field bio split (mirrors the User model):
+  //   bio   — short Bio (≤55 chars, plain text).
+  //   about — long-form Tiptap HTML for the public profile.
+  // Curated faculty entries override the linked User's fields, so
+  // an admin can write a workspace-specific tagline + about
+  // without touching the teacher's personal profile.
   bio?: string
+  about?: string
   photo?: string
   coverImageUrl?: string
   socials?: PortalSocials
-  // Custom URL-safe handle for /p/[tenant]/teachers/[handle].
+  // Custom URL-safe handle for /p/[tenant]/instructors/[handle].
   handle: string
   // Hand-picked subset of course IDs taught by this member.
   courseIds?: string[]
@@ -352,6 +385,11 @@ export interface PortalTestimonial {
   quote: string
   featured?: boolean
   source: "wall" | "manual" | "student-submission"
+  // Direct attribution to a specific instructor. When set, the
+  // public profile page for that instructor will surface this
+  // testimonial in its "What students say" rail. Falls back to a
+  // `course.instructor.id` join via `courseId` when this is unset.
+  aboutInstructorId?: string
   createdAt: string
   // Moderation state. Absence / "published" means the testimonial
   // renders on the public surfaces (Wall of Love, page-builder
@@ -369,6 +407,17 @@ export interface PortalTestimonial {
   // review screen knows who sent it without losing the public-facing
   // authorName, which may differ from the submitter's profile name).
   submittedByUserId?: string
+  // Optional rejection reason — captured in the Reject dialog so the
+  // teacher (or a follow-up reviewer) has context. Visible only to
+  // admins; never rendered on the public surface.
+  rejectionReason?: string
+  // Reviewer attribution — who approved/rejected this.
+  moderatedByUserId?: string
+  moderatedAt?: string
+  // Anti-spam — score from the public submission's heuristics check.
+  // Caller decides what to do with it (auto-flag vs. auto-trash);
+  // we persist it so subsequent reviewers can see the signal.
+  spamScore?: number
 }
 
 // ----- Blog -----
@@ -390,6 +439,15 @@ export interface PortalBlogPost {
   allowSharing?: boolean
   status: "draft" | "published"
   publishedAt?: string
+  // Optional schedule — when set, status="draft" + scheduledFor in
+  // the future means the post should auto-publish at that timestamp.
+  // A nightly cron flips status when scheduledFor <= now; until then
+  // it shows as "Scheduled · <date>" in the dashboard list.
+  scheduledFor?: string
+  // Editor-pinned: shown at the top of the dashboard list AND on the
+  // public blog index. Max 3 pinned posts (soft cap; the UI warns
+  // past that).
+  pinned?: boolean
   seo?: PortalPageSEO
   // Visitor-submitted comments stored on the post itself. Cheap and
   // tenant-scoped via the parent post's storage key — no separate
@@ -483,7 +541,7 @@ const DEFAULT_FOOTER_COLUMNS: PortalFooterColumn[] = [
     heading: "Explore",
     links: [
       { label: "Courses", href: "/courses" },
-      { label: "Teachers", href: "/teachers" },
+      { label: "Instructors", href: "/instructors" },
       { label: "Blog", href: "/blog" },
       { label: "About", href: "/about" },
     ],
@@ -543,7 +601,7 @@ function defaultHomeSections(): PortalSection[] {
         subhead:
           "Practical, taught-live, and proven by hundreds of students. Pick a course below to get started.",
         primaryCta: { label: "Browse courses", href: "/courses" },
-        secondaryCta: { label: "Meet Your instructor", href: "/teachers" },
+        secondaryCta: { label: "Meet Your instructor", href: "/instructors" },
         alignment: "center",
       },
     },
@@ -1245,7 +1303,10 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, [stampEdited])
 
   const getPage = useCallback(
-    (s: string) => pages.find((p) => p.slug === s),
+    // Trashed pages (deletedAt set) are excluded from the public
+    // resolver so a deleted slug 404s immediately — the Trash tab
+    // in the dashboard is the only place they remain visible.
+    (s: string) => pages.find((p) => p.slug === s && !p.deletedAt),
     [pages],
   )
   const upsertPage = useCallback((page: PortalPage) => {

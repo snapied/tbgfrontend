@@ -273,7 +273,7 @@ async function probeAI(): Promise<ProbeResult> {
       status: "warn",
       latencyMs: latency,
       detail:
-        "Backend has no AI key. Set OPENAI_API_KEY or GROQ_API_KEY in backend/.env and restart the server.",
+        "Backend reports no AI key. Set GROQ_API_KEY, DEEPSEEK_API_KEY, or OPENAI_API_KEY in backend/.env and restart the server (Node reads env on boot — adding the key without a restart leaves the route blind to it).",
       ranAt: new Date().toISOString(),
     }
   } catch {
@@ -288,7 +288,11 @@ async function probeAI(): Promise<ProbeResult> {
 
 const ROWS = [
   { key: "backend", label: "Backend reachable", run: probeBackend },
-  { key: "auth", label: "Signed in", run: probeAuth },
+  // Phrase the label as a CHECK NAME, not a current state — when this
+  // row fails, the old "Signed in: Session expired" copy reads like a
+  // self-contradiction. "Auth session" is neutral, so a failed row
+  // reads as "Auth session: expired" which is honest.
+  { key: "auth", label: "Auth session", run: probeAuth },
   { key: "livekit", label: "LiveKit token service", run: probeLiveKit },
   { key: "ai", label: "AI provider", run: probeAI, optional: true },
 ] as const

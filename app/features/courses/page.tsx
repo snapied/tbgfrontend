@@ -73,6 +73,23 @@ export default function CoursesFeaturePage() {
           mockup={<ProgressMockup />}
         />
 
+        {/* Drip + cohort window — newly shipped (Phase 3). Surfaced
+            here because "structured release" is a real reason
+            cohort-based creators pick a platform; the page used to
+            describe a flat always-on course. */}
+        <FeatureSplit
+          reverse
+          title="Cohorts that open on a date. Modules that wait their turn."
+          body="Stamp a cohort start date on a community — the batch page shows a live countdown until launch, then a 'wraps in N days' chip while it runs. Pair that with per-module drip — Module 2 unlocks on Day 7, Module 3 on Day 14 — and you have a real program, not just a video library. Students who enroll mid-cohort see their own clock; nobody waits for catch-up logic you have to maintain."
+          bullets={[
+            "Cohort start + end dates with a countdown banner",
+            "Per-module unlock-offset in days (0–365)",
+            "Players show 'Unlocks on <date>' instead of an empty lesson list",
+            "Every buyer auto-lands in the course's community — no second sale",
+          ]}
+          mockup={<ProgressMockup />}
+        />
+
         <FeatureCTA />
       </main>
       <Footer />

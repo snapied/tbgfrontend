@@ -35,6 +35,7 @@ import { useLMS } from "@/lib/lms-store"
 import { useTenant } from "@/lib/tenant-store"
 import { useStorageError } from "@/lib/storage-error"
 import { WorkspaceDataCard } from "@/components/settings/workspace-data-card"
+import { WebPushSettingsCard } from "@/components/dashboard/web-push-settings-card"
 import { FileUploadField } from "@/components/upload/file-upload-field"
 import {
   PasswordStrengthInput,
@@ -159,6 +160,14 @@ export default function SettingsPage() {
           </a>.
         </p>
       </div>
+
+      {/* Sprint C Communities #48 — Web Push opt-in card. Lives
+          above the notification preferences grid because the
+          permission prompt sets the ceiling for everything below
+          (no granted permission → no push delivery regardless of
+          per-channel toggles). One-card layout reads as "first
+          decide whether push is on, then tune what gets through". */}
+      <WebPushSettingsCard />
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Notifications */}

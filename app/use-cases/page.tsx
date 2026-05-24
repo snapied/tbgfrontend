@@ -51,7 +51,7 @@ const USE_CASES: UseCase[] = [
     who: "Schools & coaching institutes",
     headline: "Move your batches online without losing the structure.",
     body:
-      "Teachers run their own subjects under your brand. Bulk-import the roster from CSV, assign instructors, and you have a parent-facing platform on Monday.",
+      "Instructors run their own subjects under your brand. Bulk-import the roster from CSV, assign instructors, and you have a parent-facing platform on Monday.",
     pillars: [
       { title: "One brand, many teachers", detail: "Each instructor gets their own classes + courses inside one workspace." },
       { title: "Attendance + reports",     detail: "Per-class attendance feeds the leaderboard and parent-facing progress." },

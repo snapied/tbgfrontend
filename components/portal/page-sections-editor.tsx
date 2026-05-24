@@ -16,6 +16,8 @@ import {
   Eye,
   EyeOff,
   GripVertical,
+  History,
+  MessageSquare,
   Plus,
   Sparkles,
   Trash2,
@@ -55,6 +57,7 @@ import type { PlanLimits } from "@/lib/plans"
 import { ThumbnailField } from "@/components/upload/thumbnail-field"
 import { RichTextEditor } from "@/components/editor/rich-text-editor"
 import { PortalLivePreview } from "@/components/portal/portal-live-preview"
+import { PageSeoEditor } from "@/components/portal/page-seo-editor"
 import {
   usePortal,
   generatePortalId,
@@ -64,6 +67,11 @@ import {
 } from "@/lib/portal-store"
 import { useTenant } from "@/lib/tenant-store"
 import { useConfirm } from "@/lib/use-confirm"
+import { useLMS } from "@/lib/lms-store"
+import { useVersionedDoc } from "@/lib/versioning"
+import { VersionsSheet } from "@/components/ui/versions-sheet"
+import { useReviewThread } from "@/lib/review-store"
+import { ReviewPanel } from "@/components/ui/review-panel"
 import { toast } from "sonner"
 
 const SECTION_LABELS: Record<SectionKind, { label: string; emoji: string; description: string }> = {
@@ -82,6 +90,7 @@ const SECTION_LABELS: Record<SectionKind, { label: string; emoji: string; descri
   video: { label: "Video", emoji: "▶️", description: "Embedded YouTube/Vimeo/MP4." },
   "image-gallery": { label: "Gallery", emoji: "🖼️", description: "Grid of photos." },
   "logos-strip": { label: "Logos", emoji: "🏢", description: "Trusted-by logo row." },
+  "trust-badges": { label: "Trust badges", emoji: "🛡️", description: "Secure payment, refund window, support — claims you control." },
 }
 
 interface PageSectionsEditorProps {
@@ -109,10 +118,65 @@ export function PageSectionsEditor({
   showMissingHint = true,
   headerAction,
 }: PageSectionsEditorProps) {
-  const { pages, upsertPage } = usePortal()
+  const { pages, upsertPage, config } = usePortal()
   const { currentTenant } = useTenant()
+  const { currentUser } = useLMS()
   const tenantSlug = currentTenant?.slug ?? ""
   const page = useMemo(() => pages.find((p) => p.slug === slug), [pages, slug])
+
+  // Versioning + reviews bound to this page. We key by page id so a
+  // rename of the slug doesn't orphan history. The hooks no-op safely
+  // when `page` hasn't resolved yet (artifactId falls back to "").
+  const versions = useVersionedDoc<PortalPage>({
+    tenantSlug,
+    kind: "page",
+    artifactId: page?.id ?? "",
+    actor: { id: currentUser?.id, name: currentUser?.name },
+    isEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  })
+  const reviews = useReviewThread({
+    tenantSlug,
+    kind: "page",
+    artifactId: page?.id ?? "",
+    actor: { id: currentUser?.id, name: currentUser?.name },
+  })
+  const [versionsOpen, setVersionsOpen] = useState(false)
+  const [reviewsOpen, setReviewsOpen] = useState(false)
+
+  // Brand defaults flow through the SEO preview (share image, primary
+  // colour) and the public-URL the previews render in their chrome.
+  const brand = config?.brand
+  const publicUrl =
+    typeof window !== "undefined" && tenantSlug
+      ? `${window.location.host}/p/${tenantSlug}${slug === "/" ? "" : slug}`
+      : `your-portal.com/p/${tenantSlug}${slug === "/" ? "" : slug}`
+
+  // Item 20 — legal placeholder watch. Scan the page's rich-text
+  // sections for `[YOUR-SUPPORT-EMAIL]` so we can surface a banner if
+  // it shipped without substitution. We also detect the auto-replaced
+  // version when ownerEmail flips later, so the banner clears
+  // automatically once the teacher fixes their support email upstream.
+  const ownerEmail = currentTenant?.ownerEmail
+  const placeholderPresent = useMemo(() => {
+    if (!page) return false
+    return page.sections.some((s) => {
+      const html = (s.config as { html?: string })?.html
+      return typeof html === "string" && html.includes("[YOUR-SUPPORT-EMAIL]")
+    })
+  }, [page])
+  const autoFixPlaceholders = () => {
+    if (!page || !ownerEmail) return
+    upsertPage({
+      ...page,
+      sections: page.sections.map((s) => {
+        const html = (s.config as { html?: string })?.html
+        if (typeof html !== "string" || !html.includes("[YOUR-SUPPORT-EMAIL]")) return s
+        return { ...s, config: { ...s.config, html: html.replace(/\[YOUR-SUPPORT-EMAIL\]/g, ownerEmail) } }
+      }),
+      updatedAt: new Date().toISOString(),
+    })
+    toast.success("Replaced placeholder with your support email.")
+  }
   const [openSectionId, setOpenSectionId] = useState<string | null>(null)
   const confirm = useConfirm()
 
@@ -203,11 +267,108 @@ export function PageSectionsEditor({
         </div>
         <div className="flex items-center gap-3">
           {headerAction}
+          {/* Versions + Reviews — only meaningful once a page exists.
+              Save-a-version is explicit because the editor autosaves
+              on every keystroke and we don't want a snapshot per char. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const e = versions.snapshot(page, `Saved · ${new Date().toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`)
+              if (e) {
+                toast.success("Version saved.")
+                setVersionsOpen(true)
+              } else {
+                toast.info("Nothing changed since the last version.")
+              }
+            }}
+            className="gap-1.5"
+            title="Snapshot the current page so you can restore it later"
+          >
+            <History className="h-3.5 w-3.5" />
+            Save version
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setVersionsOpen(true)}
+            className="gap-1.5"
+          >
+            <History className="h-3.5 w-3.5" />
+            Versions
+            {versions.history.length > 0 && (
+              <span className="rounded-full bg-muted px-1.5 text-[10px] font-bold text-muted-foreground">
+                {versions.history.length}
+              </span>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setReviewsOpen(true)}
+            className="gap-1.5"
+          >
+            <MessageSquare className="h-3.5 w-3.5" />
+            Reviews
+            {reviews.openCount > 0 && (
+              <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-bold text-primary">
+                {reviews.openCount}
+              </span>
+            )}
+          </Button>
           <div data-tour="add-section">
             <AddSectionMenu onPick={addSection} />
           </div>
         </div>
       </div>
+
+      {/* Legal placeholder watch — banner shown only when a section
+          still contains the [YOUR-SUPPORT-EMAIL] marker from a legal
+          template. Two CTAs: auto-fix if we have an owner email, or
+          jump to brand identity to set one. */}
+      {placeholderPresent && (
+        <div
+          role="alert"
+          className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-[12.5px] text-amber-700 dark:text-amber-300"
+        >
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">
+              This page still contains <code className="rounded bg-amber-100 px-1 font-mono text-[11px] text-amber-800">[YOUR-SUPPORT-EMAIL]</code>
+            </p>
+            <p className="mt-0.5">
+              {ownerEmail
+                ? `Replace it with your support email (${ownerEmail}) so visitors don't see the placeholder.`
+                : "Set your support email on the Brand → Identity page, then come back to fix this in one tap."}
+            </p>
+          </div>
+          {ownerEmail ? (
+            <Button size="sm" onClick={autoFixPlaceholders} className="shrink-0">
+              Replace placeholder
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" asChild className="shrink-0">
+              <Link href="/dashboard/portal/brand">Set support email</Link>
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* SEO + social-share editor — collapsed by default so the
+          editor stays focused on content; click to expand for the
+          per-page meta + four live preview cards. */}
+      <PageSeoEditor
+        page={page}
+        publicUrl={publicUrl}
+        defaults={{
+          siteName: brand?.siteName,
+          description: deriveDescriptionFromSections(page),
+          ogImage: brand?.ogImage,
+          primaryColor: brand?.primaryColor,
+        }}
+        onChange={(seo) =>
+          upsertPage({ ...page, seo, updatedAt: new Date().toISOString() })
+        }
+      />
 
       {/* Two-column: editor / preview */}
       <div className="grid gap-6 lg:grid-cols-[1fr_560px]">
@@ -329,6 +490,52 @@ export function PageSectionsEditor({
           </Card>
         </div>
       </div>
+
+      {/* Versions sheet — restore replaces the page in place. The sheet
+          auto-snapshots the current state before restore so a hasty
+          rollback is itself reversible. */}
+      <VersionsSheet<PortalPage>
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        api={versions}
+        current={page as unknown as PortalPage}
+        onRestore={(snapshot) => {
+          upsertPage({ ...snapshot, updatedAt: new Date().toISOString() })
+          toast.success("Restored. The preview will refresh in a moment.")
+        }}
+        fieldLabels={{
+          title: "Title",
+          slug: "URL slug",
+          status: "Status",
+          sections: "Sections",
+          seo: "SEO",
+          showInNav: "Show in nav",
+          navLabel: "Nav label",
+          navOrder: "Nav order",
+        }}
+      />
+
+      {/* Review panel — anchored to top-level page fields + each
+          section (so reviewers can drop a note on "the hero copy" or
+          "the FAQ ordering" instead of free-floating notes). */}
+      <ReviewPanel
+        open={reviewsOpen}
+        onOpenChange={setReviewsOpen}
+        api={reviews}
+        title={`Reviews · ${page.title}`}
+        description="Threaded notes on this page. Anchor a comment to a section so the reviewer's point doesn't get lost."
+        anchorOptions={[
+          { kind: "field", target: "title", label: "Title" },
+          { kind: "field", target: "slug", label: "URL slug" },
+          { kind: "field", target: "seo", label: "SEO / meta" },
+          { kind: "field", target: "nav", label: "Nav placement" },
+          ...page.sections.map((s) => ({
+            kind: "section" as const,
+            target: `section:${s.id}`,
+            label: `${SECTION_LABELS[s.kind]?.emoji ?? "📄"} ${SECTION_LABELS[s.kind]?.label ?? s.kind}`,
+          })),
+        ]}
+      />
     </div>
   )
 }
@@ -351,7 +558,7 @@ function AddSectionMenu({ onPick }: { onPick: (kind: SectionKind) => void }) {
   const { isAllowed } = usePlan()
   const kinds: SectionKind[] = [
     "hero", "features", "courses-grid", "store-grid", "testimonials", "faculty",
-    "cta", "rich-text", "faq", "stats", "contact-form",
+    "cta", "rich-text", "faq", "stats", "trust-badges", "contact-form",
     "blog-teaser", "video", "image-gallery", "logos-strip",
   ]
   return (
@@ -1025,6 +1232,100 @@ function SectionEditor({
         </div>
       )
     }
+    case "trust-badges": {
+      const items = ((c.items as Array<{ icon?: string; label?: string }>) ?? [])
+      const setItems = (next: typeof items) => onChange({ items: next })
+      const variant = (str("variant") || "row") as "row" | "cards"
+      const align = (str("align") || "center") as "left" | "center" | "right"
+      const ICON_OPTIONS: Array<{ value: string; label: string }> = [
+        { value: "shield",  label: "🛡️  Shield" },
+        { value: "refresh", label: "🔄  Refresh" },
+        { value: "message", label: "💬  Message" },
+        { value: "lock",    label: "🔒  Lock" },
+        { value: "check",   label: "✅  Check" },
+        { value: "star",    label: "⭐  Star" },
+        { value: "globe",   label: "🌐  Globe" },
+        { value: "award",   label: "🏆  Award" },
+      ]
+      return (
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label>Heading (optional)</Label>
+            <Input
+              value={str("heading")}
+              onChange={(e) => onChange({ heading: e.target.value })}
+              placeholder='e.g. "What you get"'
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Layout</Label>
+              <select
+                value={variant}
+                onChange={(e) => onChange({ variant: e.target.value })}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="row">Inline row (compact)</option>
+                <option value="cards">Card grid (premium)</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Alignment</Label>
+              <select
+                value={align}
+                onChange={(e) => onChange({ align: e.target.value })}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="left">Left</option>
+                <option value="center">Center</option>
+                <option value="right">Right</option>
+              </select>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label>Badges</Label>
+            {items.map((it, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <select
+                  value={it.icon ?? "check"}
+                  onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, icon: e.target.value } : x))}
+                  className="rounded-md border border-input bg-background px-2 py-2 text-sm"
+                >
+                  {ICON_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+                <Input
+                  value={it.label ?? ""}
+                  onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+                  placeholder='e.g. "14-day refund"'
+                  className="flex-1"
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setItems(items.filter((_, j) => j !== i))}
+                  aria-label="Remove badge"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setItems([...items, { icon: "check", label: "" }])}
+            >
+              <Plus className="mr-1 h-3.5 w-3.5" /> Add badge
+            </Button>
+            <p className="text-[11px] text-muted-foreground">
+              Keep claims accurate — these badges sit on your marketing page and shape buyer trust.
+            </p>
+          </div>
+        </div>
+      )
+    }
     case "logos-strip": {
       const logos = ((c.logos as Array<{ url?: string; alt?: string }>) ?? [])
       const setLogos = (next: typeof logos) => onChange({ logos: next })
@@ -1105,6 +1406,7 @@ function sectionSummary(s: PortalSection): string {
     case "video": return str("title") || str("source") || "Video"
     case "image-gallery": return `${((c.images as unknown[]) ?? []).length} images`
     case "logos-strip": return `${((c.logos as unknown[]) ?? []).length} logos`
+    case "trust-badges": return `${((c.items as unknown[]) ?? []).length} badges`
     default: return s.kind
   }
 }
@@ -1171,6 +1473,20 @@ function defaultConfigFor(kind: SectionKind): Record<string, unknown> {
       return { heading: "", images: [] }
     case "logos-strip":
       return { heading: "Trusted by", logos: [] }
+    case "trust-badges":
+      // Seed with the three claims we used to hardcode in the
+      // Hero. Editable from the get-go — teacher tweaks labels to
+      // match their actual policy.
+      return {
+        heading: "",
+        variant: "row",
+        align: "center",
+        items: [
+          { icon: "shield",  label: "Secure payment" },
+          { icon: "refresh", label: "30-day refund" },
+          { icon: "message", label: "Email support in 24h" },
+        ],
+      }
     default:
       return {}
   }
@@ -1220,4 +1536,19 @@ function TenantPrefixInput({
       />
     </div>
   )
+}
+
+// Derive a meta-description seed by stripping HTML from the first
+// rich-text section. Falls back to undefined if no rich-text section
+// exists (caller renders its own placeholder).
+function deriveDescriptionFromSections(page: PortalPage | undefined): string | undefined {
+  if (!page) return undefined
+  const first = page.sections.find((s) => s.kind === "rich-text")
+  const html = (first?.config as { html?: string } | undefined)?.html
+  if (!html) return undefined
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 200)
 }

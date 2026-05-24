@@ -2,7 +2,7 @@
 
 // Footer columns editor. Each column has a heading + a list of links.
 // Links can be:
-//   • Internal — "/courses", "/teachers", "/blog/some-post"
+//   • Internal — "/courses", "/instructors", "/blog/some-post"
 //   • External — "https://twitter.com/…"
 //   • Email — "mailto:hello@example.com"
 //
@@ -13,7 +13,7 @@
 import { Plus, Trash2, GripVertical, ArrowUp, ArrowDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { StableInput } from "@/components/ui/stable-input"
 import {
   type PortalFooterColumn,
   generatePortalId,
@@ -57,9 +57,9 @@ export function FooterColumnsEditor({ columns, onChange }: Props) {
           <CardContent className="space-y-3 p-4">
             <div className="flex items-center gap-2">
               <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <Input
+              <StableInput
                 value={col.heading}
-                onChange={(e) => upsertColumn(col.id, { heading: e.target.value })}
+                onChange={(v) => upsertColumn(col.id, { heading: v })}
                 placeholder="Column heading"
                 className="flex-1 text-base font-semibold"
               />
@@ -98,11 +98,11 @@ export function FooterColumnsEditor({ columns, onChange }: Props) {
             <div className="space-y-2 pl-6">
               {col.links.map((l, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <Input
+                  <StableInput
                     value={l.label}
-                    onChange={(e) =>
+                    onChange={(v) =>
                       upsertColumn(col.id, {
-                        links: col.links.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)),
+                        links: col.links.map((x, j) => (j === i ? { ...x, label: v } : x)),
                       })
                     }
                     placeholder="Label (e.g. Privacy)"

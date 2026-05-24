@@ -45,9 +45,12 @@ import {
 import { AssignmentComposer } from "@/components/assignments/assignment-composer"
 import { QuickQuizDialog } from "@/components/course-editor/quick-quiz-dialog"
 import { EditSessionDialog } from "@/components/classes/edit-session-dialog"
-import { CalendarClock } from "lucide-react"
+import { CalendarClock, CalendarPlus } from "lucide-react"
 import { AssignmentShareDialog } from "@/components/assignments/assignment-share-dialog"
 import { ClassRecapEditor } from "@/components/classes/class-recap-editor"
+import { AgendaEditor, AgendaList } from "@/components/classes/agenda-editor"
+import { ScheduleNextClassDialog } from "@/components/classes/schedule-next-dialog"
+import { AddToCalendarMenu } from "@/components/classes/add-to-calendar-menu"
 import { RecordingPlayerDialog } from "@/components/classes/recording-player-dialog"
 import {
   computeSessionStatus,
@@ -85,6 +88,7 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
   const [resent, setResent] = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
   const [rescheduleOpen, setRescheduleOpen] = useState(false)
+  const [scheduleNextOpen, setScheduleNextOpen] = useState(false)
   const [shareAssignment, setShareAssignment] = useState<Assignment | null>(null)
   const [quizDialogOpen, setQuizDialogOpen] = useState(false)
   const followUps = useLMS().getAssignmentsForSession(session?.id ?? "__none__")
@@ -264,6 +268,36 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
             <Button variant="outline" onClick={() => setRescheduleOpen(true)}>
               <CalendarClock className="mr-2 h-4 w-4" />
               Reschedule
+            </Button>
+          )}
+          {/* Add-to-calendar — only useful before the class actually
+              runs. Hides post-end so we don't suggest scheduling a
+              class that already happened. */}
+          {status !== "cancelled" && status !== "ended" && (
+            <AddToCalendarMenu
+              event={{
+                title: session.title,
+                startsAt: session.scheduledAt,
+                durationMinutes: session.durationMinutes,
+                description: session.description ?? undefined,
+                location:
+                  typeof window !== "undefined" && joinUrl
+                    ? joinUrl
+                    : session.meetingUrl,
+                uid: `${session.id}@thebigclass.com`,
+              }}
+            />
+          )}
+          {/* Schedule next — surfaces after the class wraps so the
+              teacher can build a cohort series without bouncing to
+              the calendar. Pre-fills same time +7d so weekly
+              recurring classes are one click. Available on
+              cancelled classes too (you might want to schedule a
+              make-up for the same audience). */}
+          {(status === "ended" || status === "cancelled") && (
+            <Button variant="outline" onClick={() => setScheduleNextOpen(true)}>
+              <CalendarPlus className="mr-2 h-4 w-4" />
+              Schedule next
             </Button>
           )}
           {status !== "cancelled" && status !== "ended" && (
@@ -490,6 +524,52 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         </Card>
       )}
 
+      {/* Pre-class agenda — what's planned, in scannable order.
+          Always visible (even after the class) so a teacher can
+          glance back at what was on the original docket. */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Agenda</CardTitle>
+          <CardDescription>
+            What you plan to cover. Students see this in the waiting
+            room so they arrive ready.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <AgendaEditor
+            value={session.agenda ?? []}
+            onChange={(next) => updateLiveSession(session.id, { agenda: next })}
+          />
+          {/* Chat toggle. Sits with agenda because both are
+              pre-class room configuration. Default-on (the field is
+              tri-state with undefined === enabled), so a teacher
+              has to actively opt out for focused / lecture-only
+              sessions. */}
+          <label className="flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 hover:bg-muted/40">
+            <input
+              type="checkbox"
+              checked={session.chatEnabled !== false}
+              onChange={(e) =>
+                updateLiveSession(session.id, {
+                  chatEnabled: e.target.checked,
+                })
+              }
+              className="mt-0.5"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">
+                Chat is{" "}
+                {session.chatEnabled === false ? "off" : "on"} for this class
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                Students can text-chat during the live class. Turn off
+                for focused recording-only sessions or one-way lectures.
+              </span>
+            </span>
+          </label>
+        </CardContent>
+      </Card>
+
       {/* Post-class recap — summary, recording, materials */}
       <Card>
         <CardHeader className="pb-3">
@@ -638,6 +718,11 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         session={session}
         open={rescheduleOpen}
         onOpenChange={setRescheduleOpen}
+      />
+      <ScheduleNextClassDialog
+        source={session}
+        open={scheduleNextOpen}
+        onOpenChange={setScheduleNextOpen}
       />
       {shareAssignment && (
         <AssignmentShareDialog

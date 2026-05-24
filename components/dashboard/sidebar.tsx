@@ -3,9 +3,10 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { LayoutDashboard, FilePlus, Heart, History, Users, Settings, LogOut, ChevronDown, ChevronRight, BookOpen, GraduationCap, FileQuestion, BarChart3, MessageSquare, Megaphone, Palette, Trophy, UserPlus, Video, ClipboardList, ShoppingBag, Globe, ExternalLink as ExternalLinkIcon, Home, FileText, Trash2, Code2, Users2, PenSquare, Film, Inbox, CreditCard, Banknote, Webhook as WebhookIcon, Languages as LanguagesIcon, Activity, Sparkles } from "lucide-react"
+import { LayoutDashboard, FilePlus, Heart, History, Users, Settings, LogOut, ChevronDown, ChevronRight, BookOpen, Bookmark, GraduationCap, FileQuestion, BarChart3, MessageSquare, Megaphone, Palette, Trophy, UserPlus, Video, ClipboardList, ShoppingBag, Globe, ExternalLink as ExternalLinkIcon, Home, FileText, Trash2, Code2, Users2, PenSquare, Film, Inbox, CreditCard, Banknote, Webhook as WebhookIcon, Languages as LanguagesIcon, Activity, Sparkles, Calendar, Beaker } from "lucide-react"
 import { openTeacherWelcome } from "@/components/dashboard/welcome-modal"
 import { NotificationBell } from "@/components/dashboard/notification-bell"
+import { ViewPublicSiteButton } from "@/components/dashboard/view-public-site-button"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -64,12 +65,14 @@ const navGroups: NavGroup[] = [
       { name: "Engagement", href: "/dashboard/students/engagement", icon: Activity },
       { name: "Communities", href: "/dashboard/batches", icon: Users2 },
       { name: "Live Classes", href: "/dashboard/classes", icon: Video },
+      { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
       { name: "Recordings", href: "/dashboard/recordings", icon: Film },
       { name: "Whiteboards", href: "/dashboard/whiteboards", icon: PenSquare },
       { name: "Quizzes", href: "/dashboard/quizzes", icon: FileQuestion },
       { name: "Assignments", href: "/dashboard/assignments", icon: ClipboardList },
       { name: "Storefront", href: "/dashboard/store", icon: ShoppingBag },
       { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
+      { name: "Experiments", href: "/dashboard/experiments", icon: Beaker },
     ],
   },
   {
@@ -89,6 +92,11 @@ const navGroups: NavGroup[] = [
       // discussions, batch posts, leads, and blog comments that need
       // attention. The specific surfaces below remain for deep work.
       { name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
+      // Saved — the per-user bookmarked-posts tray. Lives in
+      // Community because that's where every saved post originates
+      // from today; if we add saved lessons or recordings later
+      // they'll come into the same surface.
+      { name: "Saved", href: "/dashboard/saved", icon: Bookmark },
       // Discussions has been folded into Communities — see
       // /dashboard/discussions/page.tsx for the redirect surface.
       // Removing the nav entry prevents new traffic to the old path.
@@ -326,16 +334,32 @@ export function DashboardSidebar() {
         </div>
         {currentTenant && (
           <div className="flex items-center justify-between gap-2 border-t border-sidebar-border/60 bg-sidebar-accent/40 px-6 py-1.5 text-[10px]">
-            <Link
-              href="/dashboard/settings"
-              className="min-w-0 flex-1 truncate font-mono text-sidebar-foreground/80 hover:text-sidebar-foreground"
-              title="Workspace settings"
-            >
-              {currentTenant.name}
-              <span className="ml-1 text-sidebar-foreground/45">
-                · {tenantPublicUrl(currentTenant.slug, currentTenant.customDomain, currentTenant.customDomainStatus).replace(/^https?:\/\//, "")}
-              </span>
-            </Link>
+            {/* Workspace name → settings; the tenant URL slot becomes
+                an outbound link to the public site (with an external-
+                link glyph) so "view your live site" is one click from
+                anywhere in the dashboard, without crowding the logo. */}
+            <div className="flex min-w-0 flex-1 items-center gap-1.5">
+              <Link
+                href="/dashboard/settings"
+                className="min-w-0 truncate font-mono text-sidebar-foreground/80 hover:text-sidebar-foreground tenant-name"
+                title="Workspace settings"
+              >
+                {currentTenant.name}
+              </Link>
+              <span className="text-sidebar-foreground/45">·</span>
+              <a
+                href={tenantPublicUrl(currentTenant.slug, currentTenant.customDomain, currentTenant.customDomainStatus)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group inline-flex min-w-0 items-center gap-1 truncate rounded-md px-1 py-0.5 font-mono text-sidebar-foreground/75 transition-colors hover:bg-sidebar-accent hover:text-primary"
+                title="Open your public site in a new tab"
+              >
+                {/* <span className="truncate">
+                  {tenantPublicUrl(currentTenant.slug, currentTenant.customDomain, currentTenant.customDomainStatus).replace(/^https?:\/\//, "")}
+                </span> */}
+                <ExternalLinkIcon className="h-3.5 w-3.5 shrink-0 text-primary group-hover:scale-110 transition-transform" />
+              </a>
+            </div>
             <PlanBadge />
             {currentTenant.status === "suspended" && (
               <span className="rounded-full bg-destructive/20 px-1.5 py-0.5 font-semibold uppercase tracking-wide text-destructive">
@@ -507,6 +531,7 @@ export function DashboardHeader() {
       </Link>
       <div className="flex items-center gap-2">
         <PlanBadge />
+        <ViewPublicSiteButton variant="compact" />
         <NotificationBell />
         <Button variant="outline" asChild size="sm">
           <Link href="/login" onClick={() => setCurrentUser(null)}>Sign out</Link>

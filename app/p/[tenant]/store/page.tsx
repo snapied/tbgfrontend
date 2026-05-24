@@ -82,9 +82,34 @@ export default function PortalStorePage({
       <section className="border-b border-border bg-gradient-to-br from-primary/5 via-background to-accent/5 py-12">
         <div className="mx-auto max-w-5xl px-6 text-center lg:px-8">
           <h1 className="font-serif text-4xl font-bold tracking-tight sm:text-5xl">Shop</h1>
-          <p className="mx-auto mt-3 max-w-2xl text-lg text-muted-foreground">
-            Courses, downloads, 1-on-1 sessions, webinars, memberships and more — everything we sell.
-          </p>
+          {/* Auto-summary value-line, built from `counts`. Beats the
+              static "courses, downloads, sessions, …" wall of
+              categories — visitors see what's actually on sale, not
+              a list of platform capabilities. Falls back to the
+              generic line only when there's nothing published. */}
+          {(() => {
+            if (published.length === 0) {
+              return (
+                <p className="mx-auto mt-3 max-w-2xl text-lg text-muted-foreground">
+                  Nothing&apos;s on sale here yet — check back soon.
+                </p>
+              )
+            }
+            const parts = visibleKinds.map((k) => {
+              const n = counts[k]
+              const label = KIND_META[k].label.toLowerCase()
+              return `${n} ${label}${n === 1 ? "" : "s"}`
+            })
+            const summary =
+              parts.length === 1 ? parts[0] :
+              parts.length === 2 ? parts.join(" and ") :
+              `${parts.slice(0, -1).join(", ")}, and ${parts[parts.length - 1]}`
+            return (
+              <p className="mx-auto mt-3 max-w-2xl text-lg text-muted-foreground">
+                {summary} from {brand.name}.
+              </p>
+            )
+          })()}
           <div className="mx-auto mt-6 max-w-xl">
             <div className="relative">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -128,8 +153,62 @@ export default function PortalStorePage({
           <div className="rounded-xl border border-dashed border-border py-16 text-center text-sm text-muted-foreground">
             Nothing to show yet. The teacher hasn&apos;t published any products in this category.
           </div>
+        ) : kindFilter === "all" && !search && visibleKinds.length > 1 ? (
+          // Group view (no filter, no search, mixed catalogue).
+          // Stacking $999 courses next to $5 PDFs in one grid
+          // forces visitors to compare apples to oranges. Grouping
+          // by kind keeps the catalog scannable and lets each tier
+          // hold its own visual weight. We still keep the kind
+          // chips above so the user can collapse to a single kind
+          // when they want to.
+          <div className="space-y-12">
+            {visibleKinds.map((k) => {
+              const kindProducts = filtered.filter((p) => p.kind === k)
+              if (kindProducts.length === 0) return null
+              const km = KIND_META[k]
+              const KIcon = km.icon
+              return (
+                <section key={k}>
+                  <div className="mb-4 flex items-center gap-2">
+                    <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <KIcon className="h-4 w-4" />
+                    </div>
+                    <h2 className="font-serif text-xl font-bold tracking-tight sm:text-2xl">
+                      {km.label}{kindProducts.length === 1 ? "" : "s"}
+                    </h2>
+                    <span className="text-xs text-muted-foreground">
+                      · {kindProducts.length}
+                    </span>
+                  </div>
+                  <div
+                    className={cn(
+                      "grid gap-6",
+                      kindProducts.length <= 4
+                        ? "sm:grid-cols-2"
+                        : "sm:grid-cols-2 lg:grid-cols-3",
+                    )}
+                  >
+                    {kindProducts.map((p) => (
+                      <ProductCard key={p.id} product={p} tenant={tenant} />
+                    ))}
+                  </div>
+                </section>
+              )
+            })}
+          </div>
         ) : (
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          // Flat grid — used when the user is filtering / searching
+          // (group headings would feel redundant when they've already
+          // narrowed to one kind) or when the catalogue is
+          // single-kind.
+          <div
+            className={cn(
+              "grid gap-6",
+              filtered.length <= 4
+                ? "sm:grid-cols-2"
+                : "sm:grid-cols-2 lg:grid-cols-3",
+            )}
+          >
             {filtered.map((p) => (
               <ProductCard key={p.id} product={p} tenant={tenant} />
             ))}
@@ -176,6 +255,39 @@ function KindChip({
 function ProductCard({ product, tenant }: { product: Product; tenant: string }) {
   const meta = KIND_META[product.kind]
   const Icon = meta.icon
+  const { products: allProducts } = useStore()
+  // Auto-savings pill for bundles + memberships. Sum the children's
+  // standalone one-time prices, compare to the bundle's own price,
+  // and render "Save X% vs separate" when the savings are real.
+  // Skip when the math doesn't work cleanly (mixed currencies,
+  // children without one-time pricing, free bundle, etc.) — better
+  // to omit the chip than to print a misleading number.
+  const savingsPct = (() => {
+    if (product.kind !== "bundle" && product.kind !== "membership") return null
+    const pr = product.pricing
+    if (pr.type !== "one-time" && pr.type !== "subscription") return null
+    const bundleAmount = pr.amount
+    if (bundleAmount <= 0) return null
+    const childIds =
+      product.delivery.kind === "bundle" ? product.delivery.childProductIds :
+      product.delivery.kind === "membership" ? product.delivery.includedProductIds :
+      []
+    if (childIds.length < 2) return null
+    const ccy = pr.currency
+    const children = childIds
+      .map((id) => allProducts.find((p) => p.id === id))
+      .filter(Boolean) as Product[]
+    if (children.length < childIds.length) return null
+    let standaloneTotal = 0
+    for (const c of children) {
+      if (c.pricing.type !== "one-time") return null
+      if (c.pricing.currency !== ccy) return null
+      standaloneTotal += c.pricing.amount
+    }
+    if (standaloneTotal <= bundleAmount) return null
+    const pct = Math.round(((standaloneTotal - bundleAmount) / standaloneTotal) * 100)
+    return pct >= 5 ? pct : null
+  })()
   // Pricing display — products carry a discriminated union on `type`.
   const priceLabel = (() => {
     const pr = product.pricing
@@ -204,7 +316,9 @@ function ProductCard({ product, tenant }: { product: Product; tenant: string }) 
             <img
               src={product.coverImageUrl}
               alt={product.title}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              loading="lazy"
+              onLoad={(e) => e.currentTarget.classList.remove("opacity-0")}
+              className="h-full w-full object-cover opacity-0 transition-[opacity,transform] duration-300 group-hover:scale-[1.03]"
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-primary/20 to-accent/20 text-primary">
@@ -215,6 +329,11 @@ function ProductCard({ product, tenant }: { product: Product; tenant: string }) 
             <Icon className="h-3 w-3" />
             {meta.label}
           </div>
+          {savingsPct !== null && (
+            <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-emerald-500/95 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white shadow-sm">
+              Save {savingsPct}%
+            </div>
+          )}
         </div>
         <CardContent className="p-5">
           <h3 className="line-clamp-2 font-semibold text-foreground group-hover:text-primary">

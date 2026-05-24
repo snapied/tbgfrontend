@@ -13,16 +13,28 @@
 // portal store + lms-store via props, NOT directly — so the page editor
 // can pass a draft preview without committing.
 
-import { useState, type CSSProperties, type ReactNode, type FormEvent } from "react"
+import { useEffect, useState, type CSSProperties, type ReactNode, type FormEvent } from "react"
+import { useExperiment } from "@/lib/experiments"
 import Link from "next/link"
 import {
   ArrowRight,
+  Award,
   CheckCircle2,
   ChevronDown,
+  Clock,
+  Globe,
+  Heart,
+  Lock,
+  MessageCircle,
   Quote,
+  Radio,
+  RefreshCw,
+  ShieldCheck,
   Star,
   Sparkles,
+  Users,
 } from "lucide-react"
+import { useWishlist } from "@/lib/wishlist"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -55,6 +67,25 @@ export interface PortalCourseLite {
   price?: number
   originalPrice?: number
   currency?: string
+  /** Sprint D Brand #20 — early-bird countdown anchor on cards.
+   *  When set + in the future, cards show "Ends in Nd" to drive
+   *  urgency. Empty when the course has no time-bound discount. */
+  earlyBirdUntil?: string
+  // Sprint A Brand #18 — derived signal: does any lesson on this
+  // course have `isPreview: true`? Drives the "Free preview" ribbon
+  // on cards and the course detail's "watch a lesson before enrolling"
+  // affordance (#25). Pre-computed in the dataset so cards don't have
+  // to load full course data to check.
+  hasFreePreview?: boolean
+  /** Lesson ids the visitor can watch without enrolling. Empty array
+   *  when none. Used by the preview-lesson modal on course detail. */
+  previewLessonIds?: string[]
+  /** Sprint B Brand #19 — top 3 recent enrollee avatars for the
+   *  "social density" stack on the card. Pre-computed in the dataset
+   *  once so cards don't each scan the enrollments collection. Empty
+   *  for brand-new courses. Each entry is {avatar?, name} so a
+   *  missing image renders as an initials chip. */
+  recentEnrolleeAvatars?: Array<{ name: string; avatar?: string }>
 }
 
 export interface PortalStoreProductLite {
@@ -67,18 +98,56 @@ export interface PortalStoreProductLite {
   priceLabel: string
 }
 
+/** Pre-computed social-proof stats shown in the hero's trust strip.
+ *  Aggregated once per dataset hydration to avoid every section
+ *  redoing the sum. Hidden by the consumer when totals are too small
+ *  to be persuasive (≤50 students kills the credibility instead of
+ *  building it). */
+export interface PortalTrustStats {
+  studentCount: number
+  reviewCount: number
+  avgRating: number      // 0..5; 0 when no reviews
+  countryCount: number   // distinct country codes from enrolled users
+  courseCount: number    // published courses (used as fallback signal)
+}
+
+/** Lightweight next-live-session shape so the hero can render an
+ *  urgency strip without importing the full LiveSession type into
+ *  every section file. Caller picks the soonest upcoming session
+ *  within a sensible window (default 12h). */
+export interface PortalNextLiveSession {
+  id: string
+  title: string
+  scheduledAt: string
+  courseTitle?: string
+  enrolledCount?: number
+  /** Public deep-link to the join / waiting room. */
+  href: string
+}
+
 export interface PortalDataset {
   courses: PortalCourseLite[]
   faculty: PortalFacultyMember[]
   testimonials: PortalTestimonial[]
   posts: PortalBlogPost[]
   storeProducts: PortalStoreProductLite[]
+  // Tenant slug — section renderers need this to scope per-tenant
+  // primitives (experiments, attribution capture). Always set; falls
+  // back to "default" only when the caller couldn't resolve a tenant.
+  tenantSlug: string
   // Routing helpers — the public portal lives at /p/[tenant]/...; this
   // lets every link prefix itself correctly.
   basePath: string
   // Currency formatter — passed in so the section doesn't have to import
   // currency utils and pick a fallback.
   formatMoney: (amount: number, currency?: string) => string
+  // Aggregated social-proof. Sprint A item — Hero trust strip
+  // consumes this; renders nothing when below the credibility floor.
+  trustStats: PortalTrustStats
+  // Soonest upcoming live session in the next ~12h. Sprint A item —
+  // Hero live-state strip renders when present. Null when nothing's
+  // scheduled within the window.
+  nextLiveSession: PortalNextLiveSession | null
   // Where lead submissions go. The contact-form section POSTs to it.
   submitLead: (payload: {
     formId: string
@@ -102,7 +171,7 @@ export function SectionRenderer({
 }) {
   if (section.hidden) return null
   switch (section.kind) {
-    case "hero": return <Hero section={section} basePath={dataset.basePath} />
+    case "hero": return <Hero section={section} dataset={dataset} />
     case "features": return <Features section={section} />
     case "courses-grid": return <CoursesGrid section={section} dataset={dataset} />
     case "store-grid": return <StoreGrid section={section} dataset={dataset} />
@@ -117,6 +186,7 @@ export function SectionRenderer({
     case "video": return <VideoSection section={section} />
     case "image-gallery": return <ImageGallery section={section} />
     case "logos-strip": return <LogosStrip section={section} />
+    case "trust-badges": return <TrustBadges section={section} />
     default: return null
   }
 }
@@ -130,6 +200,23 @@ function num(v: unknown, fb = 0): number { return typeof v === "number" ? v : fb
 function arr<T>(v: unknown): T[] { return Array.isArray(v) ? (v as T[]) : [] }
 function obj(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" ? (v as Record<string, unknown>) : {}
+}
+
+/** Detect SHOUTY copy (≥50% upper-case letters AND ≥4 uppercase
+ *  glyphs) and soft-case it to "Title Case With First Letter Up"
+ *  so a serif hero doesn't read like a billboard. Strings that
+ *  aren't SHOUTY pass through unchanged. */
+function softCase(s: string): string {
+  if (!s) return s
+  const letters = s.replace(/[^A-Za-z]/g, "")
+  if (letters.length < 6) return s
+  const upper = letters.replace(/[^A-Z]/g, "").length
+  if (upper < 4 || upper / letters.length < 0.5) return s
+  // Title-case each word; lowercase the rest. Keeps numbers + punct
+  // intact. The first letter of the string is always upper.
+  const lowered = s.toLowerCase()
+  const titled = lowered.replace(/(^|\s)([a-z])/g, (_, ws, ch) => ws + ch.toUpperCase())
+  return titled
 }
 
 function SectionWrap({
@@ -158,18 +245,23 @@ function CtaButton({
   label,
   variant = "default",
   basePath,
+  onClick,
 }: {
   href: string
   label: string
   variant?: "default" | "outline"
   basePath: string
+    /** Fires alongside the navigation — used by the hero CTA to register
+     *  an experiment conversion. We don't preventDefault, so the link
+     *  still navigates normally. */
+    onClick?: () => void
 }) {
   const isExternal = /^https?:\/\//.test(href)
   const finalHref = isExternal ? href : prefix(basePath, href)
   if (isExternal) {
     return (
       <Button variant={variant} asChild>
-        <a href={finalHref} target="_blank" rel="noopener noreferrer nofollow">
+        <a href={finalHref} target="_blank" rel="noopener noreferrer nofollow" onClick={onClick}>
           {label}
         </a>
       </Button>
@@ -177,7 +269,7 @@ function CtaButton({
   }
   return (
     <Button variant={variant} asChild>
-      <Link href={finalHref}>{label}</Link>
+      <Link href={finalHref} onClick={onClick}>{label}</Link>
     </Button>
   )
 }
@@ -192,13 +284,126 @@ function prefix(basePath: string, path: string): string {
 // Renderers
 // ============================================================
 
-function Hero({ section, basePath }: { section: PortalSection; basePath: string }) {
+// Sprint A Brand #1 — Placeholder strings the page editor ships as
+// defaults. When the published portal still contains any of these,
+// we treat the section as "untouched template" and synthesise a copy
+// from brand + first published course so visitors never see literal
+// placeholder text. Add new ones here as they're introduced in the
+// editor; comparison is case-insensitive + trimmed.
+const HERO_PLACEHOLDER_STRINGS = [
+  "a line that sells the dream",
+  "welcome",
+  "your headline",
+  "your tagline",
+  "edit me",
+  "lorem ipsum",
+]
+
+function isPlaceholder(value: string | undefined): boolean {
+  if (!value) return false
+  const v = value.trim().toLowerCase()
+  return HERO_PLACEHOLDER_STRINGS.includes(v)
+}
+
+function Hero({
+  section,
+  dataset,
+}: {
+  section: PortalSection
+  dataset: PortalDataset
+}) {
+  const { basePath, tenantSlug, trustStats, nextLiveSession, courses, storeProducts } = dataset
   const c = section.config
   const eyebrow = str(c.eyebrow)
-  const headline = str(c.headline, "A line that sells the dream")
+  const rawHeadline = str(c.headline)
   const subhead = str(c.subhead)
   const primary = obj(c.primaryCta) as { label?: string; href?: string }
   const secondary = obj(c.secondaryCta) as { label?: string; href?: string }
+
+  // Sprint A Brand #1 — derive a sensible headline when the teacher
+  // left the placeholder in. Falls back through: first published
+  // course topic → "Learn at <site>" → static safe copy. The site
+  // name is read from the first course's "tenant" implicitly via
+  // the courses list. Editor-side banner (separate change) tells
+  // teachers to fix it; this just makes sure the public never sees
+  // "A line that sells the dream".
+  const headline = (() => {
+    if (rawHeadline && !isPlaceholder(rawHeadline)) return rawHeadline
+    const lead = courses[0]
+    if (lead?.title) return `Learn ${lead.title.split(/[:—-]/)[0].trim()} — at your pace`
+    return "Learn at your pace. Get further than you thought you could."
+  })()
+  const effectiveSubhead = isPlaceholder(subhead) ? "" : subhead
+
+  // Sprint A Brand #1 — same fix for CTA labels. A primary CTA stuck
+  // at "Browse" reads as a placeholder; derive a stronger default
+  // when the link points at courses, otherwise keep the author's text.
+  //
+  // Offer-aware CTA. When the teacher hasn't customised the label
+  // (or left a placeholder) AND the link points at courses, we
+  // *don't* blindly say "Browse courses". We inspect what the
+  // workspace actually sells:
+  //   • only sessions → "Book a call"
+  //   • only memberships → "Join the membership"
+  //   • only downloads → "See the downloads"
+  //   • mostly courses → "Browse courses"
+  //   • mixed catalogue → "See what's available"
+  // Picks by simple plurality across published store products. The
+  // teacher's authored label always wins if they bothered to set
+  // one.
+  const fallbackPrimaryLabel = (() => {
+    if (primary.label && !isPlaceholder(primary.label)) return primary.label
+    if (!primary.href?.includes("course")) return primary.label
+    // Bucket the catalogue by kind. Courses are double-counted here:
+    // the dataset surfaces both LMS courses (real curricula) AND
+    // store products that re-sell those courses, so we union the
+    // two sets when deciding the offer's centre of gravity.
+    const counts: Record<string, number> = { course: 0, session: 0, webinar: 0, membership: 0, download: 0, license: 0, bundle: 0 }
+    for (const p of storeProducts) counts[p.kind] = (counts[p.kind] ?? 0) + 1
+    counts.course += courses.length
+    const total = Object.values(counts).reduce((a, b) => a + b, 0)
+    if (total === 0) return "Browse courses"
+    const top = (Object.entries(counts) as Array<[keyof typeof counts, number]>)
+      .filter(([, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1])
+    const [dominant, n] = top[0]
+    const monoculture = n / total >= 0.7
+    if (monoculture) {
+      if (dominant === "session") return "Book a call"
+      if (dominant === "membership") return "Join the membership"
+      if (dominant === "download") return "See the downloads"
+      if (dominant === "webinar") return "Register for the webinar"
+      if (dominant === "license") return "Get a license"
+      if (dominant === "bundle") return "See the bundles"
+      return "Browse courses"
+    }
+    return "See what's available"
+  })()
+
+  // Hero CTA copy A/B — the most common experiment a teacher wants.
+  // Admin defines variants in /dashboard/experiments under the key
+  // "hero-cta-copy". Each variant id maps to a label override below
+  // (control = whatever the page editor specified, urgent / aspirational
+  // = canned overrides). If the experiment is absent / draft / paused,
+  // the hook returns "control" and we render the editor-authored label.
+  const exp = useExperiment({
+    tenantSlug,
+    key: "hero-cta-copy",
+    variantIds: ["control", "urgent", "aspirational"],
+  })
+  // Fire an exposure on first paint. The experiments hook de-dupes
+  // by (visitor, experiment) so navigation back to the page doesn't
+  // inflate impressions.
+  useEffect(() => {
+    if (fallbackPrimaryLabel && primary.href) exp.exposure()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const heroCtaLabel = (() => {
+    if (!fallbackPrimaryLabel) return fallbackPrimaryLabel
+    if (exp.variant === "urgent") return "Start free today"
+    if (exp.variant === "aspirational") return "Begin your journey"
+    return fallbackPrimaryLabel
+  })()
   const bgImage = str(c.backgroundImage)
   const align = str(c.alignment, "center") as "left" | "center"
   const overlay = num(c.overlayOpacity, bgImage ? 0.55 : 0)
@@ -213,9 +418,32 @@ function Hero({ section, basePath }: { section: PortalSection; basePath: string 
     ? `url("${bgImage}") center/cover`
     : "linear-gradient(135deg, color-mix(in oklch, var(--primary) 12%, transparent) 0%, transparent 50%, color-mix(in oklch, var(--accent) 14%, transparent) 100%)"
 
+  // Sprint A Brand #2 — Trust strip eligibility. We render the
+  // social-proof line only when totals are persuasive enough that
+  // they help rather than hurt (≤ ~50 students looks worse than
+  // showing nothing). Tunable per market; for the IN POC the bar
+  // is intentionally low (10 students + 3 reviews).
+  const showTrustStrip =
+    trustStats.studentCount >= 10 ||
+    trustStats.reviewCount >= 3
+  // Cold-start framing. When the trust strip can't show *real*
+  // social proof but the workspace has at least one published
+  // course (it isn't a totally blank workspace), surface a
+  // "Just launched" badge that reframes low numbers as an early
+  // opportunity rather than emptiness. Hidden when even courseCount
+  // is zero — there's nothing to invite people to yet.
+  const showJustLaunched = !showTrustStrip && trustStats.courseCount > 0
+
   return (
     <section
-      className="relative overflow-hidden border-b border-border"
+      // Sprint D mobile P0 (Brand #6 + #7) — reserve vertical
+      // space with min-height so the hero doesn't pop in late
+      // and shift the page (CLS). Default min is 60vh on mobile
+      // and 70vh on desktop — gives the hero presence without
+      // pushing everything below off the fold on small screens.
+      // The image still lazy-paints; the reserved box prevents the
+      // layout jump.
+      className="relative min-h-[60vh] overflow-hidden border-b border-border md:min-h-[70vh]"
       style={{ background: bg }}
     >
       {bgImage && overlay > 0 && (
@@ -223,7 +451,11 @@ function Hero({ section, basePath }: { section: PortalSection; basePath: string 
       )}
       <div
         className={cn(
-          "relative mx-auto max-w-5xl px-6 py-20 sm:py-28 lg:px-8",
+          // Sprint D mobile P0 (Brand #7) — tighter mobile padding
+          // (py-14 instead of py-20) so the hero doesn't dominate
+          // the entire mobile viewport before content. Desktop
+          // keeps the generous py-28.
+          "relative mx-auto max-w-5xl px-6 py-14 sm:py-20 lg:px-8 lg:py-28",
           align === "center" ? "text-center" : "text-left",
         )}
       >
@@ -240,15 +472,24 @@ function Hero({ section, basePath }: { section: PortalSection; basePath: string 
             {eyebrow}
           </span>
         )}
+        {/* SHOUTY guard. A serif hero in ALL CAPS reads as
+            aggressive marketing instead of premium editorial. We
+            detect ≥50% upper-case letters with at least 4
+            uppercase glyphs and soft-case the headline (sentence
+            case) on the public site. The editor still sees what
+            the teacher typed; only the rendered hero is calmed.
+            `normal-case` defensively pins text-transform so a
+            stray .uppercase global utility can't sneak in. */}
         <h1
           className={cn(
-            "mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl",
+            "mt-5 font-serif text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl normal-case",
+            "[text-wrap:balance]",
             bgImage ? "text-white" : "text-foreground",
           )}
         >
-          {headline}
+          {softCase(headline)}
         </h1>
-        {subhead && (
+        {effectiveSubhead && (
           <p
             className={cn(
               "mx-auto mt-4 max-w-2xl text-lg",
@@ -256,31 +497,188 @@ function Hero({ section, basePath }: { section: PortalSection; basePath: string 
               align === "left" && "mx-0",
             )}
           >
-            {subhead}
+            {effectiveSubhead}
           </p>
         )}
-        {(primary.label || secondary.label) && (
+
+        {/* Sprint A Brand #2 — Trust strip. Tight stat row between
+            subhead and CTAs. Each stat hides individually when the
+            backing count is below its own floor (avoids "1 country").
+            Rendered before CTAs because conversion research says
+            social proof should precede the ask, not follow it. */}
+        {showTrustStrip && (
           <div
             className={cn(
-              "mt-8 flex flex-wrap items-center gap-3",
-              align === "center" ? "justify-center" : "justify-start",
+              "mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12.5px] font-medium",
+              align === "center" && "justify-center",
+              bgImage ? "text-white/85" : "text-muted-foreground",
             )}
           >
-            {primary.label && primary.href && (
-              <CtaButton href={primary.href} label={primary.label} basePath={basePath} />
+            {trustStats.studentCount >= 10 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                <span className={cn("font-bold tabular-nums", bgImage ? "text-white" : "text-foreground")}>
+                  {trustStats.studentCount.toLocaleString()}+
+                </span>
+                students
+              </span>
             )}
-            {secondary.label && secondary.href && (
-              <CtaButton
-                href={secondary.href}
-                label={secondary.label}
-                variant="outline"
-                basePath={basePath}
-              />
+            {trustStats.reviewCount >= 3 && trustStats.avgRating > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Star className="h-3.5 w-3.5 fill-current" />
+                <span className={cn("font-bold tabular-nums", bgImage ? "text-white" : "text-foreground")}>
+                  {trustStats.avgRating.toFixed(1)}
+                </span>
+                across {trustStats.reviewCount.toLocaleString()} reviews
+              </span>
+            )}
+            {trustStats.countryCount >= 3 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Globe className="h-3.5 w-3.5" />
+                <span className={cn("font-bold tabular-nums", bgImage ? "text-white" : "text-foreground")}>
+                  {trustStats.countryCount}
+                </span>
+                countries
+              </span>
             )}
           </div>
         )}
+
+        {/* Just-launched pill — shown only when the real trust strip
+            can't render (no enrolments + no reviews yet) but the
+            workspace has at least one course. Reframes "0 students"
+            as an opportunity instead of leaving the hero with no
+            social signal at all. */}
+        {showJustLaunched && (
+          <p
+            className={cn(
+              "mt-5",
+              align === "center" && "text-center",
+            )}
+          >
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold",
+                bgImage
+                  ? "border border-white/30 bg-white/10 text-white"
+                  : "border border-primary/20 bg-primary/10 text-primary",
+              )}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Just launched · be one of the first
+            </span>
+          </p>
+        )}
+
+        {/* Sprint A Brand #3 — CTA pair. Primary stays filled-and-bold
+            (default CtaButton variant). Secondary moves to a quiet
+            ghost-link style so it stops competing visually. If the
+            author didn't supply a secondary, no second button — no
+            placeholder. */}
+        {(fallbackPrimaryLabel || secondary.label) && (
+          <div
+            className={cn(
+              "mt-8 flex flex-wrap items-center gap-4",
+              align === "center" ? "justify-center" : "justify-start",
+            )}
+          >
+            {fallbackPrimaryLabel && primary.href && (
+              <CtaButton
+                href={primary.href}
+                label={heroCtaLabel ?? fallbackPrimaryLabel}
+                basePath={basePath}
+                onClick={() => exp.convert("hero-cta-click")}
+              />
+            )}
+            {secondary.label && secondary.href && !isPlaceholder(secondary.label) && (
+              <a
+                href={secondary.href.startsWith("http") ? secondary.href : prefix(basePath, secondary.href)}
+                className={cn(
+                  "group inline-flex items-center gap-1.5 text-[14px] font-semibold underline-offset-4 hover:underline",
+                  bgImage ? "text-white" : "text-foreground",
+                )}
+              >
+                {secondary.label}
+                <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Trust strip + live-session strip removed from the hero
+            (Sprint X — public-site cleanup).
+            • Trust badges now ship as a dedicated `trust-badges`
+              section so the teacher controls the labels + icons
+              (instead of the platform shipping its own claim
+              about refund + support windows that may not match the
+              workspace's actual policy).
+            • The "UPCOMING · Instant class · In 4m" live strip used
+              to render here for visitors who happened to land while
+              a class was scheduled. It bled internal scheduling
+              detail to the public marketing surface and confused
+              cold visitors who didn't know what "Instant class"
+              meant. Removed entirely from public — enrolled learners
+              still see live state inside /p/<tenant>/my. */}
       </div>
     </section>
+  )
+}
+
+/** Hero #8 — animated countdown / live chip. Pulled out of Hero so
+ *  the live-time ticker doesn't re-render the whole hero every second. */
+function HeroLiveStrip({
+  session,
+  onDarkBg,
+  basePath,
+}: {
+  session: PortalNextLiveSession
+  onDarkBg: boolean
+  basePath: string
+}) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    // 30s tick is enough for human-readable time-from copy without
+    // burning CPU. Drift on minutes is invisible to the eye.
+    const id = window.setInterval(() => setNow(Date.now()), 30 * 1000)
+    return () => window.clearInterval(id)
+  }, [])
+  const startMs = Date.parse(session.scheduledAt)
+  const diffMs = startMs - now
+  const isLive = diffMs <= 0
+  const timeLabel = isLive
+    ? "Live now"
+    : diffMs < 60 * 60_000
+      ? `In ${Math.max(1, Math.round(diffMs / 60_000))}m`
+      : diffMs < 12 * 3600_000
+        ? `In ${Math.round(diffMs / 3600_000)}h`
+        : new Date(startMs).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })
+
+  const href = session.href.startsWith("http") ? session.href : prefix(basePath, session.href.replace(basePath, "") || "/")
+
+  return (
+    <a
+      href={href}
+      className={cn(
+        "mt-7 inline-flex max-w-full flex-wrap items-center gap-2 rounded-full border px-3 py-1.5 text-[12.5px] font-semibold transition-colors",
+        onDarkBg
+          ? "border-white/25 bg-white/10 text-white hover:bg-white/20"
+          : "border-rose-500/30 bg-rose-500/10 text-rose-700 hover:bg-rose-500/15 dark:text-rose-300",
+      )}
+    >
+      <Radio className={cn("h-3.5 w-3.5", isLive && "animate-pulse")} />
+      <span className="uppercase tracking-wider">{isLive ? "Live" : "Upcoming"}</span>
+      <span className="opacity-60">·</span>
+      <span className="truncate max-w-[180px]">{session.title}</span>
+      {session.courseTitle && (
+        <>
+          <span className="opacity-60">·</span>
+          <span className="truncate max-w-[140px] opacity-80">{session.courseTitle}</span>
+        </>
+      )}
+      <span className="opacity-60">·</span>
+      <span>{timeLabel}</span>
+      <ArrowRight className="h-3 w-3 opacity-80" />
+    </a>
   )
 }
 
@@ -290,6 +688,19 @@ function Features({ section }: { section: PortalSection }) {
   const subhead = str(c.subhead)
   const items = arr<{ title?: string; body?: string; icon?: string }>(c.items)
   if (items.length === 0) return null
+  // Gate on real authoring. The default config seeds 3 generic
+  // items ("Feature 1 · What's great about it"). Publishing those
+  // verbatim makes the workspace look unfinished. We require at
+  // least one item whose title is non-placeholder before rendering
+  // the whole section; if every title is still placeholder, the
+  // teacher hasn't actually authored anything and the section is
+  // hidden.
+  const PLACEHOLDER_TITLES = /^feature\s*\d?$|^\s*$/i
+  const PLACEHOLDER_BODIES = /^what'?s great about it\.?$|^\s*$/i
+  const hasCustomItem = items.some((it) =>
+    !(PLACEHOLDER_TITLES.test(str(it.title)) && PLACEHOLDER_BODIES.test(str(it.body))),
+  )
+  if (!hasCustomItem) return null
   return (
     <SectionWrap>
       {(heading || subhead) && (
@@ -326,6 +737,10 @@ function CoursesGrid({
   section: PortalSection
   dataset: PortalDataset
 }) {
+  // Sprint B Brand #21 — wishlist binding scoped to the dataset's
+  // tenant. Single hook for the whole grid so we don't fire one per
+  // card; per-card UI reads from the same array.
+  const wishlist = useWishlist(dataset.tenantSlug)
   const c = section.config
   const heading = str(c.heading, "Courses")
   const mode = str(c.mode, "popular") as
@@ -381,6 +796,41 @@ function CoursesGrid({
                     alt={course.title}
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                   />
+                  {/* Sprint A Brand #18 — free preview ribbon. Top-
+                      right because thumbnails often have left-aligned
+                      titles; a right-side ribbon doesn't clash with
+                      typical cover art focal points. Click-through
+                      uses the parent <Link> — the badge isn't its
+                      own action target, so screen readers don't
+                      double-announce. */}
+                  {course.hasFreePreview && (
+                    <span
+                      aria-label="Includes a free preview lesson"
+                      className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500/95 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-white shadow-sm"
+                    >
+                      <Sparkles className="h-2.5 w-2.5" />
+                      Free preview
+                    </span>
+                  )}
+                  {/* Sprint B Brand #21 — wishlist heart. Placed
+                      bottom-right of the thumbnail so it doesn't
+                      collide with the top-right preview ribbon when
+                      both are present. Stops the parent link
+                      navigation on click — toggle wishlist without
+                      opening the course. */}
+                  <button
+                    type="button"
+                    aria-label={wishlist.has(course.id) ? "Remove from wishlist" : "Save to wishlist"}
+                    aria-pressed={wishlist.has(course.id)}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      wishlist.toggle(course.id)
+                    }}
+                    className="absolute bottom-2 right-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/40 bg-black/40 text-white backdrop-blur-sm transition hover:scale-110"
+                  >
+                    <Heart className={cn("h-4 w-4", wishlist.has(course.id) && "fill-rose-400 text-rose-400")} />
+                  </button>
                 </div>
                 <CardContent className="p-5">
                   {course.category && (
@@ -396,12 +846,76 @@ function CoursesGrid({
                       {stripRichTextTags(course.description).slice(0, 160)}
                     </p>
                   )}
+                  {/* Sprint B Brand #19 — social-density row. Renders
+                      only when the course has at least one enrollee;
+                      keeps brand-new courses from showing an empty
+                      avatar slot. Stack of up to 3 avatars + "+N
+                      others" label. Initials fallback when a student
+                      has no avatar. The "X others" text is the
+                      tooltip-style summary so a screen reader picks
+                      up "Anita, Priya and 29 others enrolled". */}
+                  {course.recentEnrolleeAvatars && course.recentEnrolleeAvatars.length > 0 && (course.enrolledCount ?? 0) > 0 && (
+                    <div className="mt-3 flex items-center gap-2">
+                      <div className="flex -space-x-1.5">
+                        {course.recentEnrolleeAvatars.slice(0, 3).map((e, i) =>
+                          e.avatar ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              key={i}
+                              src={e.avatar}
+                              alt=""
+                              title={e.name}
+                              className="h-6 w-6 rounded-full border-2 border-card object-cover"
+                            />
+                          ) : (
+                            <span
+                              key={i}
+                              title={e.name}
+                              className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-card bg-muted text-[9px] font-bold text-muted-foreground"
+                            >
+                              {e.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()}
+                            </span>
+                          ),
+                        )}
+                      </div>
+                      <span className="text-[11px] text-muted-foreground">
+                        {(() => {
+                          const names = course.recentEnrolleeAvatars.map((e) => e.name.split(" ")[0])
+                          const others = Math.max(0, (course.enrolledCount ?? 0) - names.length)
+                          const lead = names.slice(0, 2).join(", ")
+                          return others > 0
+                            ? `${lead} & ${others.toLocaleString()} others enrolled`
+                            : `${names.join(", ")} enrolled`
+                        })()}
+                      </span>
+                    </div>
+                  )}
                   <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
-                    <span className="text-lg font-bold">
-                      {(course.price ?? 0) > 0
-                        ? dataset.formatMoney(course.price ?? 0, course.currency)
-                        : "Free"}
-                    </span>
+                    <div className="flex flex-wrap items-baseline gap-1.5">
+                      <span className="text-lg font-bold">
+                        {(course.price ?? 0) > 0
+                          ? dataset.formatMoney(course.price ?? 0, course.currency)
+                          : "Free"}
+                      </span>
+                      {/* Sprint D Brand #20 — price comparison anchor.
+                          Two forms:
+                            • original price strikethrough when set
+                            • discount % when both prices exist
+                          Renders inline so a paid course with a
+                          discount reads "$49 ($120 · 59% off)".
+                          Adds visual proof of value without bloating
+                          the card. */}
+                      {course.originalPrice && course.originalPrice > (course.price ?? 0) && (
+                        <>
+                          <span className="text-xs text-muted-foreground line-through">
+                            {dataset.formatMoney(course.originalPrice, course.currency)}
+                          </span>
+                          <span className="rounded-full bg-rose-500/15 px-1.5 py-0 text-[10px] font-bold uppercase text-rose-700 dark:text-rose-300">
+                            {Math.round((1 - (course.price ?? 0) / course.originalPrice) * 100)}% off
+                          </span>
+                        </>
+                      )}
+                    </div>
                     {course.rating ? (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Star className="h-3.5 w-3.5 fill-accent text-accent" />
@@ -410,6 +924,26 @@ function CoursesGrid({
                       </span>
                     ) : null}
                   </div>
+                  {/* Sprint D Brand #20 — urgency strip when there's
+                      an early-bird window in the future. Renders the
+                      remaining days as a small chip; sits below the
+                      price row so it doesn't crowd the price/rating
+                      line. Hides when no earlyBirdUntil or it has
+                      passed. */}
+                  {course.earlyBirdUntil && (() => {
+                    const msLeft = Date.parse(course.earlyBirdUntil) - Date.now()
+                    if (msLeft <= 0) return null
+                    const days = Math.max(1, Math.round(msLeft / (24 * 3600 * 1000)))
+                    const label =
+                      msLeft < 24 * 3600 * 1000
+                        ? `Ends in ${Math.max(1, Math.round(msLeft / 3600_000))}h`
+                        : `Ends in ${days} ${days === 1 ? "day" : "days"}`
+                    return (
+                      <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                        ⏳ {label}
+                      </p>
+                    )
+                  })()}
                 </CardContent>
               </Card>
             </Link>
@@ -607,7 +1141,7 @@ function Faculty({
         {list.map((m) => (
           <Link
             key={m.id}
-            href={prefix(dataset.basePath, `/teachers/${m.handle}`)}
+            href={prefix(dataset.basePath, `/instructors/${m.handle}`)}
             className="group block"
           >
             <Card className="overflow-hidden py-0 transition-shadow group-hover:shadow-lg">
@@ -793,9 +1327,28 @@ function ContactFormInner({
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
   const [message, setMessage] = useState("")
+  const [subject, setSubject] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [sentAt, setSentAt] = useState<Date | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // Pre-fill subject from ?from=<product-or-course-title> on mount.
+  // Visitors arriving from a course / store product carry the
+  // origin in the query so the contact form lands with a useful
+  // context line ("Question about React Fundamentals"). Big intent
+  // signal for the teacher; zero typing for the visitor. Reading
+  // from window so we don't have to thread search params through
+  // every renderer.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const params = new URLSearchParams(window.location.search)
+    const from = params.get("from")?.trim()
+    if (!from) return
+    setSubject(`Question about ${from}`)
+    // Also seed message with the same context line — easier to keep
+    // or delete than to compose from scratch.
+    setMessage((cur) => cur || `Hi! I had a question about ${from}.\n\n`)
+  }, [])
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -812,10 +1365,15 @@ function ContactFormInner({
         name: name.trim() || undefined,
         email: email.trim(),
         phone: phone.trim() || undefined,
-        message: message.trim() || undefined,
+        // Merge subject into the message body since the lead schema
+        // doesn't carry a separate subject field. Teacher sees both.
+        message: [subject.trim(), message.trim()].filter(Boolean).join("\n\n") || undefined,
+        // Tag the lead with the originating product/course so the
+        // inbox can show "From: <X>" without re-parsing the body.
+        fields: subject.trim() ? { subject: subject.trim() } : undefined,
       })
       setSentAt(new Date())
-      setName(""); setEmail(""); setPhone(""); setMessage("")
+      setName(""); setEmail(""); setPhone(""); setMessage(""); setSubject("")
     } catch (err) {
       setError((err as Error).message ?? "Couldn't send. Try again.")
     } finally {
@@ -868,6 +1426,15 @@ function ContactFormInner({
         </div>
       )}
       <div>
+        <label className="mb-1.5 block text-sm font-medium">Subject</label>
+        <input
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          placeholder="What's this about?"
+        />
+      </div>
+      <div>
         <label className="mb-1.5 block text-sm font-medium">Message</label>
         <textarea
           value={message}
@@ -878,9 +1445,20 @@ function ContactFormInner({
         />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" disabled={submitting} className="w-full">
-        {submitting ? "Sending…" : <>Send message <ArrowRight className="ml-1.5 h-4 w-4" /></>}
-      </Button>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {/* Reply-time reassurance — currently a static "within 24h"
+            line. Once we wire it to the median reply latency from
+            the doubts table this becomes data-driven. Lives next to
+            the Submit button so the social-cost of asking is set
+            right at the moment of decision. */}
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Clock className="h-3.5 w-3.5" />
+          Typical reply within a day
+        </span>
+        <Button type="submit" disabled={submitting}>
+          {submitting ? "Sending…" : <>Send message <ArrowRight className="ml-1.5 h-4 w-4" /></>}
+        </Button>
+      </div>
     </form>
   )
 }
@@ -1018,6 +1596,99 @@ function ImageGallery({ section }: { section: PortalSection }) {
           </figure>
         ))}
       </div>
+    </SectionWrap>
+  )
+}
+
+// Author-controlled trust badges. Each badge is { icon, label } —
+// the icon name maps to a Lucide component via TRUST_ICONS below so
+// teachers don't paste SVG. Default config seeds the same three
+// claims that used to be hardcoded in the Hero, but every label is
+// now editable so a tenant with a 14-day refund (or no refund at
+// all) doesn't ship a lie on their home page.
+const TRUST_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  "shield": ShieldCheck,
+  "refresh": RefreshCw,
+  "message": MessageCircle,
+  "lock": Lock,
+  "check": CheckCircle2,
+  "star": Star,
+  "globe": Globe,
+  "award": Award,
+}
+
+function TrustBadges({ section }: { section: PortalSection }) {
+  const c = section.config
+  const heading = str(c.heading)
+  const align = (str(c.align, "center") as "left" | "center" | "right")
+  const variant = (str(c.variant, "row") as "row" | "cards")
+  const items = arr<{ icon?: string; label?: string }>(c.items)
+    .filter((i) => i.label && i.label.trim())
+  if (items.length === 0) return null
+  const alignClass =
+    align === "left" ? "justify-start" :
+      align === "right" ? "justify-end" :
+        "justify-center"
+  if (variant === "cards") {
+    return (
+      <SectionWrap className="py-10">
+        {heading && (
+          <p className={cn(
+            "mb-6 text-xs font-medium uppercase tracking-wider text-muted-foreground",
+            align === "left" ? "text-left" : align === "right" ? "text-right" : "text-center",
+          )}>
+            {heading}
+          </p>
+        )}
+        <div className={cn(
+          "grid gap-3",
+          items.length === 1 && "grid-cols-1",
+          items.length === 2 && "grid-cols-1 sm:grid-cols-2",
+          items.length === 3 && "grid-cols-1 sm:grid-cols-3",
+          items.length >= 4 && "grid-cols-2 sm:grid-cols-4",
+        )}>
+          {items.map((it, i) => {
+            const Icon = TRUST_ICONS[str(it.icon, "check")] ?? CheckCircle2
+            return (
+              <div
+                key={i}
+                className="flex items-start gap-3 rounded-lg border border-border bg-card p-4"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                  <Icon className="h-5 w-5" />
+                </div>
+                <p className="text-sm font-medium leading-snug">{it.label}</p>
+              </div>
+            )
+          })}
+        </div>
+      </SectionWrap>
+    )
+  }
+  return (
+    <SectionWrap className="py-8">
+      {heading && (
+        <p className={cn(
+          "mb-4 text-xs font-medium uppercase tracking-wider text-muted-foreground",
+          align === "left" ? "text-left" : align === "right" ? "text-right" : "text-center",
+        )}>
+          {heading}
+        </p>
+      )}
+      <ul className={cn(
+        "flex flex-wrap items-center gap-x-8 gap-y-2 text-sm text-muted-foreground",
+        alignClass,
+      )}>
+        {items.map((it, i) => {
+          const Icon = TRUST_ICONS[str(it.icon, "check")] ?? CheckCircle2
+          return (
+            <li key={i} className="inline-flex items-center gap-2">
+              <Icon className="h-4 w-4 text-primary" />
+              <span className="font-medium text-foreground">{it.label}</span>
+            </li>
+          )
+        })}
+      </ul>
     </SectionWrap>
   )
 }

@@ -227,7 +227,7 @@ export function Whiteboard({ className, readOnly = false }: WhiteboardProps) {
         />
         {readOnly && (
           <div className="absolute right-3 top-3 pointer-events-none rounded-md bg-slate-900/50 px-2 py-0.5 text-[10px] font-medium text-white backdrop-blur-xs">
-            Teacher screen (view-only)
+            Instructor screen (view-only)
           </div>
         )}
       </div>

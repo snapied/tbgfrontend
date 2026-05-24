@@ -75,7 +75,7 @@ export function PortalSiteHeader({ tenant, config, pages, basePath }: Props) {
     // needed — no per-tile translation work in the header.
     const BUILT_IN_DEFS: Record<string, { label: string; href: string; default: boolean; flag: keyof typeof nav }> = {
       courses:  { label: t("header.courses" as keyof Dictionary),      href: `${basePath}/courses`,  default: true,  flag: "showCourses" },
-      teachers: { label: t("header.teachers" as keyof Dictionary),     href: `${basePath}/teachers`, default: true,  flag: "showTeachers" },
+      teachers: { label: t("header.teachers" as keyof Dictionary), href: `${basePath}/instructors`, default: true, flag: "showTeachers" },
       store:    { label: t("header.shop" as keyof Dictionary),         href: `${basePath}/store`,    default: true,  flag: "showStore" },
       blog:     { label: t("header.blog" as keyof Dictionary),         href: `${basePath}/blog`,     default: true,  flag: "showBlog" },
       wall:     { label: t("header.wallOfLove" as keyof Dictionary),   href: `${basePath}/wall`,     default: false, flag: "showWall" },
@@ -110,6 +110,33 @@ export function PortalSiteHeader({ tenant, config, pages, basePath }: Props) {
     return `${basePath}${href === "/" ? "" : href}`
   }
 
+  // Sprint A Brand #14 — returning-visitor detection. We set a
+  // sticky flag after the visitor has spent >30s on the portal on
+  // their first visit. On subsequent visits, the header swaps CTA
+  // emphasis: returning anonymous visitors see a prominent Sign in
+  // (they've been here, probably have an account), while new
+  // visitors still see Enroll as primary. Hydration-safe: starts
+  // false (matches SSR), flips after the 30s timer or on remount.
+  const [isReturning, setIsReturning] = useState(false)
+  useEffect(() => {
+    try {
+      // Already-flagged returning visitor (subsequent visit).
+      if (window.localStorage.getItem("thebigclass.returningVisitor") === "1") {
+        setIsReturning(true)
+        return
+      }
+      // First visit: flag once they've stuck around 30s. The flag
+      // is set in the timer callback so a hit-and-bounce visitor
+      // doesn't get demoted to "returning" prematurely.
+      const timer = window.setTimeout(() => {
+        try { window.localStorage.setItem("thebigclass.returningVisitor", "1") } catch { /* ignore */ }
+      }, 30 * 1000)
+      return () => window.clearTimeout(timer)
+    } catch {
+      /* private browsing — treat as new visitor every time */
+    }
+  }, [])
+
   // Explicit nav CTAs win over the legacy "first extra link is CTA" path.
   // Both labels run through tenantT so the admin can translate the
   // exact string they typed in the nav editor (e.g. "Enroll Now" →
@@ -140,6 +167,28 @@ export function PortalSiteHeader({ tenant, config, pages, basePath }: Props) {
         href: scopeHref(rawSecondaryCta.href),
       }
     : undefined
+
+  // Sprint A Brand #14 — for returning anonymous visitors, promote
+  // Sign in to primary and demote the teacher-set primary (if any)
+  // to secondary. We only swap when:
+  //   • The visitor is anonymous (signed-in users never see auth CTAs).
+  //   • The auto-generated "Sign in" secondary is in play (we don't
+  //     override an explicit teacher-configured secondary).
+  //   • The visitor is flagged returning.
+  // This is conservative on purpose: misclassifying a new visitor as
+  // returning costs us the Enroll click; the reverse is recoverable
+  // (they sign in elsewhere). The 30s threshold above is the safety.
+  const shouldSwapCtas =
+    !currentUser &&
+    isReturning &&
+    !nav.secondaryCta && // teacher didn't set a custom secondary
+    !!primaryCta
+  const finalPrimary = shouldSwapCtas
+    ? { label: t("header.signIn" as keyof Dictionary), href: `${basePath}/login` }
+    : primaryCta
+  const finalSecondary = shouldSwapCtas
+    ? primaryCta // demote the original primary to a quiet link
+    : secondaryCta
 
   // Marquee variant prepends a thin promo row above the standard
   // split layout. Reuses the announcementBar's message + cta — feels
@@ -190,8 +239,8 @@ export function PortalSiteHeader({ tenant, config, pages, basePath }: Props) {
             logo={logo}
             basePath={basePath}
             allLinks={allLinks}
-            primaryCta={primaryCta ?? { label: t("header.enroll" as keyof Dictionary), href: `${basePath}/courses` }}
-            secondaryCta={secondaryCta}
+                primaryCta={finalPrimary ?? { label: t("header.enroll" as keyof Dictionary), href: `${basePath}/courses` }}
+                secondaryCta={finalSecondary}
             open={open}
             setOpen={setOpen}
           />
@@ -203,8 +252,8 @@ export function PortalSiteHeader({ tenant, config, pages, basePath }: Props) {
             logo={logo}
             basePath={basePath}
             allLinks={allLinks}
-            primaryCta={primaryCta}
-            secondaryCta={secondaryCta}
+                  primaryCta={finalPrimary}
+                  secondaryCta={finalSecondary}
             open={open}
             setOpen={setOpen}
             pill={layout === "sticky-pill"}

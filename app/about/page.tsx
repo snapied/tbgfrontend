@@ -164,7 +164,7 @@ export default function AboutPage() {
                         Renu Rawat
                       </p>
                       <p className="mt-0.5 text-sm text-muted-foreground">
-                        Mother. Teacher. Builder. In that order.
+                        Mother. Instructor. Builder. In that order.
                       </p>
                     </div>
                     <div className="space-y-1.5 border-t border-border pt-3 text-sm">
@@ -353,7 +353,7 @@ export default function AboutPage() {
                 photoAlt="A cozy study setup representing the kitchen table classroom"
               />
               <FirstCard
-                photo="/people/teacher-1.jpg"
+                photo="/people/sanjay.jpg"
                 icon={<Sparkles className="h-4 w-4" />}
                 label="First commitment"
                 value="Stay a teacher's tool"
@@ -480,7 +480,7 @@ function ValueCard({ icon, title, body }: { icon: React.ReactNode; title: string
 // one-line zoom-in that makes it specific (a child, a street, a rule).
 function FirstCard({
   photo,
-  photoAlt = "",
+  photoAlt,
   icon,
   label,
   value,
@@ -493,6 +493,11 @@ function FirstCard({
   value: string
   detail: string
 }) {
+  // Sensible alt fallback derived from the card's own label so a card
+  // without an explicit `photoAlt` still gets a non-empty alt — much
+  // better for screen-reader users than the old "" default which
+  // hid the image's meaning entirely.
+  const resolvedAlt = photoAlt ?? `${label}: ${value}`
   return (
     <div className="group overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
       {/* Photo */}
@@ -501,7 +506,7 @@ function FirstCard({
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={photo}
-            alt={photoAlt}
+            alt={resolvedAlt}
             className="h-full w-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
           />
           {/* Gradient so the badge reads cleanly */}

@@ -13,6 +13,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useTenantBrand } from "@/lib/tenant-brand"
+import { AuthRedirectGate } from "@/components/auth/auth-redirect-gate"
 
 export default function PortalForgotPasswordPage({
   params,
@@ -53,6 +54,7 @@ export default function PortalForgotPasswordPage({
 
   return (
     <div className="mx-auto max-w-md px-6 py-12 lg:px-8">
+      <AuthRedirectGate tenantSlug={tenant} />
       <Card>
         <CardContent className="space-y-5 p-6">
           {sent ? (

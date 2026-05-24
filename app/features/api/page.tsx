@@ -131,8 +131,14 @@ export default function ApiFeaturePage() {
                   Open the docs <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Link>
               </Button>
+              {/* Auth-gated destination — `/dashboard/developer` redirects
+                  unauthenticated visitors to /login, which now honours
+                  the `?next=` param and bounces them back here after
+                  sign-in. New visitors can click "Register" from the
+                  login page. AuthRedirectGate on login keeps signed-in
+                  teachers from ever seeing the form. */}
               <Button variant="outline" size="lg" asChild>
-                <Link href="/dashboard/developer">
+                <Link href="/login?next=%2Fdashboard%2Fdeveloper">
                   <KeyRound className="mr-2 h-4 w-4" />
                   Get an API key
                 </Link>
@@ -292,7 +298,13 @@ Content-Type: application/json
                 ["GET", "/api/v1/orders", "Receipt + entitlement history", false],
                 ["POST", "/api/v1/enrollments", "Idempotent enrol on (studentId, courseId)", false],
               ].map(([method, path, summary, live]) => (
-                <li key={String(path)} className="flex items-start gap-3 rounded-md border border-border bg-card p-3">
+                <li
+                  // Path alone isn't unique — GET + POST on the same
+                  // resource (e.g. /api/v1/students) share it. Method
+                  // + path is the actual REST identity.
+                  key={`${String(method)} ${String(path)}`}
+                  className="flex items-start gap-3 rounded-md border border-border bg-card p-3"
+                >
                   <Badge
                     variant="outline"
                     className={

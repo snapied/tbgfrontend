@@ -145,8 +145,8 @@ const SECTIONS: ChangeSection[] = [
         body: "Author or admin can edit any post via the ⋯ menu. Edited posts show a subtle \"edited · 3m\" footnote so readers know it changed.",
       },
       {
-        title: "Teachers pinned at the top",
-        body: "A Teachers card sits above the feed showing the course's primary instructor + co-instructors as chips. Member count is on the right. Everyone knows who's leading at a glance.",
+        title: "Instructors pinned at the top",
+        body: "A Instructors card sits above the feed showing the course's primary instructor + co-instructors as chips. Member count is on the right. Everyone knows who's leading at a glance.",
       },
     ],
   },

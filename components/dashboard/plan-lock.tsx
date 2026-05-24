@@ -157,6 +157,12 @@ const FEATURE_COPY: Partial<Record<keyof PlanLimits, FeatureMeta>> = {
       "Starter classes cap at 60 minutes. Paid plans run up to 4 hours per session (or unlimited on Institute).",
     minPlan: "pro",
   },
+  courseVersioning: {
+    label: "Course version history",
+    description:
+      "Every time you publish changes, the new version is snapshotted. Preview old versions side-by-side with what's live, and one-click restore to roll back a release. Snapshots are taken on every plan, so an upgrade unlocks the history you've been quietly building all along.",
+    minPlan: "pro",
+  },
 }
 
 // ────────────────────────────────────────────────────────────────────

@@ -163,7 +163,7 @@ export default function DoubtThreadPage({
         doubt={doubt}
         courseTitle={course?.title}
         authorName={askerName}
-        getReplierName={(uid) => getUserById(uid)?.name ?? "Teacher"}
+        getReplierName={(uid) => getUserById(uid)?.name ?? "Instructor"}
         onReply={onReply}
         onResolve={() => setDoubtStatus(doubt.id, doubt.status === "open" ? "resolved" : "open")}
         onDelete={async () => {

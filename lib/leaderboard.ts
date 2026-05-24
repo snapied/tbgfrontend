@@ -104,6 +104,12 @@ interface ScoreInputs {
   doubts?: Doubt[]
   wallEntries?: WallEntry[]
   rules?: ScoreRules
+  /** Optional — when present, lets the engine compute "lessons
+   *  completed" against each course's CURRENT lesson set rather
+   *  than blindly trusting `enrollment.completedLessons.length`,
+   *  which keeps counting after lessons are removed. Same input as
+   *  the engagement classifier so callers can pass the same array. */
+  courseLessonIds?: Map<string, Set<string>>
 }
 
 /**
@@ -193,11 +199,26 @@ export function computeLeaderboard(input: ScoreInputs): LeaderboardEntry[] {
       if (s.score != null && s.score >= 80) assignmentsHighScore++
     }
 
+    // Count lessons completed against each course's CURRENT lesson
+    // set when the caller passes courseLessonIds. Otherwise fall back
+    // to the stored array (preserves prior behaviour for callers that
+    // didn't provide the map). The course-complete bonus uses the
+    // same live ratio so a curriculum that grew after enrolment
+    // doesn't keep flagging a half-finished course as done.
     let lessonsCompleted = 0
     let coursesCompleted = 0
     for (const e of enrs) {
-      lessonsCompleted += e.completedLessons.length
-      if (e.progress >= 100) coursesCompleted++
+      const liveSet = input.courseLessonIds?.get(e.courseId)
+      const aliveDone = liveSet
+        ? e.completedLessons.filter((id) => liveSet.has(id)).length
+        : e.completedLessons.length
+      lessonsCompleted += aliveDone
+      const courseLessonCount = liveSet?.size
+      const livePct =
+        courseLessonCount && courseLessonCount > 0
+          ? Math.round((aliveDone / courseLessonCount) * 100)
+          : e.progress
+      if (livePct >= 100) coursesCompleted++
     }
 
     // ── Engagement ──────────────────────────────────────────
@@ -291,14 +312,19 @@ export function computeLeaderboard(input: ScoreInputs): LeaderboardEntry[] {
 }
 
 /**
- * Compact tier label for the top of the leaderboard.
+ * Compact tier label for the top of the leaderboard. `total` is the
+ * cohort size (number of ranked students), not a sentinel.
  */
 export function tierForRank(rank: number, total: number): { label: string; emoji: string } | null {
+  if (rank < 1) return null
   if (rank === 1) return { label: "Champion", emoji: "🥇" }
   if (rank === 2) return { label: "Runner-up", emoji: "🥈" }
   if (rank === 3) return { label: "Bronze", emoji: "🥉" }
-  if (total <= 10 && rank <= 5) return { label: "Top 5", emoji: "⭐" }
-  if (total > 10 && rank <= Math.ceil(total * 0.1)) return { label: "Top 10%", emoji: "⭐" }
+  // For small cohorts we don't render a tier past 3rd — labelling
+  // 4th of 7 as "Top half" is noise. For larger cohorts we use a
+  // 10% slice (rounded UP so 11 students still has 2 top-10% rows).
+  if (total < 10) return null
+  if (rank <= Math.max(4, Math.ceil(total * 0.1))) return { label: "Top 10%", emoji: "⭐" }
   return null
 }
 

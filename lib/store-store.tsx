@@ -199,6 +199,11 @@ export interface Order {
   createdAt: string
   paidAt?: string
   refundedAt?: string
+  // Test purchases — true when the order was placed via the
+  // "Test purchase" admin affordance. Renders a "TEST" watermark
+  // on receipts + skips webhook fan-out so test orders don't
+  // pollute real CRM streams or revenue charts.
+  testMode?: boolean
 }
 
 export type EntitlementType =
@@ -243,6 +248,11 @@ export interface Subscription {
   currentPeriodEnd: string
   cancelAt?: string
   canceledAt?: string
+  /** Razorpay's subscription id (e.g. "sub_OABC...") — set when the
+   *  buyer paid through the real gateway. Used by the webhook
+   *  reconciler to match incoming subscription.charged events back
+   *  to the right local Subscription. Absent on stub-mode subs. */
+  gatewaySubscriptionId?: string
 }
 
 // ============================================================
@@ -346,6 +356,11 @@ export interface CheckoutInput {
   // the old stub behaviour (every charge auto-succeeds).
   paymentReference?: string
   paymentMethod?: "razorpay"
+  // Razorpay subscription id paired with paymentReference when the
+  // buyer authorised a recurring product through the real gateway.
+  // Stamped into the resulting Subscription row so the webhook
+  // reconciler can match charge events back to it later.
+  gatewaySubscriptionId?: string
   // Phase 2B — checkout order bumps. Each id refers to an existing
   // Product in the storefront; the buyer ticked a "Add the resource
   // pack for ₹X" checkbox alongside the main product. Bumps add
@@ -354,6 +369,15 @@ export interface CheckoutInput {
   // additional line items. Free / non-one-time bumps are silently
   // skipped — only deterministic-price products can ride along.
   bumpProductIds?: string[]
+  // Test mode — when true, the checkout runs the full pipeline
+  // (computes money, builds the order, mints entitlements) but
+  // SKIPS the webhook fan-out so the teacher's CRM doesn't see a
+  // fake "order.paid" event. The resulting Order is stamped with
+  // testMode=true so receipts + invoices show a "TEST" watermark.
+  // Used by the per-course "Test purchase" affordance — lets a
+  // teacher dry-run their own checkout flow without polluting
+  // real numbers.
+  testMode?: boolean
 }
 
 export type CheckoutResult =
@@ -696,9 +720,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // processPaymentStub for dev convenience until the real client
     // is wired up.
     const usingRealGateway = !!input.paymentReference
+    const isTest = input.testMode === true
     let paymentReference: string
     let paymentMethod: Order["paymentMethod"]
-    if (total === 0) {
+    if (isTest) {
+      // Test purchase — synthetic reference stamped TEST so the
+      // origin is obvious in every downstream surface (receipt,
+      // invoices list, Razorpay reconciler). No real money path.
+      paymentReference = `TEST-${Date.now().toString(36)}`
+      paymentMethod = "manual"
+    } else if (total === 0) {
       paymentReference = `free_${Date.now().toString(36)}`
       paymentMethod = "free"
     } else if (usingRealGateway) {
@@ -737,6 +768,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bumpLineItems: bumpLineItems.length > 0 ? bumpLineItems : undefined,
       createdAt: now,
       paidAt: now,
+      testMode: isTest || undefined,
     }
 
     // Subscription bookkeeping
@@ -751,6 +783,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         status: product.pricing.trialDays ? "trialing" : "active",
         currentPeriodStart: now,
         currentPeriodEnd: periodEnd,
+        gatewaySubscriptionId: input.gatewaySubscriptionId,
       }
       order.subscriptionId = sub.id
     }
@@ -762,6 +795,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const ents = grantEntitlementsForProduct(product, input.customerId, orderId)
     for (const bp of bumpProducts) {
       ents.push(...grantEntitlementsForProduct(bp, input.customerId, orderId))
+    }
+
+    // Cross-store hook (Phase 3C — Gap 11). Emit a DOM event for each
+    // course entitlement granted so the LMS store can auto-add the
+    // buyer to that course's default batch (when set). Two separate
+    // providers can't directly call each other's mutations, so we
+    // route through window dispatch — same pattern the trash module
+    // uses. Listeners are best-effort: an unmounted store just
+    // ignores the event. The next-step page still attempts the join
+    // when the user lands there as a belt-and-braces fallback.
+    if (typeof window !== "undefined") {
+      for (const e of ents) {
+        if (e.type === "course" && e.reference) {
+          window.dispatchEvent(
+            new CustomEvent("entitlement.course-granted", {
+              detail: { customerId: input.customerId, courseId: e.reference },
+            }),
+          )
+        }
+      }
     }
 
     // Commit all state in one go.
@@ -777,22 +830,30 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // entitlement granted maps 1:1 to an enrollment.created event so
     // CRM / fulfilment hooks can react to course access independently
     // of the order itself.
-    fireWebhookEvent("order.paid", {
-      id: order.id,
-      productId: order.productId,
-      customerEmail: order.customerEmail,
-      total: order.total,
-      currency: order.currency,
-      paymentReference: order.paymentReference,
-    })
-    for (const e of ents) {
-      fireWebhookEvent("enrollment.created", {
-        id: e.id,
-        type: e.type,
-        reference: e.reference,
-        customerId: e.customerId,
-        orderId,
+    //
+    // Test orders skip the entire fan-out: webhooks are downstream-
+    // facing (CRM, fulfilment, analytics) and a teacher running a
+    // dry-run should not see fake conversions appear in real
+    // dashboards. The order + entitlements ARE persisted so the
+    // teacher can walk the post-purchase flow end-to-end.
+    if (!isTest) {
+      fireWebhookEvent("order.paid", {
+        id: order.id,
+        productId: order.productId,
+        customerEmail: order.customerEmail,
+        total: order.total,
+        currency: order.currency,
+        paymentReference: order.paymentReference,
       })
+      for (const e of ents) {
+        fireWebhookEvent("enrollment.created", {
+          id: e.id,
+          type: e.type,
+          reference: e.reference,
+          customerId: e.customerId,
+          orderId,
+        })
+      }
     }
 
     return { ok: true, order, entitlements: ents }

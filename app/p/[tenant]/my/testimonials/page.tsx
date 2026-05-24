@@ -17,7 +17,7 @@
 //   3. The student sees their own pending submissions on this page so
 //      they know it's in the queue.
 //
-// Teacher publish / reject happens at /dashboard/portal/testimonials.
+// Instructor publish / reject happens at /dashboard/portal/testimonials.
 
 import { useMemo, useState } from "react"
 import {

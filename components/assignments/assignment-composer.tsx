@@ -71,7 +71,7 @@ interface AssignmentComposerProps {
    * closes this composer and calls this callback — letting the parent
    * open the QuickQuizDialog. We don't model quizzes as assignments
    * because they have their own QuizQuestion shape + a dedicated
-   * builder; this just gives the teacher one entry point for "post
+   * builder; this just gives the Instructor one entry point for "post
    * something for after this lesson".
    */
   onCreateQuiz?: () => void
@@ -192,19 +192,19 @@ export function AssignmentComposer({
 
   return (
     <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) reset() }}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-x-hidden overflow-y-auto">
+        <DialogHeader className="min-w-0">
           <DialogTitle className="flex items-center gap-2">
             <ClipboardList className="h-5 w-5 text-primary" />
             Post follow-up
           </DialogTitle>
-          <DialogDescription className="line-clamp-2">{contextLabel}</DialogDescription>
+          <DialogDescription className="line-clamp-2 break-words">{contextLabel}</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {/* Kind picker. Quiz is a passthrough — picking it closes
               this composer and lets the parent open the dedicated
-              quiz builder, so teachers have one entry point for any
+              quiz builder, so Instructors have one entry point for any
               kind of follow-up. */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {KIND_OPTIONS.map((opt) => {
@@ -313,7 +313,7 @@ export function AssignmentComposer({
 
           {/* Distribution — collapsed by default. The 3 toggle rows
               ship enabled; clicking "Customize channels" reveals them
-              so a teacher can mute (say) WhatsApp for a quiet release.
+              so a Instructor can mute (say) WhatsApp for a quiet release.
               Saves ~120px of vertical space + 3 toggle decisions for
               the 90% case. */}
           <ChannelsSection
@@ -419,15 +419,20 @@ function ResourcesEditor({
       {resources.length > 0 && (
         <ul className="space-y-1.5">
           {resources.map((r) => (
-            <li key={r.id} className="flex items-start gap-2 rounded-md border border-border/60 px-2 py-1.5">
-              <span className="mt-0.5 text-muted-foreground">
+            <li
+              key={r.id}
+              className="flex min-w-0 items-start gap-2 overflow-hidden rounded-md border border-border/60 px-2 py-1.5"
+            >
+              <span className="mt-1 shrink-0 text-muted-foreground">
                 {iconFor(r.type)}
               </span>
               <div className="min-w-0 flex-1 space-y-1">
                 <Input
                   value={r.label}
-                  onChange={(e) => update(r.id, { label: e.target.value })}
-                  className="h-7 text-xs"
+                  onChange={(e) => update(r.id, { label: e.target.value.slice(0, 120) })}
+                  maxLength={120}
+                  title={r.label}
+                  className="h-7 min-w-0 text-xs"
                 />
                 {r.type === "note" ? (
                   <Textarea
@@ -443,13 +448,13 @@ function ResourcesEditor({
                   </p>
                 )}
               </div>
-              <Badge variant="secondary" className="capitalize">{r.type}</Badge>
+              <Badge variant="secondary" className="shrink-0 capitalize">{r.type}</Badge>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 onClick={() => remove(r.id)}
-                className="h-7 w-7 text-destructive hover:text-destructive"
+                className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
               >
                 <X className="h-3.5 w-3.5" />
               </Button>

@@ -1,11 +1,10 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
   Plus,
-  Search,
   MoreHorizontal,
   Eye,
   Pencil,
@@ -26,7 +25,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
+import { fuzzySearch } from "@/lib/fuzzy-search"
 import { Checkbox } from "@/components/ui/checkbox"
 import { QuizShareDialog } from "@/components/quiz/quiz-share-dialog"
 import {
@@ -59,6 +59,10 @@ import {
 } from "@/components/ui/table"
 import { useLMS, generateId, type Quiz, type QuizQuestion } from "@/lib/lms-store"
 import { useConfirm } from "@/lib/use-confirm"
+import { QuizTemplatePicker } from "@/components/quiz/quiz-template-picker"
+import { QUIZ_TEMPLATES, type QuizTemplate } from "@/lib/quiz-templates"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Sparkles } from "lucide-react"
 import { useUrlState } from "@/lib/use-url-state"
 import { usePageShortcut } from "@/components/dashboard/shortcuts-provider"
 import { stripRichTextTags } from "@/components/editor/rich-text-content"
@@ -199,8 +203,51 @@ function buildQuizFromTemplate(seed: QuizTemplateSeed, courseId: string): Quiz {
 
 export default function QuizzesPage() {
   const router = useRouter()
-  const { quizzes, quizAttempts, courses, getCourseById, deleteQuiz, addQuiz, updateQuiz } = useLMS()
+  const { quizzes, quizAttempts, courses, getCourseById, getUserById, deleteQuiz, addQuiz, updateQuiz, currentUser } = useLMS()
   const confirm = useConfirm()
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false)
+
+  // Materialise a Quiz from a QuizTemplate. Uses the first course as
+  // the destination if the teacher didn't pre-pick one — the editor
+  // re-asks immediately so the choice surfaces.
+  const createFromQuizTemplate = (t: QuizTemplate) => {
+    const defaultCourseId = courses[0]?.id
+    if (!defaultCourseId) {
+      toast.error("Create a course first so the quiz has a home.")
+      router.push("/dashboard/courses/new")
+      return
+    }
+    const quiz: Quiz = {
+      id: generateId("quiz"),
+      title: t.title,
+      description: t.description,
+      courseId: defaultCourseId,
+      questions: t.questions.map((q) => ({ ...q, id: generateId("q") })),
+      timeLimit: t.timeLimit,
+      passingScore: t.passingScore,
+      maxAttempts: 3,
+      shuffleQuestions: false,
+      showAnswers: true,
+      gradingMode: t.gradingMode,
+      createdAt: new Date().toISOString(),
+      // Track ownership so the list card can render the creator's
+      // avatar. Falls back to "unknown" if the auth session hasn't
+      // hydrated yet — matches whiteboard behaviour.
+      createdBy: currentUser?.id ?? "unknown",
+    }
+    addQuiz(quiz)
+    setTemplatePickerOpen(false)
+    toast.success(`Created "${quiz.title}" — edit the questions next.`)
+    router.push(`/dashboard/quizzes/${quiz.id}`)
+  }
+
+  // Initials helper reused by the owner pill below the card title.
+  const initialsOf = (name: string): string => {
+    const tokens = name.trim().split(/\s+/).filter(Boolean)
+    if (tokens.length === 0) return "??"
+    if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase()
+    return (tokens[0][0] + tokens[tokens.length - 1][0]).toUpperCase()
+  }
   // Filters synced to ?q= and ?course= so refresh + back button
   // preserve the view. Defaults are stripped from the URL — a clean
   // /dashboard/quizzes link means "everything, no filter".
@@ -215,14 +262,7 @@ export default function QuizzesPage() {
   const [shareQuizId, setShareQuizId] = useState<string | null>(null)
   const shareQuiz = shareQuizId ? quizzes.find(q => q.id === shareQuizId) ?? null : null
 
-  // Search input ref so "/" can focus it from anywhere on the page.
-  const searchInputRef = useRef<HTMLInputElement | null>(null)
-  usePageShortcut({
-    id: "quizzes:focus-search",
-    keys: "/",
-    description: "Focus search",
-    handler: () => searchInputRef.current?.focus(),
-  })
+  // "/" focus shortcut is owned by SearchInput. "n" still lives here.
   usePageShortcut({
     id: "quizzes:new",
     keys: "n",
@@ -246,11 +286,13 @@ export default function QuizzesPage() {
 
   const filteredQuizzes = useMemo(
     () =>
-      quizzes.filter((quiz) => {
-        const matchesSearch = quiz.title.toLowerCase().includes(search.toLowerCase())
-        const matchesCourse = courseFilter === "all" || quiz.courseId === courseFilter
-        return matchesSearch && matchesCourse
-      }),
+      fuzzySearch(
+        quizzes.filter(
+          (quiz) => courseFilter === "all" || quiz.courseId === courseFilter,
+        ),
+        search,
+        (q) => q.title,
+      ),
     [quizzes, search, courseFilter],
   )
 
@@ -371,11 +413,13 @@ export default function QuizzesPage() {
         </div>
         <div className="flex items-center gap-2">
           <TakeATourButton tourId="quizzes-list-v1" />
-          <Button asChild data-tour="quizzes-create">
-            <Link href="/dashboard/quizzes/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Create Quiz
-            </Link>
+          {/* Single Create Quiz entrypoint — opens the template picker.
+              The picker itself carries "Start blank instead" in its
+              header for the from-scratch path, so this one button
+              covers both flows like the whiteboard "+ New board". */}
+          <Button onClick={() => setTemplatePickerOpen(true)} data-tour="quizzes-create" className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create Quiz
           </Button>
         </div>
       </div>
@@ -440,14 +484,14 @@ export default function QuizzesPage() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="relative flex-1" data-tour="quizzes-search">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                ref={searchInputRef}
-                placeholder="Search quizzes…  ( / )"
+            <div data-tour="quizzes-search" className="flex-1">
+              <SearchInput
+                pageId="quizzes"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+                onChange={setSearch}
+                placeholder="Search quizzes…"
+                ariaLabel="Search quizzes"
+                shortcutDescription="Focus quiz search"
               />
             </div>
             <Select value={courseFilter} onValueChange={setCourseFilter}>
@@ -534,62 +578,42 @@ export default function QuizzesPage() {
         </CardHeader>
         <CardContent>
           {quizzes.length === 0 ? (
-            // True-empty: no quizzes at all in the workspace. Show
-            // template starting points so the teacher's first quiz
-            // isn't a blank form. Picking a template creates a real
-            // Quiz in the store and jumps to the edit page where they
-            // can tweak the seeded questions.
+            // True-empty: no quizzes at all in the workspace. We show a
+            // featured trio of templates inline, then route the
+            // "Browse all" button to the full picker (18 templates with
+            // search + subject filters). Keeps the empty state quick to
+            // scan while still exposing the full library.
             (() => {
-              const defaultCourseId = courses[0]?.id
-              const createFromTemplate = (
-                seedKey: "pop" | "module" | "reflection",
-              ) => {
-                if (!defaultCourseId) {
-                  toast.error("Create a course first so the quiz has a home.")
-                  router.push("/dashboard/courses/new")
-                  return
-                }
-                const seed = QUIZ_TEMPLATE_SEEDS[seedKey]
-                const quiz = buildQuizFromTemplate(seed, defaultCourseId)
-                addQuiz(quiz)
-                toast.success(`Created "${quiz.title}" — tweak the questions next.`)
-                router.push(`/dashboard/quizzes/${quiz.id}`)
+              const featured = ["pop-quiz", "module-assessment", "reflection"]
+                .map((k) => QUIZ_TEMPLATES.find((t) => t.key === k))
+                .filter((t): t is QuizTemplate => Boolean(t))
+              const accentByKey: Record<string, "amber" | "emerald" | "violet"> = {
+                "pop-quiz": "amber",
+                "module-assessment": "emerald",
+                reflection: "violet",
               }
-              const templates: EmptyStateTemplate[] = [
-                {
-                  key: "pop",
-                  title: "Pop quiz",
-                  preview: "5-question auto-graded check. Mix of true/false and short answer — 10 min timer.",
-                  icon: <Zap className="h-4 w-4" />,
-                  accent: "amber",
-                  onSelect: () => createFromTemplate("pop"),
-                },
-                {
-                  key: "module",
-                  title: "Module assessment",
-                  preview: "Graded 10-question test, 70% passing, 30 min limit. Auto-scored multiple choice.",
-                  icon: <Award className="h-4 w-4" />,
-                  accent: "emerald",
-                  onSelect: () => createFromTemplate("module"),
-                },
-                {
-                  key: "reflection",
-                  title: "Reflection prompt",
-                  preview: "One open-ended question, teacher-reviewed. Best for journaling end-of-week takeaways.",
-                  icon: <MessageSquareText className="h-4 w-4" />,
-                  accent: "violet",
-                  onSelect: () => createFromTemplate("reflection"),
-                },
-              ]
+              const iconByKey: Record<string, React.ReactNode> = {
+                "pop-quiz": <Zap className="h-4 w-4" />,
+                "module-assessment": <Award className="h-4 w-4" />,
+                reflection: <MessageSquareText className="h-4 w-4" />,
+              }
+              const templates: EmptyStateTemplate[] = featured.map((t) => ({
+                key: t.key,
+                title: t.title,
+                preview: t.description,
+                icon: iconByKey[t.key] ?? <Sparkles className="h-4 w-4" />,
+                accent: accentByKey[t.key] ?? "primary",
+                onSelect: () => createFromQuizTemplate(t),
+              }))
               return (
                 <EmptyStateWithTemplates
                   icon={<FileQuestion className="h-5 w-5" />}
                   title="No quizzes yet"
-                  description="Pick a template to land on a working quiz in one click, or start from scratch."
+                  description={`Pick one of the popular starters, or browse all ${QUIZ_TEMPLATES.length} templates across K-12, engineering, management, and entrance prep.`}
                   templates={templates}
                   blankAction={{
-                    label: "Start blank instead",
-                    onSelect: () => router.push("/dashboard/quizzes/new"),
+                    label: `Browse all ${QUIZ_TEMPLATES.length} templates`,
+                    onSelect: () => setTemplatePickerOpen(true),
                   }}
                 />
               )
@@ -675,7 +699,7 @@ export default function QuizzesPage() {
                                   : "bg-muted text-muted-foreground"
                               }`}
                             >
-                              {mode === "teacher" ? "Teacher-graded" : "Auto-graded"}
+                              {mode === "teacher" ? "Instructor-graded" : "Auto-graded"}
                             </span>
                             {stats.pendingReview > 0 && (
                               <Link
@@ -691,6 +715,26 @@ export default function QuizzesPage() {
                               plain text in the list (tags would leak
                               like "<p>te</p>" otherwise). */}
                           <p className="mt-0.5 text-sm text-muted-foreground line-clamp-1">{stripRichTextTags(quiz.description)}</p>
+                          {/* Owner pill — avatar + name. Same shape as
+                              the whiteboard list so attribution reads
+                              the same across surfaces. */}
+                          {(() => {
+                            const owner = quiz.createdBy ? getUserById(quiz.createdBy) : undefined
+                            const ownerName = owner?.name ?? "Unknown"
+                            return (
+                              <div className="mt-1 flex items-center gap-1.5">
+                                <Avatar className="h-5 w-5">
+                                  {owner?.avatar ? <AvatarImage src={owner.avatar} alt={ownerName} /> : null}
+                                  <AvatarFallback className="text-[9px] font-semibold">
+                                    {initialsOf(ownerName)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-[11px] font-medium text-foreground/80" title={ownerName}>
+                                  {ownerName}
+                                </span>
+                              </div>
+                            )
+                          })()}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -795,6 +839,17 @@ export default function QuizzesPage() {
           onOpenChange={(open) => !open && setShareQuizId(null)}
         />
       )}
+
+      {/* Quiz template picker — single entrypoint from the header
+          "+ Create Quiz" button. The picker carries "Start blank
+          instead" in its own header to cover the from-scratch path,
+          so we route that here. */}
+      <QuizTemplatePicker
+        open={templatePickerOpen}
+        onOpenChange={setTemplatePickerOpen}
+        onPick={createFromQuizTemplate}
+        onStartBlank={() => router.push("/dashboard/quizzes/new")}
+      />
     </div>
   )
 }

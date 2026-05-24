@@ -5,7 +5,7 @@
 // Distinct from /dashboard/users (legacy "manage team" page that
 // pairs admins + instructors in a flat table) and from
 // /dashboard/portal/faculty (the marketing showcase that controls
-// who appears on /p/[tenant]/teachers). This page is the one place
+// who appears on /p/[tenant]/instructors). This page is the one place
 // to see every teacher with a login, invite new ones, and edit any
 // of their profile or status. The shape mirrors /dashboard/students
 // (card grid + search + add CTA) so the IA reads like "Students for
@@ -14,7 +14,6 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import {
-  Search,
   UserPlus,
   Mail,
   Phone,
@@ -26,7 +25,8 @@ import {
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { SearchInput } from "@/components/ui/search-input"
+import { fuzzySearch } from "@/lib/fuzzy-search"
 import { cn } from "@/lib/utils"
 import { useLMS } from "@/lib/lms-store"
 import { lookupFaculty } from "@/lib/faculty-registry"
@@ -62,16 +62,8 @@ export default function FacultyListPage() {
   const teacherCap = limits.teachers
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return faculty.filter((u) => {
-      if (roleFilter !== "all" && u.role !== roleFilter) return false
-      if (!q) return true
-      return (
-        u.name.toLowerCase().includes(q) ||
-        u.email.toLowerCase().includes(q) ||
-        (u.phone ?? "").toLowerCase().includes(q)
-      )
-    })
+    const base = faculty.filter((u) => roleFilter === "all" || u.role === roleFilter)
+    return fuzzySearch(base, search, (u) => [u.name, u.email, u.phone ?? ""])
   }, [faculty, search, roleFilter])
 
   return (
@@ -81,8 +73,7 @@ export default function FacultyListPage() {
         <div>
           <h1 className="font-serif text-2xl font-bold tracking-tight">Instructors</h1>
           <p className="text-muted-foreground">
-            Teachers and admins with a login to this workspace. Add new
-            members and they&apos;ll get an email to set a password.
+            Invite teachers and admins. New members will get an email to set their password.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -117,15 +108,15 @@ export default function FacultyListPage() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative max-w-sm flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search by name, email, or phone…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          pageId="faculty"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name, email, or phone…"
+          ariaLabel="Search instructors"
+          shortcutDescription="Focus instructor search"
+          className="max-w-sm flex-1"
+        />
         <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
           {(["all", "instructor", "admin"] as const).map((r) => (
             <button

@@ -18,7 +18,9 @@
 // entry ages out — no teacher action needed.
 
 import { useEffect, useMemo, useState } from "react"
-import { MessageCircleQuestion, Send } from "lucide-react"
+import { Loader2, MessageCircleQuestion, Send, Sparkles, ThumbsUp } from "lucide-react"
+import { aiDoubtReply } from "@/lib/ai-client"
+import { stripRichTextTags } from "@/components/editor/rich-text-content"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -77,6 +79,24 @@ export function AskDoubtDialog({
   const [guestPhone, setGuestPhone] = useState("")
   const [guestPhoneValid, setGuestPhoneValid] = useState(false)
   const [sent, setSent] = useState(false)
+  // AI-tutor preview state. The flow is:
+  //   idle    → composer is open, no AI activity yet
+  //   loading → student tapped "Try AI first" — call in flight
+  //   shown   → AI returned an answer; student decides whether
+  //             it solved their question or whether to send to
+  //             the teacher
+  //   skipped → student explicitly opted out (e.g. "Ask teacher
+  //             directly" button) so we don't keep re-suggesting
+  // We deliberately don't auto-fire the AI on submit because
+  // teachers + students reported that auto-suggesting felt like
+  // a wall ("just answer my question"). Opt-in keeps it useful.
+  const [aiState, setAiState] = useState<"idle" | "loading" | "shown" | "skipped">("idle")
+  const [aiAnswer, setAiAnswer] = useState<string>("")
+  // Distinguishes which path closed the dialog so the success
+  // panel reads honestly. "teacher" = the doubt actually shipped
+  // to the inbox; "ai" = the student marked the AI answer as
+  // sufficient and we never wrote a Doubt row.
+  const [resolvedBy, setResolvedBy] = useState<"ai" | "teacher" | null>(null)
   // Once-a-minute tick so the lock countdown stays accurate while
   // the dialog sits open across the 24h boundary.
   const [, tick] = useState(0)
@@ -108,6 +128,58 @@ export function AskDoubtDialog({
     setGuestPhone("")
     setGuestPhoneValid(false)
     setSent(false)
+    setAiState("idle")
+    setAiAnswer("")
+    setResolvedBy(null)
+  }
+
+  // Pull a course context string for the AI prompt. We don't have
+  // the course title in scope here — courseId is the closest hint —
+  // so we keep the context tight ("you're tutoring a student in
+  // course <id>") and let the model rely on the question body. The
+  // existing aiDoubtReply backend handles the heavy lifting.
+  const askAi = async () => {
+    const question = `${title.trim()}\n\n${stripRichTextTags(body).slice(0, 1500)}`
+    if (!question.trim()) return
+    setAiState("loading")
+    try {
+      const r = await aiDoubtReply({
+        question,
+        context: courseId ? `Course id: ${courseId}` : undefined,
+        tone: "encouraging",
+      })
+      if ("error" in r) {
+        // Fail open — show a friendly message + let them send to
+        // the teacher. AI being unavailable shouldn't block the
+        // human escalation path.
+        setAiAnswer(
+          "The AI tutor couldn't respond right now. Send your question to the teacher — they'll get back to you.",
+        )
+      } else {
+        setAiAnswer(r.content)
+      }
+      setAiState("shown")
+    } catch {
+      setAiAnswer(
+        "Couldn't reach the AI tutor. Send your question to the teacher instead.",
+      )
+      setAiState("shown")
+    }
+  }
+
+  const markAiResolved = () => {
+    // The student says the AI answered their question; we don't
+    // write a Doubt at all (no clutter in the teacher's inbox).
+    // The dialog closes with a positive confirmation. Rate-limit
+    // is still incremented so the AI route doesn't bypass the
+    // per-day cap.
+    pushRate(rateKey, ENQUIRY_MAX_PER_DAY, ENQUIRY_WINDOW_MS)
+    setResolvedBy("ai")
+    setSent(true)
+    setTimeout(() => {
+      setOpen(false)
+      reset()
+    }, 1500)
   }
 
   const emailValid = !guestEmail || /^[^@]+@[^@]+\.[^@]+$/.test(guestEmail)
@@ -210,6 +282,7 @@ export function AskDoubtDialog({
     }
 
     pushRate(rateKey, ENQUIRY_MAX_PER_DAY, ENQUIRY_WINDOW_MS)
+    setResolvedBy("teacher")
     setSent(true)
     setTimeout(() => {
       setOpen(false)
@@ -252,7 +325,9 @@ export function AskDoubtDialog({
         </DialogHeader>
         {sent ? (
           <div className="rounded-md border border-success/40 bg-success/5 p-4 text-center text-sm text-success">
-            ✓ Question sent. The teacher will be notified.
+            {resolvedBy === "ai"
+              ? "✓ Glad the AI tutor helped. Catch you next time."
+              : "✓ Question sent. The teacher will be notified."}
           </div>
         ) : (
           <>
@@ -317,6 +392,69 @@ export function AskDoubtDialog({
                   minHeight={160}
                 />
               </div>
+              {/* AI tutor panel — three states. Idle = a soft CTA
+                  to try the AI first. Loading = spinner. Shown =
+                  AI answer + "this helped" / "still send to
+                  teacher" buttons. Skipped = collapsed back to
+                  baseline so we don't nag. */}
+              {aiState === "shown" ? (
+                <div className="space-y-2 rounded-md border border-primary/30 bg-primary/[0.04] p-3">
+                  <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+                    <Sparkles className="h-3 w-3" />
+                    AI tutor — quick first pass
+                  </p>
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+                    {aiAnswer}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    AI is a starting point — it can be wrong. If this answered
+                    your question, great. If not, send it to the teacher and
+                    they&rsquo;ll get back to you.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={markAiResolved}
+                      className="border-success/50 text-success hover:bg-success/10"
+                    >
+                      <ThumbsUp className="mr-1.5 h-3 w-3" />
+                      That helped — close
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setAiState("skipped")}
+                    >
+                      Show me the teacher path
+                    </Button>
+                  </div>
+                </div>
+              ) : aiState === "loading" ? (
+                <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  AI tutor is reading your question…
+                </div>
+              ) : aiState === "idle" && !isRichTextEmpty(body) ? (
+                <button
+                  type="button"
+                  onClick={() => void askAi()}
+                  disabled={!title.trim() || isRichTextEmpty(body)}
+                  className="flex w-full items-center justify-between gap-3 rounded-md border border-primary/30 bg-primary/[0.04] px-3 py-2.5 text-left transition-colors hover:bg-primary/[0.08] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <span className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">
+                      Try the AI tutor first
+                    </span>
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    Instant answer · falls through to teacher if it misses
+                  </span>
+                </button>
+              ) : null}
               <p
                 className={cn(
                   "text-xs",
@@ -339,7 +477,7 @@ export function AskDoubtDialog({
               <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
               <Button onClick={submit} disabled={!canSubmit}>
                 <Send className="mr-1.5 h-4 w-4" />
-                Send to teacher
+                {aiState === "shown" ? "Still send to teacher" : "Send to teacher"}
               </Button>
             </DialogFooter>
           </>

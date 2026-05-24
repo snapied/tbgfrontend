@@ -14,13 +14,13 @@
 // invite still goes out so the person opts in to this workspace;
 // we don't auto-link accounts without consent.
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import {
   AlertTriangle,
-  Image as ImageIcon,
   Loader2,
   Mail,
+  RefreshCw,
   Send,
   Shield,
   Sparkles,
@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select"
 import { PhoneInput } from "@/components/forms/phone-input"
 import { ThumbnailField } from "@/components/upload/thumbnail-field"
+import { RichTextEditor } from "@/components/editor/rich-text-editor"
 import { generateId, useLMS, type User } from "@/lib/lms-store"
 import { useTenant } from "@/lib/tenant-store"
 import { lookupFaculty, recordFacultyTenant, dropFacultyTenant } from "@/lib/faculty-registry"
@@ -115,10 +116,33 @@ export function FacultyForm({ mode, initial }: Props) {
   const [role, setRole] = useState<FacultyRole>(
     (initial?.role as FacultyRole) ?? "instructor",
   )
-  const [bio, setBio] = useState(initial?.bio ?? "")
+  // 55-char hard cap — the public teacher card has roughly 55
+  // chars of width before it line-breaks past the photo column.
+  // Capping at the data layer means we never have to truncate
+  // visually downstream + the teacher sees a live counter while
+  // typing.
+  const BIO_MAX = 55
+  const [bio, setBio] = useState((initial?.bio ?? "").slice(0, BIO_MAX))
+  // Long-form "tell more about yourself" — Tiptap HTML, surfaced
+  // in the About card on the public teacher detail page. Stored
+  // as a separate field so the Bio (short) and the
+  // profile bio (rich) don't fight each other for one string.
+  const [about, setAbout] = useState(initial?.about ?? "")
   const [avatar, setAvatar] = useState(initial?.avatar ?? "")
+  // Cover image — pulled from the same User record so a teacher
+  // who already filled in their /dashboard/portal/profile cover
+  // sees it pre-populated here. New field on the form; not
+  // previously settable from this page.
+  const [coverImageUrl, setCoverImageUrl] = useState(initial?.coverImageUrl ?? "")
+  // "Same as workspace profile" detection. When the faculty member
+  // being edited is the signed-in user (the workspace owner editing
+  // their own profile in two places), we offer a one-click sync
+  // from /dashboard/portal/profile so they don't have to maintain
+  // two parallel records. This compares ids — the LMS-store
+  // currentUser is the canonical record both surfaces read from.
+  const isSelfProfile = !!initial && !!currentUser && initial.id === currentUser.id
   // Online presence — all optional. Surfaced on the public
-  // instructor card on every course page + /p/[tenant]/teachers.
+  // instructor card on every course page + /p/[tenant]/instructors.
   const [portfolioUrl, setPortfolioUrl] = useState(initial?.portfolioUrl ?? "")
   const [linkedInUrl, setLinkedInUrl] = useState(initial?.linkedInUrl ?? "")
   const [twitterUrl, setTwitterUrl] = useState(initial?.twitterUrl ?? "")
@@ -218,6 +242,8 @@ export function FacultyForm({ mode, initial }: Props) {
           phone,
           avatar: avatar || undefined,
           bio: bio || undefined,
+          about: about || undefined,
+          coverImageUrl: coverImageUrl || undefined,
           role,
           createdAt: new Date().toISOString(),
           invitedAt: new Date().toISOString(),
@@ -243,6 +269,8 @@ export function FacultyForm({ mode, initial }: Props) {
           phone,
           avatar: avatar || undefined,
           bio: bio || undefined,
+          about: about || undefined,
+          coverImageUrl: coverImageUrl || undefined,
           role,
           ...socialFields,
           // Email intentionally not editable — switching emails on a
@@ -301,14 +329,150 @@ export function FacultyForm({ mode, initial }: Props) {
     router.push("/dashboard/faculty")
   }
 
+  // Pull-from-public-profile sync. Pulls the canonical fields off
+  // the User record being edited (`initial`) and writes them into
+  // form state.
+  //
+  // Why `initial` and not `currentUser`: the old version pulled
+  // from `currentUser` (the signed-in admin), which (a) silently
+  // overwrote a different teacher's bio with the admin's bio when
+  // an admin was editing someone else and (b) was a no-op for the
+  // self-edit case because `currentUser` and `initial` point at
+  // the same User record. Pulling from `initial` is correct in
+  // both cases: the form snapshot can drift from the live User
+  // record when the same person is updated from
+  // /dashboard/portal/profile in another tab, and this button
+  // (plus the auto-sync effect below) brings the form back in
+  // line. Force-sync — overwrites local values even when they
+  // were edited; explicit click is the user telling us "I want
+  // the latest from the public profile".
+  function syncFromWorkspaceProfile() {
+    if (!initial) return
+    if (initial.name) setName(initial.name)
+    if (initial.phone) {
+      setPhone(initial.phone)
+      setPhoneValid(true)
+    }
+    setAvatar(initial.avatar ?? "")
+    setCoverImageUrl(initial.coverImageUrl ?? "")
+    setBio((initial.bio ?? "").slice(0, BIO_MAX))
+    setAbout(initial.about ?? "")
+    setPortfolioUrl(initial.portfolioUrl ?? "")
+    setLinkedInUrl(initial.linkedInUrl ?? "")
+    setTwitterUrl(initial.twitterUrl ?? "")
+    setInstagramUrl(initial.instagramUrl ?? "")
+    setYoutubeUrl(initial.youtubeUrl ?? "")
+    setGithubUrl(initial.githubUrl ?? "")
+    toast.success("Pulled latest from public profile.")
+  }
+
+  // Auto-sync: when the live User record (initial prop) updates
+  // out-of-band — typically because the same person updated their
+  // /dashboard/portal/profile in another tab — refresh the bio /
+  // about / social / cover / avatar fields here. We DO NOT auto-
+  // sync the name / phone / role because those are workspace-
+  // admin controls and shouldn't be hijacked by a profile edit
+  // happening elsewhere.
+  //
+  // Dirty-edit protection: each field only re-syncs if its current
+  // value matches what we last seeded into it. If the user has
+  // started typing locally, the previously-seeded value won't
+  // match anymore and we leave their work alone. The explicit
+  // Sync button above always force-overwrites.
+  const seedRef = useRef({
+    bio: initial?.bio ?? "",
+    about: initial?.about ?? "",
+    avatar: initial?.avatar ?? "",
+    coverImageUrl: initial?.coverImageUrl ?? "",
+    portfolioUrl: initial?.portfolioUrl ?? "",
+    linkedInUrl: initial?.linkedInUrl ?? "",
+    twitterUrl: initial?.twitterUrl ?? "",
+    instagramUrl: initial?.instagramUrl ?? "",
+    youtubeUrl: initial?.youtubeUrl ?? "",
+    githubUrl: initial?.githubUrl ?? "",
+  })
+  useEffect(() => {
+    if (!initial) return
+    const seed = seedRef.current
+    const next = {
+      bio: (initial.bio ?? "").slice(0, BIO_MAX),
+      about: initial.about ?? "",
+      avatar: initial.avatar ?? "",
+      coverImageUrl: initial.coverImageUrl ?? "",
+      portfolioUrl: initial.portfolioUrl ?? "",
+      linkedInUrl: initial.linkedInUrl ?? "",
+      twitterUrl: initial.twitterUrl ?? "",
+      instagramUrl: initial.instagramUrl ?? "",
+      youtubeUrl: initial.youtubeUrl ?? "",
+      githubUrl: initial.githubUrl ?? "",
+    }
+    if (next.bio !== seed.bio && bio === seed.bio) setBio(next.bio)
+    if (next.about !== seed.about && about === seed.about) setAbout(next.about)
+    if (next.avatar !== seed.avatar && avatar === seed.avatar) setAvatar(next.avatar)
+    if (next.coverImageUrl !== seed.coverImageUrl && coverImageUrl === seed.coverImageUrl) setCoverImageUrl(next.coverImageUrl)
+    if (next.portfolioUrl !== seed.portfolioUrl && portfolioUrl === seed.portfolioUrl) setPortfolioUrl(next.portfolioUrl)
+    if (next.linkedInUrl !== seed.linkedInUrl && linkedInUrl === seed.linkedInUrl) setLinkedInUrl(next.linkedInUrl)
+    if (next.twitterUrl !== seed.twitterUrl && twitterUrl === seed.twitterUrl) setTwitterUrl(next.twitterUrl)
+    if (next.instagramUrl !== seed.instagramUrl && instagramUrl === seed.instagramUrl) setInstagramUrl(next.instagramUrl)
+    if (next.youtubeUrl !== seed.youtubeUrl && youtubeUrl === seed.youtubeUrl) setYoutubeUrl(next.youtubeUrl)
+    if (next.githubUrl !== seed.githubUrl && githubUrl === seed.githubUrl) setGithubUrl(next.githubUrl)
+    seedRef.current = next
+    // We deliberately only depend on `initial` — re-running on every
+    // local edit would constantly clobber the user's typing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initial])
+
   return (
     <div className="space-y-6">
       <ProductTour
         tourId={mode === "new" ? "faculty-new-v1" : "faculty-edit-v1"}
         steps={mode === "new" ? FACULTY_NEW_TOUR : FACULTY_EDIT_TOUR}
       />
-      <div className="flex justify-end">
+      {/* Top action bar — primary CTAs live up here so they're
+          visible without scrolling on long forms. Save-at-bottom
+          was getting lost below the social-links grid. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <TakeATourButton tourId={mode === "new" ? "faculty-new-v1" : "faculty-edit-v1"} />
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Pull-from-public-profile button. Available on every
+              edit (not just self-edit) so admins managing other
+              teachers can also pick up edits the teacher made on
+              their own /dashboard/portal/profile. The button is
+              additive to the auto-sync effect above — it
+              force-overwrites local edits, whereas auto-sync
+              respects in-progress typing. */}
+          {mode === "edit" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={syncFromWorkspaceProfile}
+              title={isSelfProfile
+                ? "Refresh bio, about, socials, and photo from your public profile"
+                : "Refresh bio, about, socials, and photo from this teacher's public profile"}
+            >
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              {isSelfProfile ? "Sync from workspace profile" : "Pull latest from public profile"}
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            onClick={() => router.push("/dashboard/faculty")}
+            disabled={busy}
+          >
+            Cancel
+          </Button>
+          <Button onClick={submit} disabled={!canSubmit} data-tour="faculty-submit">
+            {busy ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : mode === "new" ? (
+              <Send className="mr-2 h-4 w-4" />
+            ) : (
+              <UserPlus className="mr-2 h-4 w-4" />
+            )}
+            {mode === "new" ? "Add & send invite" : "Save changes"}
+          </Button>
+        </div>
       </div>
       <Card>
         <CardContent className="space-y-5 p-6">
@@ -343,16 +507,23 @@ export function FacultyForm({ mode, initial }: Props) {
             </div>
           )}
 
-          {/* Avatar + identity */}
-          <div className="grid gap-5 sm:grid-cols-[auto_1fr]">
+          {/* Avatar + identity. Photo column is constrained to
+              w-40 — ThumbnailField uses aspect-video w-full
+              internally, so without a wrapper it stretches to fill
+              the grid's "auto" track and dominates the form. 160px
+              is wide enough to read the avatar preview but narrow
+              enough that the identity fields keep most of the row. */}
+          <div className="grid gap-5 sm:grid-cols-[10rem_1fr]">
             <div className="space-y-2">
               <Label className="text-xs">Photo</Label>
-              <ThumbnailField
-                value={avatar}
-                onChange={(url) => setAvatar(url ?? "")}
-                defaultTitle={name || "Instructor"}
-                folder="faculty"
-              />
+              <div className="w-40">
+                <ThumbnailField
+                  value={avatar}
+                  onChange={(url) => setAvatar(url ?? "")}
+                  defaultTitle={name || "Instructor"}
+                  folder="faculty"
+                />
+              </div>
             </div>
             <div className="space-y-4">
               <div className="space-y-1.5">
@@ -389,6 +560,22 @@ export function FacultyForm({ mode, initial }: Props) {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Cover image — wide 16:9 banner above the teacher's
+              public profile card. Optional; falls back to a
+              generated gradient on the public side when unset. */}
+          <div className="space-y-2">
+            <Label className="text-xs">Cover image (optional)</Label>
+            <ThumbnailField
+              value={coverImageUrl}
+              onChange={(url) => setCoverImageUrl(url ?? "")}
+              defaultTitle={name || "Instructor"}
+              folder="faculty"
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Wide 16:9 banner shown above the public teacher profile. Leave blank for an auto-generated gradient.
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -428,17 +615,48 @@ export function FacultyForm({ mode, initial }: Props) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="f-bio">Short bio (optional)</Label>
+            <div className="flex items-end justify-between gap-2">
+              <Label htmlFor="f-bio">Bio (optional)</Label>
+              <span
+                className={
+                  "text-[11px] tabular-nums " +
+                  (bio.length >= BIO_MAX
+                    ? "text-destructive"
+                    : "text-muted-foreground")
+                }
+              >
+                {bio.length} / {BIO_MAX}
+              </span>
+            </div>
             <Textarea
               id="f-bio"
               value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              rows={3}
-              placeholder="One-paragraph intro — what they teach, where they're from, why students love them."
+              onChange={(e) => setBio(e.target.value.slice(0, BIO_MAX))}
+              maxLength={BIO_MAX}
+              rows={2}
+              placeholder="One line, e.g. 'Calculus prof. Ex-IIT. Loves whiteboards.'"
             />
             <p className="text-[11px] text-muted-foreground">
-              Shown on /p/{currentTenant?.slug ?? "your-tenant"}/teachers and on every course this
-              teacher publishes.
+              Shown under the name on the teacher card across /p/{currentTenant?.slug ?? "your-tenant"}/instructors and every course this teacher publishes. Keep it tight — the card breaks past one line beyond {BIO_MAX} characters.
+            </p>
+          </div>
+
+          {/* About — long-form profile bio. WYSIWYG so the teacher
+              can write headings, links, lists, the lot. Renders
+              inside the "About <name>" card on the public teacher
+              detail page. Distinct from `bio` (the 55-char card
+              tagline above) because the card and the profile
+              page have very different copy needs. */}
+          <div className="space-y-1.5">
+            <Label>About — tell more about yourself (optional)</Label>
+            <RichTextEditor
+              value={about}
+              onChange={setAbout}
+              placeholder="Where you've taught, what you specialise in, what your students walk away knowing. A few paragraphs is plenty."
+              minHeight={200}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Shown in the &ldquo;About&rdquo; card on /p/{currentTenant?.slug ?? "your-tenant"}/instructors/&lt;handle&gt;. Formatting (bold, lists, links) is preserved.
             </p>
           </div>
 
@@ -521,57 +739,35 @@ export function FacultyForm({ mode, initial }: Props) {
         </CardContent>
       </Card>
 
-      {/* Footer actions */}
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Footer — secondary destructive/auxiliary actions only.
+          Primary Save/Cancel live in the top bar. */}
+      {mode === "edit" && initial && (
         <div className="flex flex-wrap gap-2">
-          {mode === "edit" && initial && (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={resendInvite}
-                disabled={busy}
-              >
-                <Mail className="mr-1.5 h-4 w-4" />
-                {initial.invitedAt && !initial.lastLoginAt
-                  ? "Resend invite"
-                  : "Send password reset"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={onDelete}
-                disabled={busy}
-              >
-                <Trash2 className="mr-1.5 h-4 w-4" />
-                Remove from workspace
-              </Button>
-            </>
-          )}
-        </div>
-        <div className="flex justify-end gap-2">
           <Button
-            variant="ghost"
-            onClick={() => router.push("/dashboard/faculty")}
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={resendInvite}
             disabled={busy}
           >
-            Cancel
+            <Mail className="mr-1.5 h-4 w-4" />
+            {initial.invitedAt && !initial.lastLoginAt
+              ? "Resend invite"
+              : "Send password reset"}
           </Button>
-          <Button onClick={submit} disabled={!canSubmit} data-tour="faculty-submit">
-            {busy ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : mode === "new" ? (
-              <Send className="mr-2 h-4 w-4" />
-            ) : (
-              <UserPlus className="mr-2 h-4 w-4" />
-            )}
-            {mode === "new" ? "Add & send invite" : "Save changes"}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={onDelete}
+            disabled={busy}
+          >
+            <Trash2 className="mr-1.5 h-4 w-4" />
+            Remove from workspace
           </Button>
         </div>
-      </div>
+      )}
     </div>
   )
 }

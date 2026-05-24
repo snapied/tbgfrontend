@@ -1,6 +1,6 @@
 "use client"
 
-// Faculty showcase manager. The list on this page powers /p/[tenant]/teachers
+// Faculty showcase manager. The list on this page powers /p/[tenant]/instructors
 // and the `faculty` section on any portal page. Each member can either
 // (a) auto-pull from a real instructor user (set userId) or (b) be a
 // standalone entry (e.g. guest faculty without a workspace login).
@@ -57,7 +57,7 @@ export default function FacultyPage() {
         <div>
           <h1 className="font-serif text-2xl font-bold tracking-tight">Instructor showcase</h1>
           <p className="text-muted-foreground">
-            The team page visitors see on your public site. Featured cards on /teachers and the home page.
+            The team page visitors see on your public site. Featured cards on /instructors and the home page.
           </p>
         </div>
         <Button onClick={openNew}>
@@ -90,7 +90,7 @@ export default function FacultyPage() {
             <h3 className="mt-4 text-lg font-semibold">No faculty yet</h3>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
               Add yourself first, then anyone else who teaches with you. Each member gets a public
-              profile at <code className="rounded bg-muted px-1 font-mono">/teachers/[handle]</code>.
+              profile at <code className="rounded bg-muted px-1 font-mono">/instructors/[handle]</code>.
             </p>
             <Button onClick={openNew} className="mt-4">
               <Plus className="mr-1.5 h-4 w-4" /> Add your first member
@@ -120,7 +120,7 @@ export default function FacultyPage() {
                       <p className="truncate text-xs text-muted-foreground">{m.role}</p>
                     )}
                     <p className="mt-1 truncate font-mono text-[11px] text-muted-foreground">
-                      /teachers/{m.handle}
+                      /instructors/{m.handle}
                     </p>
                   </div>
                   {m.featured && (
@@ -290,7 +290,7 @@ function FacultyDialog({
             className="font-mono text-sm"
           />
           <p className="text-[11px] text-muted-foreground">
-            Public URL: <code>/teachers/{finalHandle}</code>
+            Public URL: <code>/instructors/{finalHandle}</code>
             {handleClash && (
               <span className="ml-2 font-medium text-destructive">— this handle is taken.</span>
             )}

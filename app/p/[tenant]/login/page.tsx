@@ -28,6 +28,7 @@ import { useTenantBrand } from "@/lib/tenant-brand"
 import { postAuthDestination } from "@/lib/post-auth-redirect"
 import { useT } from "@/lib/i18n"
 import { currentTenantOwnerEmail } from "@/lib/tenant-store"
+import { AuthRedirectGate } from "@/components/auth/auth-redirect-gate"
 
 export default function PortalLoginPage({
   params,
@@ -158,6 +159,7 @@ export default function PortalLoginPage({
 
   return (
     <div className="mx-auto max-w-md px-6 py-12 lg:px-8">
+      <AuthRedirectGate tenantSlug={tenant} />
       <Card>
         <CardContent className="space-y-5 p-6">
           <div>

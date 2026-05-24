@@ -767,7 +767,7 @@ section h2::before {
         subhead:
           "Live circles, recorded practices, and a community that moves at the speed of breath. Take a seat — no rush.",
         primaryCta: { label: "Explore practices", href: "/courses" },
-        secondaryCta: { label: "Meet Your instructor", href: "/teachers" },
+        secondaryCta: { label: "Meet Your instructor", href: "/instructors" },
         alignment: "center",
       },
     },

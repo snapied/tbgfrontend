@@ -18,7 +18,7 @@
 //      and students arrive via invite or purchase that always carries
 //      a tenant.
 //
-//   3. Teacher / admin → `/dashboard`
+//   3. Instructor / admin → `/dashboard`
 //      Tenant context doesn't matter for them — the teacher dashboard is
 //      already organisation-scoped via Subscription and useLMS.
 //
@@ -32,9 +32,33 @@ export interface PostAuthInput {
   user: Pick<User, "role"> | null
   /** Tenant slug from URL or cookie. Empty string if unknown. */
   tenantSlug: string
+  /** Optional explicit destination — e.g. the `?next=…` param the user
+   *  was bounced from. When present AND safe (same-origin, not /login,
+   *  /signup, or /api), it overrides the role-based default so a
+   *  visitor returning from "Enroll → Sign in" lands back on the
+   *  course page. Anything that fails the safety check is silently
+   *  ignored — protects against open-redirect abuse. */
+  nextPath?: string | null
 }
 
-export function postAuthDestination({ user, tenantSlug }: PostAuthInput): string {
+const UNSAFE_NEXT_PREFIXES = ["/login", "/signup", "/api", "//", "http://", "https://"]
+
+function safeNext(next: string | null | undefined): string | null {
+  if (!next) return null
+  const trimmed = next.trim()
+  if (!trimmed.startsWith("/")) return null
+  for (const p of UNSAFE_NEXT_PREFIXES) {
+    if (trimmed.startsWith(p)) return null
+  }
+  return trimmed
+}
+
+export function postAuthDestination({ user, tenantSlug, nextPath }: PostAuthInput): string {
+  // Honour an explicit safe `nextPath` regardless of role — that's the
+  // whole point: the visitor told us where they wanted to land. The
+  // role-based default only fires when next is missing or unsafe.
+  const next = safeNext(nextPath)
+  if (next) return next
   if (!user) return "/login"
   if (user.role === "student") {
     if (tenantSlug) return `/p/${tenantSlug}/my`

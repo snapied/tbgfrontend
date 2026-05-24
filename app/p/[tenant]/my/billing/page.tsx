@@ -54,7 +54,11 @@ export default function MyBillingPage() {
       .sort((a, b) => b.sub.currentPeriodStart.localeCompare(a.sub.currentPeriodStart))
   }, [currentUser, subscriptions, products])
 
-  const handleCancel = async (subId: string, productTitle: string) => {
+  const handleCancel = async (
+    subId: string,
+    productTitle: string,
+    gatewaySubscriptionId: string | undefined,
+  ) => {
     const ok = await confirm({
       title: `Cancel "${productTitle}" at period end?`,
       description:
@@ -63,6 +67,35 @@ export default function MyBillingPage() {
       confirmLabel: "Cancel auto-renewal",
     })
     if (!ok) return
+    // Hit the gateway first so the local "canceled" badge never
+    // lies about Razorpay's state. Stub-mode subscriptions (no
+    // gatewaySubscriptionId — checkout went through the in-process
+    // stub) skip the API call entirely; the local flip is the only
+    // source of truth in that case.
+    if (gatewaySubscriptionId) {
+      try {
+        const res = await fetch("/api/payments/razorpay/subscriptions/cancel", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscriptionId: gatewaySubscriptionId, atCycleEnd: true }),
+        })
+        const json = (await res.json().catch(() => null)) as
+          | { ok: true }
+          | { ok: false; error: string }
+          | null
+        if (!json || !json.ok) {
+          toast.error(
+            json && "error" in json
+              ? `Razorpay said: ${json.error}`
+              : "Could not stop the gateway charge — try again or contact support.",
+          )
+          return
+        }
+      } catch (err) {
+        toast.error(`Cancellation failed: ${(err as Error).message}`)
+        return
+      }
+    }
     cancelSubscription(subId)
     toast.success("Auto-renewal stopped. You keep access through the current period.")
   }
@@ -162,7 +195,7 @@ export default function MyBillingPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleCancel(sub.id, product.title)}
+                      onClick={() => handleCancel(sub.id, product.title, sub.gatewaySubscriptionId)}
                     >
                       <X className="mr-1.5 h-3.5 w-3.5" />
                       Cancel at period end

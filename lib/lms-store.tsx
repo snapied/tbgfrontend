@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react"
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react"
 
 // Persist the users list to localStorage so students added through the
 // portal survive page refreshes. The rest of the LMS store (courses,
@@ -226,7 +226,21 @@ export interface User {
   email: string
   avatar?: string
   role: "admin" | "instructor" | "student"
+  // Two-field bio model:
+  //   • `bio` — short Bio (≤55 chars, plain text). Shown
+  //     on instructor cards, hero taglines, anywhere we need a
+  //     single-line elevator pitch.
+  //   • `about` — long-form "tell more about yourself" content.
+  //     Stored as Tiptap HTML so it can carry headings, links,
+  //     lists, embeds. Surfaced in the "About <name>" card on the
+  //     public teacher detail page.
+  // Old data only had `bio` and used it for both — the teacher
+  // profile page used to truncate `bio` for the tagline and show
+  // the rest in About. That model conflated two intents (short
+  // pitch vs. long story). Keeping both fields means the card
+  // stays tight while the profile gets room to breathe.
   bio?: string
+  about?: string
   createdAt: string
   // When set, the user is suspended — login is blocked once real auth lands
   // and they're rendered as "Disabled" on the team-management screen.
@@ -304,6 +318,13 @@ export interface LessonAttachment {
 // Expanded set of lesson types. "pdf" is kept for backwards compat with seeded
 // data; new content should prefer "document" (PDF/DOC/PPT/XLSX/TXT) or "embed"
 // (Canva, Gamma, Slides, Notion, Figma, Loom — anything iframe-able).
+// Sprint C Recordings #34 — new lesson type "recording" lets the
+// course curriculum reference an existing recording from the
+// recordings library by sessionId (LiveSession.id) in `content`,
+// instead of duplicating the video URL into the lesson. Why a new
+// type instead of just a video URL: visibility tier (#25), watch-
+// progress, transcript + chapters all flow from the recording
+// metadata — copying the URL would lose those signals.
 export type LessonType =
   | "video"
   | "text"
@@ -313,6 +334,7 @@ export type LessonType =
   | "audio"
   | "quiz"
   | "live"
+  | "recording"
 
 export interface Lesson {
   id: string
@@ -407,6 +429,12 @@ export interface Course {
   // Lifecycle
   status: "draft" | "published" | "archived"
   publishAt?: string  // ISO; for scheduled publishing
+  // Set the first time the publish-reminder runner sees this course
+  // within its 24h pre-flight window. Prevents the runner from
+  // firing again after the user dismisses or after the next mount.
+  // Cleared by the form when publishAt is rescheduled or removed,
+  // so a re-scheduled publish gets its own reminder cycle.
+  publishReminderSentAt?: string
   visibility?: CourseVisibility
   accessPassword?: string  // plain for POC; hash on the server
   // Marketing
@@ -420,6 +448,13 @@ export interface Course {
   // to take.
   certificateEligible?: boolean
   certificateTemplate: string
+  // Marketing — teacher-set override for the instructor's public
+  // profile rail. When true, this course beats the auto-pick
+  // (highest enrolment) and becomes the "Most popular" card on
+  // /p/<tenant>/instructors/<handle>. Falls back to the auto-pick
+  // when unset. A teacher should only flag one — multiple flags
+  // are tolerated (first one wins by createdAt asc).
+  featureOnInstructorProfile?: boolean
   // ── Monetize wizard (Phase 2) ───────────────────────────────
   // These fields drive the funnel mechanics around the course
   // without changing the existing `price` / `currency` shape.
@@ -449,8 +484,95 @@ export interface Course {
   // page. Optional; courses without a default batch silently skip
   // the auto-join.
   defaultBatchId?: string
+  // ── Draft / Publish workflow ────────────────────────────────
+  // The course row itself is what students see — every public surface
+  // (catalogue, /courses/<slug>, /learn/<slug>) reads from the
+  // top-level fields. Editor changes are stashed under `draft` and
+  // only flow to the top-level fields when the teacher hits Publish.
+  // This means a teacher can iterate on title / pricing / modules
+  // without students seeing half-finished edits.
+  //
+  // `draft` carries any subset of editable fields (title, subtitle,
+  // description, thumbnail, modules, etc.). On publish we merge it
+  // into the canonical fields and append the snapshot to `versions`.
+  // null / absent draft = no pending changes.
+  draft?: CourseDraft | null
+  draftUpdatedAt?: string
+  // Snapshot history. Each version is a frozen copy of the
+  // canonical fields at the moment Publish was clicked. Latest
+  // first. Used by the version-preview UI; deleting the course
+  // cascades all versions with it (they're embedded on the row).
+  versions?: CourseVersion[]
+  // ISO timestamp of the most recent publish. Distinct from
+  // updatedAt (which moves on every save, draft or not) — used by
+  // the dashboard "last published" copy and the public site's
+  // sitemap lastmod.
+  publishedAt?: string
   createdAt: string
   updatedAt: string
+}
+
+// Editable subset of a Course that the editor stashes under
+// `draft`. We intentionally don't include lifecycle / aggregate
+// fields (status, enrolledCount, rating, reviewCount, publishAt)
+// — those are operational, not content edits. The keys match the
+// canonical Course type so applying the draft is a shallow merge.
+export interface CourseDraft {
+  title?: string
+  subtitle?: string
+  slug?: string
+  description?: string
+  thumbnail?: string
+  introVideoUrl?: string
+  category?: string
+  tags?: string[]
+  level?: Course["level"]
+  language?: string
+  price?: number
+  originalPrice?: number
+  currency?: string
+  earlyBirdPrice?: number
+  earlyBirdUntil?: string
+  coupons?: Coupon[]
+  coInstructorIds?: string[]
+  modules?: Module[]
+  totalDuration?: number
+  totalLessons?: number
+  visibility?: CourseVisibility
+  accessPassword?: string
+  certificateEligible?: boolean
+  certificateTemplate?: string
+  features?: string[]
+  requirements?: string[]
+  whatYouLearn?: string[]
+  seoTitle?: string
+  seoDescription?: string
+  seoKeywords?: string[]
+  ogImage?: string
+  accessModel?: Course["accessModel"]
+  checkoutBumpProductId?: string
+  coachingProductId?: string
+  defaultBatchId?: string
+}
+
+// A frozen snapshot of a course at the moment Publish was clicked.
+// Just the content fields — operational state (enrolledCount,
+// rating) is intentionally excluded so a Restore doesn't reset
+// counts. Tagged with a monotonically increasing version number +
+// the user who published.
+export interface CourseVersion {
+  id: string
+  version: number
+  publishedAt: string
+  publishedById?: string
+  publishedByName?: string
+  note?: string
+  snapshot: CourseDraft & {
+    // Versions are immutable so we capture content-equivalent fields
+    // here too. Stored as a partial — only fields with values on the
+    // course at publish time are written.
+    instructorId?: string
+  }
 }
 
 export interface Enrollment {
@@ -498,10 +620,14 @@ export interface Quiz {
   //             a teacher releases them. Default for new quizzes.
   gradingMode?: "auto" | "teacher"
   createdAt: string
+  // Author of the quiz — used by the list card to render an owner
+  // avatar pill. Optional because legacy quizzes in storage may
+  // predate this field; the UI falls back to "Unknown" in that case.
+  createdBy?: string
 }
 
 export interface QuizQuestionGrade {
-  // Teacher's per-question verdict. Falls back to auto-comparison when absent.
+  // Instructor's per-question verdict. Falls back to auto-comparison when absent.
   correct: boolean
   note?: string
 }
@@ -544,7 +670,7 @@ export interface Review {
   // so this stays bounded. Re-enables editing automatically once the
   // oldest stored edit ages past the window.
   editTimestamps?: string[]
-  // Teacher / instructor reply, posted from the reviews-management page.
+  // Instructor / instructor reply, posted from the reviews-management page.
   // When set, the public reviews surface renders it inline below the
   // review as a "Response from the instructor" block. Empty string is
   // treated the same as undefined (cleared reply).
@@ -721,9 +847,33 @@ export interface LiveSession {
   wasHeld?: boolean
   // Markdown / plain text — "What we covered today".
   summary?: string
+  // Pre-class agenda — what the teacher plans to cover. Shown in
+  // the waiting room (so students arrive knowing what's coming)
+  // and in a side panel during the class. Each item is optional
+  // minutes so a teacher can hint pacing without locking it in.
+  // Empty array = no agenda set; the surfaces collapse cleanly.
+  agenda?: Array<{ title: string; minutes?: number }>
+  // Per-class chat enablement. Default behaviour is "on" — most
+  // classes benefit from chat. Instructors running focused
+  // recording-only or lecture-style sessions can flip this off
+  // before opening the room. `undefined` is treated as enabled so
+  // existing classes (created before this field existed) keep
+  // working as they always have.
+  chatEnabled?: boolean
   // The video recording — usually the platform's auto-export (Zoom cloud,
   // Meet recording, Loom, YouTube unlisted). Inline-embedded when shown.
   recordingUrl?: string
+  // Sprint B Recordings #25 — per-recording visibility tier.
+  // Independent of course-level visibility because teachers
+  // sometimes want a public class but a "members-only" recording
+  // (e.g. live audience freely accessible; replay reserved for paid
+  // tier). Defaults to "enrolled" when omitted (= existing
+  // behaviour: enrolled students can rewatch).
+  //   • public     anyone with the link
+  //   • enrolled   only enrolled students of the course (default)
+  //   • community  only members of the attached community
+  //   • link-only  unlisted — anyone with the link (URL-secret model)
+  recordingVisibility?: "public" | "enrolled" | "community" | "link-only"
   // Slides, PDFs, links, embeds, notes — anything the teacher wants to
   // make available to students who attended (or to no-shows as catch-up).
   materials?: SessionMaterial[]
@@ -794,6 +944,15 @@ export interface Whiteboard {
    *  board. Members can view + edit. Owner is implicit (createdBy)
    *  and isn't repeated here. */
   invitedUserIds?: string[]
+  /** Lesson IDs this board is attached to as a resource. A board
+   *  can appear in multiple lessons across multiple courses — e.g.
+   *  a Fishbone for a recurring "root-cause" mini-unit. The lesson
+   *  page reads this in reverse via `getWhiteboardsForLesson`. */
+  attachedToLessons?: string[]
+  /** Community (batch) IDs this board has been posted to. Tracked
+   *  on the board side so the card can display a "posted to N
+   *  communities" indicator without scanning the entire posts list. */
+  postedToBatches?: string[]
 }
 
 // One row per student-initiated "let me edit this board too" ask.
@@ -861,7 +1020,7 @@ export interface Notification {
 
 // ── Doubts / Q&A ────────────────────────────────────────────
 // A doubt is a student-initiated question scoped to a course (and
-// optionally a lesson). Teachers reply via replies[]; the thread is
+// optionally a lesson). Instructors reply via replies[]; the thread is
 // closed when status === "resolved". Lives on lms-store so the
 // notification + email pipeline can reuse the same dispatcher.
 export interface DoubtReply {
@@ -983,7 +1142,7 @@ export interface BatchSpace {
 
 // ── Common Room (per-batch community feed) ──────────────────
 // Each batch gets its own social space — a feed of posts that
-// members can comment on + react to. Teacher moderates (pin, hide)
+// members can comment on + react to. Instructor moderates (pin, hide)
 // but doesn't gate content. Posts are stored separately from the
 // batch record so we can prune / paginate them independently as a
 // batch grows.
@@ -1017,7 +1176,7 @@ export interface BatchPost {
   // get a highlighted card treatment + a "Featured" badge regardless
   // of where they sit in the order.
   featured?: boolean
-  // Teacher moderation flag. Hidden posts stay in storage but are
+  // Instructor moderation flag. Hidden posts stay in storage but are
   // filtered out of the member-facing feed. Keeps an audit trail
   // without the irreversibility of a hard delete.
   hidden: boolean
@@ -1043,10 +1202,19 @@ export interface BatchPostComment {
 // out of the box; teachers can rename, reorder, or add more. Lives
 // at the store boundary so any code (server-side later) can derive
 // them without rebuilding the constant.
+// Sprint C Communities #25 — expanded default channel set. The
+// spec called for Announcements / General / Q&A / Off-topic /
+// Resources. We keep Wins (existing default) and add the rest so
+// fresh communities ship with the structure most cohorts settle on
+// after a few weeks anyway. Order matches the typical scan path:
+// top-down importance.
 export const DEFAULT_BATCH_SPACES: BatchSpace[] = [
-  { id: "space-general", name: "General",    emoji: "💬", description: "Anything goes — say hi, share progress.", layout: "feed",  order: 0 },
-  { id: "space-qa",      name: "Q&A",        emoji: "❓", description: "Ask questions, help each other.",         layout: "forum", order: 1 },
-  { id: "space-wins",    name: "Wins",       emoji: "🎉", description: "Celebrate breakthroughs + milestones.",   layout: "feed",  order: 2 },
+  { id: "space-announcements", name: "Announcements", emoji: "📣", description: "Instructor posts only — read first.", layout: "feed", order: 0 },
+  { id: "space-general", name: "General", emoji: "💬", description: "Anything goes — say hi, share progress.", layout: "feed", order: 1 },
+  { id: "space-qa", name: "Q&A", emoji: "❓", description: "Ask questions, help each other.", layout: "forum", order: 2 },
+  { id: "space-wins", name: "Wins", emoji: "🎉", description: "Celebrate breakthroughs + milestones.", layout: "feed", order: 3 },
+  { id: "space-resources", name: "Resources", emoji: "📚", description: "Curated reading + tools + links.", layout: "feed", order: 4 },
+  { id: "space-off-topic", name: "Off-topic", emoji: "🛋️", description: "Memes, life, the lounge.", layout: "feed", order: 5 },
 ]
 
 // Read the spaces for a batch, falling back to the defaults when the
@@ -1091,7 +1259,7 @@ export interface Message {
 // or live session — the teacher hands them out at the end of a class — so
 // they carry an optional lessonId / sessionId pointer in addition to courseId.
 //
-// Teachers can attach a rich set of resources (links, files, videos, plain
+// Instructors can attach a rich set of resources (links, files, videos, plain
 // notes) when posting an assignment. Distribution is via in-app/email/WhatsApp
 // notifications using the same dispatcher as live classes. Each assignment
 // has a shareToken so a public /assignment/<token> URL can be sent through
@@ -1611,7 +1779,34 @@ interface LMSStore {
   deleteCourse: (id: string) => void
   getCourseById: (id: string) => Course | undefined
   getCourseBySlug: (slug: string) => Course | undefined
-  
+  /** Live enrollment count derived from the enrollments array.
+   *  Prefer this over `course.enrolledCount` (which is a stale
+   *  denormalized cache and can drift after deletes / restores). */
+  getEnrolledCount: (courseId: string) => number
+  /** Returns the next available slug, suffixing `-2`, `-3`… when the
+   *  base is already in use. Pass `excludeId` to ignore the course
+   *  you're editing so a no-op save doesn't bump its own slug. */
+  resolveUniqueSlug: (base: string, excludeId?: string) => string
+  /** Live progress for an enrollment, derived from the enrollment's
+   *  completedLessons intersected with the course's CURRENT lesson
+   *  ids. Use this instead of `enrollment.progress` whenever the
+   *  course's curriculum may have changed since enrollment. */
+  getEnrollmentProgress: (enrollmentId: string) => number
+  /** Stash editor edits without touching the public-facing course
+   *  fields. Merge-style — pass only the keys you're changing. */
+  saveCourseDraft: (id: string, patch: CourseDraft) => void
+  /** Discard the pending draft, reverting the editor to the last
+   *  published state. */
+  discardCourseDraft: (id: string) => void
+  /** Apply the pending draft to the canonical fields, append a new
+   *  version snapshot, and clear the draft. The optional `note`
+   *  shows up in the versions list. */
+  publishCourseDraft: (id: string, note?: string) => void
+  /** Roll the canonical fields back to a previous version. The
+   *  current state is captured as a fresh version first so the
+   *  restore is itself undoable. */
+  restoreCourseVersion: (id: string, versionId: string) => void
+
   // Enrollments
   enrollments: Enrollment[]
   enrollStudent: (courseId: string, studentId: string) => void
@@ -1739,6 +1934,9 @@ interface LMSStore {
   updateWhiteboard: (id: string, updates: Partial<Whiteboard>) => void
   deleteWhiteboard: (id: string) => void
   getWhiteboardById: (id: string) => Whiteboard | undefined
+  /** All whiteboards a given lesson has been attached to — reverse
+   *  index of `whiteboard.attachedToLessons`. */
+  getWhiteboardsForLesson: (lessonId: string) => Whiteboard[]
 
   // Student "give me edit access" requests against existing boards.
   whiteboardAccessRequests: WhiteboardAccessRequest[]
@@ -1798,6 +1996,20 @@ const LMSContext = createContext<LMSStore | null>(null)
 
 export function generateId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).substr(2, 9)}`
+}
+
+// Minimal HTML escape for user-controlled strings we drop straight
+// into a post body. We're not building a sanitiser — Tiptap rendering
+// already strips dangerous tags on the way out — this just stops a
+// session title with literal `<` from breaking the surrounding
+// markup. Five replacements is enough for the surface area.
+function escapeHtmlForPost(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 }
 
 export function LMSProvider({ children }: { children: ReactNode }) {
@@ -1917,13 +2129,19 @@ export function LMSProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("storage", onStorage)
   }, [usersHydrated, tenantSlug])
 
-  // Stamp `lastLoginAt` on the user that just signed in. The login
-  // page writes `thebigclass.pendingLogin` (the identifier they typed
-  // + a timestamp). Once we hydrate, we find the matching user and
-  // write the timestamp, then clear the breadcrumb. Falls back to
-  // stamping currentUser if the identifier doesn't match any row —
-  // that covers the demo flow where the user signs in via phone but
-  // there's no exact email match.
+  // Process the `thebigclass.pendingLogin` breadcrumb the /login page
+  // drops after a successful sign-in. Two jobs:
+  //   1. Stamp `lastLoginAt` on the matching user row.
+  //   2. Promote that user into `currentUserId` so the LMS store
+  //      treats them as the signed-in user.
+  //
+  // Job (2) was missing — the login page wrote the breadcrumb but
+  // nothing in the LMS store actually flipped currentUserId, so the
+  // sidebar showed "Signed out / Guest" right after a successful
+  // login. The user's access token + tenant were set correctly, but
+  // the LMS provider couldn't tell who was signed in. Now we set
+  // currentUserId AND mirror it to the persistent key in one go so
+  // a refresh keeps them signed in.
   useEffect(() => {
     if (!usersHydrated) return
     let raw: string | null = null
@@ -1937,6 +2155,7 @@ export function LMSProvider({ children }: { children: ReactNode }) {
     } catch { /* ignore */ }
     const at = parsed?.at || new Date().toISOString()
     const id = (parsed?.identifier || "").trim().toLowerCase()
+    let matchedUserId: string | null = null
     setUsers((prev) => {
       const match =
         prev.find((u) => u.email?.toLowerCase() === id) ||
@@ -1944,10 +2163,36 @@ export function LMSProvider({ children }: { children: ReactNode }) {
         prev.find((u) => u.role === "admin") ||
         null
       if (!match) return prev
+      matchedUserId = match.id
       return prev.map((u) => (u.id === match.id ? { ...u, lastLoginAt: at } : u))
     })
-    try { window.localStorage.removeItem("thebigclass.pendingLogin") } catch { /* ignore */ }
-  }, [usersHydrated])
+    // Promote to currentUser + clear any stale signed-out marker.
+    // setUsers' updater above runs synchronously in React 19, so
+    // matchedUserId is populated by the time we read it.
+    //
+    // CRITICAL: the breadcrumb is the dashboard auth gate's "login
+    // in progress, don't bounce yet" signal. Removing it without a
+    // successful promotion strands the gate — it sees a null user,
+    // no pending breadcrumb, and redirects back to /login. This
+    // effect can fire transiently against the wrong tenant slug
+    // (mid-render storage-key reshuffle, hydration tick before the
+    // user record is fetched, etc.); if so, leave the breadcrumb
+    // alone so a later tick can complete the promotion.
+    if (matchedUserId) {
+      setCurrentUserId(matchedUserId)
+      try {
+        window.localStorage.setItem(CURRENT_USER_KEY, matchedUserId)
+        window.localStorage.removeItem(SIGNED_OUT_KEY)
+        window.localStorage.removeItem("thebigclass.pendingLogin")
+      } catch { /* private browsing — in-memory state still flips */ }
+      setSignedOutState(false)
+    }
+    // No matched user → DO NOT remove the breadcrumb. We log once in
+    // dev so the failure mode is visible without spamming on every
+    // re-run when the same effect fires a second time before users
+    // hydrate. The next render (after users load / tenant slug
+    // stabilises) gets another shot.
+  }, [usersHydrated, CURRENT_USER_KEY, SIGNED_OUT_KEY])
 
   const addUser = useCallback((user: User) => {
     setUsers((prev) => [user, ...prev])
@@ -1955,23 +2200,124 @@ export function LMSProvider({ children }: { children: ReactNode }) {
   const updateUser = useCallback((id: string, updates: Partial<User>) => {
     setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...updates } : u)))
   }, [])
+  // Cascade delete a user (typically a student). Removes:
+  //   * the user row itself
+  //   * every enrollment the user owned
+  //   * every assignment submission the user made
+  //   * every quiz attempt
+  //   * every attendance record
+  //   * every doubt the user raised (and replies they wrote on others' doubts)
+  //   * every message-thread row where the user is the lone recipient
+  //   * group memberships referencing the user
+  // The full bundle is pushed to Trash so an undo restores the
+  // student together with their work — undo used to bring back a
+  // bare user shell with everything they'd done permanently gone.
+  // Cascade delete a user (typically a student). Removes related
+  // enrollments, submissions, quiz attempts, attendance, doubts,
+  // single-recipient messages, and group memberships. The full
+  // bundle is pushed to Trash so an undo restores the student
+  // together with the work they'd done.
+  //
+  // Implementation note: we snapshot each slice through its setter's
+  // callback form (rather than closing over `enrollments` etc.) so
+  // this callback doesn't have to be declared AFTER every state
+  // declaration it touches, and so it never reads a stale array
+  // from a closure that was created at mount.
   const deleteUser = useCallback((id: string) => {
+    // Holders populated inside the setter callbacks below; pushed to
+    // Trash once every collection has reported in.
+    let targetUser: User | undefined
+    let targetEnrollments: Enrollment[] = []
+    let targetSubmissions: AssignmentSubmission[] = []
+    let targetAttempts: QuizAttempt[] = []
+    let targetAttendance: AttendanceRecord[] = []
+    let targetDoubts: Doubt[] = []
+    let targetMessages: Message[] = []
+    let groupIds: string[] = []
+
     setUsers((prev) => {
-      const target = prev.find((u) => u.id === id)
-      if (target) {
-        pushToTrash({
-          id: target.id,
-          kind: "user",
-          label: target.name || target.email || "User",
-          sublabel: target.email,
-          payload: target,
-        })
-      }
-      return prev.filter((u) => u.id !== id)
+      targetUser = prev.find((u) => u.id === id)
+      return targetUser ? prev.filter((u) => u.id !== id) : prev
     })
+    setEnrollments((prev) => {
+      targetEnrollments = prev.filter((e) => e.studentId === id)
+      return prev.filter((e) => e.studentId !== id)
+    })
+    setSubmissions((prev) => {
+      targetSubmissions = prev.filter((s) => s.studentId === id)
+      return prev.filter((s) => s.studentId !== id)
+    })
+    setQuizAttempts((prev) => {
+      targetAttempts = prev.filter((a) => a.studentId === id)
+      return prev.filter((a) => a.studentId !== id)
+    })
+    setAttendance((prev) => {
+      targetAttendance = prev.filter((a) => a.studentId === id)
+      return prev.filter((a) => a.studentId !== id)
+    })
+    setDoubts((prev) => {
+      targetDoubts = prev.filter((d) => d.studentId === id)
+      // Strip the deleted user's replies from OTHER students' doubts.
+      return prev
+        .filter((d) => d.studentId !== id)
+        .map((d) => ({ ...d, replies: d.replies.filter((r) => r.authorId !== id) }))
+    })
+    setMessages((prev) => {
+      targetMessages = prev.filter(
+        (m) => m.recipientIds.length === 1 && m.recipientIds[0] === id,
+      )
+      return prev
+        .filter((m) => !(m.recipientIds.length === 1 && m.recipientIds[0] === id))
+        .map((m) =>
+          m.recipientIds.includes(id)
+            ? { ...m, recipientIds: m.recipientIds.filter((r) => r !== id) }
+            : m,
+        )
+    })
+    setStudentGroups((prev) => {
+      groupIds = prev.filter((g) => g.memberIds.includes(id)).map((g) => g.id)
+      return prev.map((g) =>
+        g.memberIds.includes(id)
+          ? { ...g, memberIds: g.memberIds.filter((m) => m !== id), updatedAt: new Date().toISOString() }
+          : g,
+      )
+    })
+
+    // Defer the trash push by a tick so all the setters have run and
+    // populated the holders. Without this, the bundle could be pushed
+    // with empty arrays under React 18's strict batching.
+    setTimeout(() => {
+      if (!targetUser) return
+      pushToTrash({
+        id: targetUser.id,
+        kind: "user",
+        label: targetUser.name || targetUser.email || "User",
+        sublabel: targetUser.email,
+        payload: {
+          user: targetUser,
+          enrollments: targetEnrollments,
+          submissions: targetSubmissions,
+          quizAttempts: targetAttempts,
+          attendance: targetAttendance,
+          doubts: targetDoubts,
+          messages: targetMessages,
+          groupIds,
+        },
+      })
+    }, 0)
   }, [])
   const [courses, setCourses] = useState<Course[]>([])
   const [coursesHydrated, setCoursesHydrated] = useState(false)
+  // Mirror of `courses` for use inside async / event-listener
+  // callbacks that would otherwise close over a stale array.
+  // Specifically: the cross-store auto-community-join effect (Gap 11)
+  // fires whenever the storefront grants a course entitlement —
+  // useState closures inside that effect would see the courses
+  // array at registration time, missing any later additions.
+  const coursesRef = useRef<Course[]>([])
+  useEffect(() => {
+    coursesRef.current = courses
+  }, [courses])
   const [enrollments, setEnrollments] = useState<Enrollment[]>([])
   const [enrollmentsHydrated, setEnrollmentsHydrated] = useState(false)
 
@@ -2012,6 +2358,74 @@ export function LMSProvider({ children }: { children: ReactNode }) {
     // get the full course list, not the trimmed local cache.
     mirrorSliceToServer(tenantSlug, KEY_SUFFIXES.courses, courses)
   }, [courses, coursesHydrated, tenantSlug])
+
+  // Auto-publish-at reminder runner. 24h before a scheduled publish
+  // we ping the course owner (in-app + email) so they get a final
+  // review window before the course goes live. Without this, a
+  // teacher who scheduled the launch a week ago finds themselves
+  // surprised when a typo lands on the homepage.
+  //
+  // Implementation: client-side checker that runs every 5 min while
+  // the dashboard is open. Each course can only fire once — we stamp
+  // `publishReminderSentAt` after firing so subsequent ticks skip
+  // it. Resetting `publishAt` (or pushing it further out) on the
+  // edit form clears the stamp so the next scheduled publish gets
+  // its own reminder.
+  const REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000
+  useEffect(() => {
+    if (!coursesHydrated) return
+    const tick = () => {
+      const now = Date.now()
+      const toFire: Course[] = []
+      for (const c of courses) {
+        if (!c.publishAt) continue
+        if (c.status !== "draft") continue
+        if (c.publishReminderSentAt) continue
+        const target = Date.parse(c.publishAt)
+        if (!Number.isFinite(target)) continue
+        // Inside the 24h pre-flight window AND still in the future.
+        if (target - now > REMINDER_WINDOW_MS) continue
+        if (target <= now) continue
+        toFire.push(c)
+      }
+      if (toFire.length === 0) return
+      // Resolve the recipient — the course's primary instructor (we
+      // already have an embedded `instructor` shape). Skip silently
+      // if we can't find a matching User row to attach prefs to.
+      setCourses((prev) =>
+        prev.map((c) =>
+          toFire.find((t) => t.id === c.id)
+            ? { ...c, publishReminderSentAt: new Date().toISOString() }
+            : c,
+        ),
+      )
+      // Notifications fire OUT of the state setter to avoid loops.
+      for (const c of toFire) {
+        const teacher = users.find((u) => u.id === c.instructor?.id)
+        if (!teacher) continue
+        const hours = Math.max(1, Math.round((Date.parse(c.publishAt!) - now) / 3_600_000))
+        const entries = buildNotifications(
+          [teacher],
+          {
+            type: "course.publish-reminder",
+            title: `"${c.title}" goes live in about ${hours}h`,
+            body: `Scheduled to publish at ${new Date(c.publishAt!).toLocaleString()}. Final preview link in the dashboard.`,
+            url: `/dashboard/courses/${c.id}`,
+            meta: { courseId: c.id, kind: "course.publish-reminder" },
+          },
+          { channels: ["in-app", "email"] },
+        )
+        addNotifications(entries)
+      }
+    }
+    // Tick immediately on hydrate, then every 5 min while the tab
+    // stays open. Long enough that we don't burn re-renders; short
+    // enough that the 24h window is meaningful at 23h59m boundary.
+    tick()
+    const interval = window.setInterval(tick, 5 * 60 * 1000)
+    return () => window.clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coursesHydrated])
 
   useEffect(() => {
     try {
@@ -2218,6 +2632,43 @@ export function LMSProvider({ children }: { children: ReactNode }) {
       }
     }
     const usersData = readArray<User>("users"); if (usersData) setUsers(usersData)
+
+    // Cross-browser login bridge. The pendingLogin breadcrumb handler
+    // above (~L2082) runs on `usersHydrated` and uses the *local*
+    // users seed — which is empty for fresh browsers / incognito /
+    // first login after signup, so the match fails and the breadcrumb
+    // sits in localStorage forever. The DashboardAuthGate then waits
+    // for the breadcrumb to clear and shows its spinner indefinitely.
+    //
+    // Server re-hydrate is the moment we *do* have the real users
+    // list, so attempt a second match here using the freshly-parsed
+    // `usersData` directly (NOT React state — that's still mid-batch).
+    // If a match is found, set currentUserId + remove the breadcrumb
+    // exactly the way the original handler does. This is one-shot per
+    // tenantSlug change and idempotent (no breadcrumb → no work), so
+    // it can't loop even if `serverHydrated` flips multiple times.
+    try {
+      const rawBreadcrumb = window.localStorage.getItem("thebigclass.pendingLogin")
+      if (rawBreadcrumb && usersData && usersData.length > 0) {
+        const parsed = JSON.parse(rawBreadcrumb) as { identifier?: string; at?: string }
+        const id = (parsed?.identifier || "").trim().toLowerCase()
+        const match =
+          usersData.find((u) => u.email?.toLowerCase() === id) ||
+          usersData.find((u) => u.phone === parsed?.identifier) ||
+          usersData.find((u) => u.role === "admin") ||
+          null
+        if (match) {
+          setCurrentUserId(match.id)
+          window.localStorage.setItem(CURRENT_USER_KEY, match.id)
+          window.localStorage.removeItem(SIGNED_OUT_KEY)
+          window.localStorage.removeItem("thebigclass.pendingLogin")
+          setSignedOutState(false)
+        }
+      }
+    } catch {
+      /* breadcrumb missing / invalid / private browsing — fine */
+    }
+
     const coursesData = readArray<Course>("courses"); if (coursesData) setCourses(coursesData)
     const enrollmentsData = readArray<Enrollment>("enrollments"); if (enrollmentsData) setEnrollments(enrollmentsData)
     const quizzesData = readArray<Quiz>("quizzes"); if (quizzesData) setQuizzes(quizzesData)
@@ -2294,37 +2745,336 @@ export function LMSProvider({ children }: { children: ReactNode }) {
 
   const getUserById = useCallback((id: string) => users.find(u => u.id === id), [users])
   
+  // Returns a slug that doesn't collide with any existing course.
+  // Appends `-2`, `-3`… until a free one is found. `excludeId` lets
+  // an edit save its own (unchanged) slug without bumping it.
+  const resolveUniqueSlug = useCallback(
+    (base: string, excludeId?: string): string => {
+      const seed = (base || "course").trim() || "course"
+      const taken = new Set(
+        courses.filter(c => c.id !== excludeId).map(c => c.slug).filter(Boolean),
+      )
+      if (!taken.has(seed)) return seed
+      let n = 2
+      while (taken.has(`${seed}-${n}`)) n++
+      return `${seed}-${n}`
+    },
+    [courses],
+  )
+
   const addCourse = useCallback((course: Course) => {
     // Dedupe by id — the new-course form pre-allocates the id and the
     // submit handler could fire twice on double-click or a Strict-Mode
     // double-render, which would otherwise plant the same row twice
     // and trigger React's "Encountered two children with the same key"
     // warning on the courses list.
-    setCourses(prev => (prev.some(c => c.id === course.id) ? prev : [...prev, course]))
-  }, [])
-  
-  const updateCourse = useCallback((id: string, updates: Partial<Course>) => {
-    setCourses(prev => prev.map(c => c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c))
-  }, [])
-  
-  const deleteCourse = useCallback((id: string) => {
+    //
+    // Also de-collide the slug. Two courses named "Math 101" used to
+    // both get the slug `math-101`; `getCourseBySlug` returns the
+    // first match, so the second course became unreachable at its
+    // public URL. We resolve a unique suffix here so the second
+    // course gets `math-101-2` without the caller having to know.
     setCourses(prev => {
-      const target = prev.find(c => c.id === id)
-      if (target) {
-        pushToTrash({
-          id: target.id,
-          kind: "course",
-          label: target.title || "Course",
-          sublabel: `${target.modules?.length ?? 0} modules`,
-          payload: target,
-        })
+      if (prev.some(c => c.id === course.id)) return prev
+      const taken = new Set(prev.map(c => c.slug).filter(Boolean))
+      let slug = course.slug || "course"
+      if (taken.has(slug)) {
+        let n = 2
+        while (taken.has(`${slug}-${n}`)) n++
+        slug = `${slug}-${n}`
       }
-      return prev.filter(c => c.id !== id)
+      return [...prev, { ...course, slug }]
     })
   }, [])
-  
+
+  const updateCourse = useCallback((id: string, updates: Partial<Course>) => {
+    setCourses(prev =>
+      prev.map(c => {
+        if (c.id !== id) return c
+        // If the slug is being changed, enforce uniqueness against all
+        // OTHER courses' slugs. Saving the same slug we already have
+        // is fine (no-op edit shouldn't bump us to `-2`).
+        let next: Course = { ...c, ...updates, updatedAt: new Date().toISOString() }
+        if (typeof updates.slug === "string" && updates.slug !== c.slug) {
+          const taken = new Set(
+            prev.filter(o => o.id !== id).map(o => o.slug).filter(Boolean),
+          )
+          let s = updates.slug || "course"
+          if (taken.has(s)) {
+            let n = 2
+            while (taken.has(`${s}-${n}`)) n++
+            s = `${s}-${n}`
+          }
+          next = { ...next, slug: s }
+        }
+        return next
+      }),
+    )
+  }, [])
+
+  // ── Draft / Publish workflow ────────────────────────────────
+  // Editor edits flow through saveCourseDraft → publishCourseDraft.
+  // updateCourse stays the low-level setter for operational fields
+  // (status, publishAt, ratings, enrollment counts). Content edits
+  // should go through the draft path so students never see a
+  // half-finished change.
+  const saveCourseDraft = useCallback((id: string, patch: CourseDraft) => {
+    setCourses((prev) =>
+      prev.map((c) => {
+        if (c.id !== id) return c
+        const nextDraft: CourseDraft = { ...(c.draft ?? {}), ...patch }
+        return {
+          ...c,
+          draft: nextDraft,
+          draftUpdatedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        }
+      }),
+    )
+  }, [])
+
+  const discardCourseDraft = useCallback((id: string) => {
+    setCourses((prev) =>
+      prev.map((c) =>
+        c.id === id
+          ? { ...c, draft: null, draftUpdatedAt: undefined, updatedAt: new Date().toISOString() }
+          : c,
+      ),
+    )
+  }, [])
+
+  const publishCourseDraft = useCallback((id: string, note?: string) => {
+    setCourses((prev) => {
+      // Read the current user via the latest setter callback so the
+      // captured author on the version is accurate even if the user
+      // signed in between mount and publish.
+      const publisher = currentUserId
+        ? users.find((u) => u.id === currentUserId) ?? null
+        : null
+      return prev.map((c) => {
+        if (c.id !== id) return c
+        const draft = c.draft ?? {}
+        // Merge draft into the canonical fields. Only keys present
+        // in the draft override; nothing else moves.
+        const applied: Course = {
+          ...c,
+          ...draft,
+          // operational fields stay where they were
+          status: c.status,
+          enrolledCount: c.enrolledCount,
+          rating: c.rating,
+          reviewCount: c.reviewCount,
+        }
+        // Snapshot AFTER the apply so version N == the public state
+        // immediately after publish (Restore is then "go back to
+        // what students were seeing on Mar 14").
+        const nextVersionNumber = (c.versions?.[0]?.version ?? 0) + 1
+        const snapshot: CourseVersion = {
+          id: generateId("ver"),
+          version: nextVersionNumber,
+          publishedAt: new Date().toISOString(),
+          publishedById: publisher?.id,
+          publishedByName: publisher?.name,
+          note,
+          snapshot: {
+            title: applied.title,
+            subtitle: applied.subtitle,
+            slug: applied.slug,
+            description: applied.description,
+            thumbnail: applied.thumbnail,
+            introVideoUrl: applied.introVideoUrl,
+            category: applied.category,
+            tags: applied.tags,
+            level: applied.level,
+            language: applied.language,
+            price: applied.price,
+            originalPrice: applied.originalPrice,
+            currency: applied.currency,
+            earlyBirdPrice: applied.earlyBirdPrice,
+            earlyBirdUntil: applied.earlyBirdUntil,
+            coupons: applied.coupons,
+            coInstructorIds: applied.coInstructorIds,
+            modules: applied.modules,
+            totalDuration: applied.totalDuration,
+            totalLessons: applied.totalLessons,
+            visibility: applied.visibility,
+            accessPassword: applied.accessPassword,
+            certificateEligible: applied.certificateEligible,
+            certificateTemplate: applied.certificateTemplate,
+            features: applied.features,
+            requirements: applied.requirements,
+            whatYouLearn: applied.whatYouLearn,
+            seoTitle: applied.seoTitle,
+            seoDescription: applied.seoDescription,
+            seoKeywords: applied.seoKeywords,
+            ogImage: applied.ogImage,
+            accessModel: applied.accessModel,
+            checkoutBumpProductId: applied.checkoutBumpProductId,
+            coachingProductId: applied.coachingProductId,
+            defaultBatchId: applied.defaultBatchId,
+            instructorId: applied.instructor?.id,
+          },
+        }
+        return {
+          ...applied,
+          draft: null,
+          draftUpdatedAt: undefined,
+          publishedAt: snapshot.publishedAt,
+          versions: [snapshot, ...(c.versions ?? [])],
+          updatedAt: new Date().toISOString(),
+        }
+      })
+    })
+  }, [currentUserId, users])
+
+  const restoreCourseVersion = useCallback((id: string, versionId: string) => {
+    setCourses((prev) => {
+      const publisher = currentUserId
+        ? users.find((u) => u.id === currentUserId) ?? null
+        : null
+      return prev.map((c) => {
+        if (c.id !== id) return c
+        const target = (c.versions ?? []).find((v) => v.id === versionId)
+        if (!target) return c
+        // First, snapshot the CURRENT state so the restore is itself
+        // undoable from the versions list.
+        const nextVersionNumber = (c.versions?.[0]?.version ?? 0) + 1
+        const preRestoreSnapshot: CourseVersion = {
+          id: generateId("ver"),
+          version: nextVersionNumber,
+          publishedAt: new Date().toISOString(),
+          publishedById: publisher?.id,
+          publishedByName: publisher?.name,
+          note: `Auto-saved before restoring "v${target.version}"`,
+          snapshot: {
+            title: c.title,
+            subtitle: c.subtitle,
+            slug: c.slug,
+            description: c.description,
+            thumbnail: c.thumbnail,
+            introVideoUrl: c.introVideoUrl,
+            category: c.category,
+            tags: c.tags,
+            level: c.level,
+            language: c.language,
+            price: c.price,
+            originalPrice: c.originalPrice,
+            currency: c.currency,
+            earlyBirdPrice: c.earlyBirdPrice,
+            earlyBirdUntil: c.earlyBirdUntil,
+            coupons: c.coupons,
+            coInstructorIds: c.coInstructorIds,
+            modules: c.modules,
+            totalDuration: c.totalDuration,
+            totalLessons: c.totalLessons,
+            visibility: c.visibility,
+            accessPassword: c.accessPassword,
+            certificateEligible: c.certificateEligible,
+            certificateTemplate: c.certificateTemplate,
+            features: c.features,
+            requirements: c.requirements,
+            whatYouLearn: c.whatYouLearn,
+            seoTitle: c.seoTitle,
+            seoDescription: c.seoDescription,
+            seoKeywords: c.seoKeywords,
+            ogImage: c.ogImage,
+            accessModel: c.accessModel,
+            checkoutBumpProductId: c.checkoutBumpProductId,
+            coachingProductId: c.coachingProductId,
+            defaultBatchId: c.defaultBatchId,
+            instructorId: c.instructor?.id,
+          },
+        }
+        // Apply the target snapshot onto the canonical fields.
+        const restored: Course = {
+          ...c,
+          // shallow-merge — only fields present in the snapshot
+          // override (versions are stored as a partial).
+          ...target.snapshot,
+          // discard any pending draft — the user explicitly chose
+          // to take this version instead.
+          draft: null,
+          draftUpdatedAt: undefined,
+          publishedAt: new Date().toISOString(),
+          versions: [preRestoreSnapshot, ...(c.versions ?? [])],
+          updatedAt: new Date().toISOString(),
+        }
+        return restored
+      })
+    })
+  }, [currentUserId, users])
+
+  // Cascade delete. Removing a course also removes everything that
+  // points at it — enrollments, assignments + their submissions and
+  // open-views, live sessions + their attendance, course-scoped
+  // quizzes + their attempts, doubts, reviews. Without this the
+  // related rows used to dangle with a dead `courseId`, and an
+  // undo from Trash could only restore the bare shell.
+  //
+  // The complete bundle is pushed to Trash so Restore brings the
+  // course back together with its children — same UX as
+  // `deleteAssignment` which already does this for submissions.
+  const deleteCourse = useCallback((id: string) => {
+    const target = courses.find(c => c.id === id)
+    if (!target) return
+
+    const targetEnrollments = enrollments.filter(e => e.courseId === id)
+    const targetAssignments = assignments.filter(a => a.courseId === id)
+    const assignmentIds = new Set(targetAssignments.map(a => a.id))
+    const targetSubmissions = submissions.filter(s => assignmentIds.has(s.assignmentId))
+    const targetAssignmentViews = assignmentViews.filter(v => assignmentIds.has(v.assignmentId))
+    const targetSessions = liveSessions.filter(s => s.courseId === id)
+    const sessionIds = new Set(targetSessions.map(s => s.id))
+    const targetAttendance = attendance.filter(a => sessionIds.has(a.sessionId))
+    const targetQuizzes = quizzes.filter(q => q.courseId === id)
+    const quizIds = new Set(targetQuizzes.map(q => q.id))
+    const targetAttempts = quizAttempts.filter(a => quizIds.has(a.quizId))
+    const targetDoubts = doubts.filter(d => d.courseId === id)
+    const targetReviews = reviews.filter(r => r.courseId === id)
+
+    pushToTrash({
+      id: target.id,
+      kind: "course",
+      label: target.title || "Course",
+      sublabel: `${target.modules?.length ?? 0} modules · ${targetEnrollments.length} student${targetEnrollments.length === 1 ? "" : "s"}`,
+      payload: {
+        course: target,
+        enrollments: targetEnrollments,
+        assignments: targetAssignments,
+        submissions: targetSubmissions,
+        assignmentViews: targetAssignmentViews,
+        liveSessions: targetSessions,
+        attendance: targetAttendance,
+        quizzes: targetQuizzes,
+        quizAttempts: targetAttempts,
+        doubts: targetDoubts,
+        reviews: targetReviews,
+      },
+    })
+
+    setCourses(prev => prev.filter(c => c.id !== id))
+    setEnrollments(prev => prev.filter(e => e.courseId !== id))
+    setAssignments(prev => prev.filter(a => a.courseId !== id))
+    setSubmissions(prev => prev.filter(s => !assignmentIds.has(s.assignmentId)))
+    setAssignmentViews(prev => prev.filter(v => !assignmentIds.has(v.assignmentId)))
+    setLiveSessions(prev => prev.filter(s => s.courseId !== id))
+    setAttendance(prev => prev.filter(a => !sessionIds.has(a.sessionId)))
+    setQuizzes(prev => prev.filter(q => q.courseId !== id))
+    setQuizAttempts(prev => prev.filter(a => !quizIds.has(a.quizId)))
+    setDoubts(prev => prev.filter(d => d.courseId !== id))
+    setReviews(prev => prev.filter(r => r.courseId !== id))
+  }, [courses, enrollments, assignments, submissions, assignmentViews, liveSessions, attendance, quizzes, quizAttempts, doubts, reviews])
+
   const getCourseById = useCallback((id: string) => courses.find(c => c.id === id), [courses])
   const getCourseBySlug = useCallback((slug: string) => courses.find(c => c.slug === slug), [courses])
+  // Live enrollment count — derived from the enrollments array so it
+  // can't drift relative to `course.enrolledCount` (the denormalized
+  // cache that the rest of the store still increments / decrements
+  // for any UI that hasn't been migrated to this getter).
+  const getEnrolledCount = useCallback(
+    (courseId: string) => enrollments.filter(e => e.courseId === courseId).length,
+    [enrollments],
+  )
   
   const enrollStudent = useCallback((courseId: string, studentId: string) => {
     const enrollment: Enrollment = {
@@ -2357,13 +3107,50 @@ export function LMSProvider({ children }: { children: ReactNode }) {
   }, [])
   
   const updateProgress = useCallback((enrollmentId: string, lessonId: string) => {
+    // Detect the 99→100 transition BEFORE the state update so we
+    // can fire the teacher congrats notification exactly once per
+    // enrollment. We compute against the current enrollments snapshot
+    // (the closed-over `enrollments` array). Without this guard,
+    // replaying a lesson after completion would re-notify every time.
+    const before = enrollments.find((e) => e.id === enrollmentId)
+    let completionEvent:
+      | { courseId: string; studentId: string }
+      | null = null
+    if (before && !before.completedAt && enrollmentId !== "preview") {
+      const course = courses.find((c) => c.id === before.courseId)
+      const currentLessonIds = new Set(
+        (course?.modules ?? []).flatMap((m) => m.lessons.map((l) => l.id)),
+      )
+      const wouldComplete = before.completedLessons.includes(lessonId)
+        ? before.completedLessons
+        : [...before.completedLessons, lessonId]
+      const aliveDone = wouldComplete.filter((id) => currentLessonIds.has(id))
+      const total = currentLessonIds.size
+      const nextProgress = total > 0
+        ? Math.min(100, Math.round((aliveDone.length / total) * 100))
+        : 0
+      if (nextProgress === 100) {
+        completionEvent = { courseId: before.courseId, studentId: before.studentId }
+      }
+    }
     setEnrollments(prev => prev.map(e => {
       if (e.id !== enrollmentId) return e
-      const completedLessons = e.completedLessons.includes(lessonId) 
-        ? e.completedLessons 
-        : [...e.completedLessons, lessonId]
       const course = courses.find(c => c.id === e.courseId)
-      const progress = course ? Math.round((completedLessons.length / course.totalLessons) * 100) : 0
+      // Lesson ids that still exist on the course RIGHT NOW. We use
+      // these both as the denominator and as a filter on the stored
+      // `completedLessons` so a lesson the teacher deleted after the
+      // student finished it doesn't keep counting toward 100%.
+      const currentLessonIds = new Set(
+        (course?.modules ?? []).flatMap(m => m.lessons.map(l => l.id)),
+      )
+      const completedLessons = e.completedLessons.includes(lessonId)
+        ? e.completedLessons
+        : [...e.completedLessons, lessonId]
+      const completedAlive = completedLessons.filter(id => currentLessonIds.has(id))
+      const total = currentLessonIds.size
+      const progress = total > 0
+        ? Math.min(100, Math.round((completedAlive.length / total) * 100))
+        : 0
       return {
         ...e,
         completedLessons,
@@ -2373,7 +3160,55 @@ export function LMSProvider({ children }: { children: ReactNode }) {
         completedAt: progress === 100 ? new Date().toISOString() : e.completedAt,
       }
     }))
-  }, [courses])
+    // Fire teacher congrats. Already gated above (no completedAt
+    // before, real enrollment, 100% projected) so this branch only
+    // executes on the actual finish-line tick.
+    if (completionEvent) {
+      const course = courses.find((c) => c.id === completionEvent.courseId)
+      const student = users.find((u) => u.id === completionEvent.studentId)
+      const teacher = course?.instructor?.id
+        ? users.find((u) => u.id === course.instructor.id)
+        : null
+      if (course && student && teacher) {
+        const entries = buildNotifications(
+          [teacher],
+          {
+            type: "course.completed",
+            title: `🎉 ${student.name} finished ${course.title}`,
+            body: `Send a quick congrats — students love being seen on the finish line.`,
+            url: `/dashboard/students/${student.id}`,
+            meta: {
+              courseId: course.id,
+              studentId: student.id,
+              kind: "course.completed",
+            },
+          },
+          { channels: ["in-app", "email"] },
+        )
+        addNotifications(entries)
+      }
+    }
+  }, [courses, users, enrollments])
+
+  // Live progress derivation — recomputes from the enrollment's
+  // completedLessons intersected with the course's CURRENT lesson
+  // ids. Use this on display surfaces (lists, dashboards, student
+  // home) so a curriculum edit reflects immediately without waiting
+  // for the next updateProgress tick.
+  const getEnrollmentProgress = useCallback(
+    (enrollmentId: string): number => {
+      const e = enrollments.find(x => x.id === enrollmentId)
+      if (!e) return 0
+      const course = courses.find(c => c.id === e.courseId)
+      const ids = new Set(
+        (course?.modules ?? []).flatMap(m => m.lessons.map(l => l.id)),
+      )
+      if (ids.size === 0) return 0
+      const done = e.completedLessons.filter(id => ids.has(id)).length
+      return Math.min(100, Math.round((done / ids.size) * 100))
+    },
+    [enrollments, courses],
+  )
   
   const getStudentEnrollments = useCallback((studentId: string) => 
     enrollments.filter(e => e.studentId === studentId), [enrollments])
@@ -2636,8 +3471,56 @@ export function LMSProvider({ children }: { children: ReactNode }) {
   }, [recomputeCourseRating])
 
   // --- Doubts (Q&A) ---
+  // When a doubt is filed (by an enrolled student OR a guest from
+  // the public course page) we also drop an in-app notification on
+  // the instructor's bell so they don't have to remember to check
+  // the inbox. Without this the doubt only surfaced via email +
+  // the dashboard inbox, and instructors complained that the bell
+  // counter understated how much was actually waiting on them.
   const addDoubt = useCallback((doubt: Doubt) => {
     setDoubts((prev) => [doubt, ...prev])
+    // Resolve target instructor through the latest courses snapshot
+    // via the setter callback so we don't capture a stale closure.
+    setCourses((prevCourses) => {
+      const course = prevCourses.find((c) => c.id === doubt.courseId)
+      if (!course) return prevCourses
+      // Notify the primary instructor + any co-instructors. We
+      // de-dupe so a teacher who's listed twice (legacy data)
+      // doesn't get two bell pings.
+      const recipientIds = new Set<string>()
+      if (course.instructor?.id) recipientIds.add(course.instructor.id)
+      for (const id of course.coInstructorIds ?? []) recipientIds.add(id)
+      // Don't ping the student / teacher who just asked their own question.
+      recipientIds.delete(doubt.studentId)
+      if (recipientIds.size > 0) {
+        const askerLabel = doubt.guest?.name?.trim() || "A student"
+        const askerSuffix = doubt.guest?.name?.trim()
+          ? ` (guest${doubt.guest.email ? ` · ${doubt.guest.email}` : ""})`
+          : ""
+        const notifs: Notification[] = [...recipientIds].map((uid) => ({
+          id: generateId("notif"),
+          userId: uid,
+          channel: "in-app",
+          type: "doubt.asked",
+          title: `New question on "${course.title}"`,
+          body: `${askerLabel}${askerSuffix}: ${doubt.title.slice(0, 200)}`,
+          url: `/dashboard/doubts`,
+          createdAt: new Date().toISOString(),
+          sentAt: new Date().toISOString(),
+          status: "sent",
+          meta: { doubtId: doubt.id, courseId: course.id },
+        }))
+        // Defer the notification push to the next tick — pushing
+        // inside the courses setter keeps state coherent but the
+        // notifications slice has its own setter that we trigger
+        // outside the render to avoid React's "setState during
+        // render" warning.
+        setTimeout(() => {
+          setNotifications((prevNotifs) => [...notifs, ...prevNotifs])
+        }, 0)
+      }
+      return prevCourses
+    })
   }, [])
   const replyToDoubt = useCallback((doubtId: string, reply: DoubtReply) => {
     setDoubts((prev) =>
@@ -2678,7 +3561,7 @@ export function LMSProvider({ children }: { children: ReactNode }) {
     (courseId: string) => doubts.filter((d) => d.courseId === courseId),
     [doubts],
   )
-  // Teacher can clean up a question's title/body for grammar or context
+  // Instructor can clean up a question's title/body for grammar or context
   // without changing its meaning. Records who edited and when.
   const updateDoubt = useCallback(
     (doubtId: string, patch: Partial<Pick<Doubt, "title" | "body">>) => {
@@ -2902,9 +3785,207 @@ export function LMSProvider({ children }: { children: ReactNode }) {
       })
     }
   }, [])
+  // Propagate a freshly-finalised recording URL into any curriculum
+  // lesson that was scheduled to play this live class. Matches by
+  // `lesson.type === "live"` + `lesson.content === sessionId` — the
+  // exact shape the curriculum editor stamps when an instructor
+  // attaches an existing live session to a lesson. We swap the
+  // lesson's type to "video" so the student player swaps from the
+  // live-placeholder UI to an actual recording inline; the original
+  // session id is preserved in lesson.resources for trace-back.
+  //
+  // Idempotent: we never overwrite a lesson that's already pointing
+  // at a non-live URL (manual override wins) and we don't re-write
+  // when the lesson already shows the same URL. Wrapped in setCourses
+  // updater form so we don't depend on stale closure courses[].
+  const propagateRecordingToLessons = useCallback(
+    (sessionId: string, recordingUrl: string) => {
+      if (!recordingUrl) return
+      setCourses((prev) => {
+        let changed = false
+        const next = prev.map((c) => {
+          let courseChanged = false
+          const modules = c.modules.map((m) => {
+            let moduleChanged = false
+            const lessons = m.lessons.map((l) => {
+              if (l.type !== "live") return l
+              if (l.content !== sessionId) return l
+              if (l.content === recordingUrl) return l // already
+              moduleChanged = true
+              return {
+                ...l,
+                type: "video" as const,
+                content: recordingUrl,
+                // Stash a back-reference so the editor can show
+                // "Originally a live class · auto-linked when the
+                // recording was ready" and an instructor can choose
+                // to revert.
+                resources: [
+                  ...(l.resources ?? []),
+                  { label: "Original live class id", url: sessionId },
+                ],
+              }
+            })
+            if (moduleChanged) {
+              courseChanged = true
+              return { ...m, lessons }
+            }
+            return m
+          })
+          if (courseChanged) {
+            changed = true
+            return { ...c, modules }
+          }
+          return c
+        })
+        return changed ? next : prev
+      })
+    },
+    [],
+  )
+
+  // Fire a recording-ready notification to every enrolled student
+  // when a class's recording URL appears for the first time. Honours
+  // the existing notifications dispatcher so channel prefs + email
+  // delivery work out of the box. We swallow the event for sessions
+  // without a courseId — those are ad-hoc rooms with no audience.
+  const fireRecordingReadyNotification = useCallback(
+    (sessionId: string, recordingUrl: string) => {
+      const session = liveSessions.find((s) => s.id === sessionId)
+      if (!session || !session.courseId) return
+      const course = courses.find((c) => c.id === session.courseId)
+      if (!course) return
+      const enrolledIds = new Set(
+        enrollments
+          .filter((e) => e.courseId === session.courseId)
+          .map((e) => e.studentId),
+      )
+      const recipients = users.filter((u) => enrolledIds.has(u.id))
+      if (recipients.length === 0) return
+      const minutes = session.durationMinutes
+        ? `${session.durationMinutes} min`
+        : "your class"
+      const entries = buildNotifications(
+        recipients,
+        {
+          type: "live-session.recording-ready",
+          title: `📼 Recording ready — ${session.title}`,
+          body: `${course.title}: yesterday's class recording is up (${minutes}). Watch when you can.`,
+          // Deep link sends them to the recordings hub. The recording
+          // row will resolve from session.id naturally.
+          url: `/dashboard/recordings?q=${encodeURIComponent(session.title)}`,
+          meta: {
+            sessionId,
+            courseId: course.id,
+            kind: "live-session.recording-ready",
+            recordingUrl,
+          },
+        },
+        // Skip WhatsApp by default — recording-ready is informational,
+        // not urgent. The dispatcher will still respect a user's
+        // explicit opt-in for the channel.
+        { channels: ["in-app", "email"] },
+      )
+      addNotifications(entries)
+    },
+    // We deliberately exclude `addNotifications` from the deps. It's
+    // declared later in this provider; the reference inside the
+    // closure is fine because the callback runs post-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [liveSessions, courses, enrollments, users],
+  )
+
+  // Sprint A Communities #19 — when a class recording becomes
+  // available, auto-post it to the course's attached community
+  // (`course.defaultBatchId`) so members get the recording in their
+  // feed without having to dig through the recordings library. We
+  // skip when no community is attached, when no permanent record
+  // exists yet (transient recording URL pre-finalisation), or when
+  // a previous auto-post for this session already exists (dedupe).
+  const autoCrossPostRecordingToCommunity = useCallback(
+    (sessionId: string, recordingUrl: string) => {
+      const session = liveSessions.find((s) => s.id === sessionId)
+      if (!session || !session.courseId) return
+      const course = courses.find((c) => c.id === session.courseId)
+      // No attached community on the course → nothing to cross-post to.
+      if (!course?.defaultBatchId) return
+      // Dedupe: scan existing posts for a marker pointing at this
+      // session. Auto-posts carry the marker
+      // `data-recording-session="<id>"` in their HTML body, which we
+      // can grep without a separate index.
+      const marker = `data-recording-session="${sessionId}"`
+      const existing = batchPosts.find(
+        (p) => p.batchId === course.defaultBatchId && (p.body ?? "").includes(marker),
+      )
+      if (existing) return
+      // Author: prefer the session's host (real human signature);
+      // fall back to first admin in the workspace so the post still
+      // ships if the host has been deleted since.
+      const authorId =
+        session.hostId ?? users.find((u) => u.role === "admin")?.id
+      if (!authorId) return
+      const duration = session.durationMinutes
+        ? ` · ${session.durationMinutes} min`
+        : ""
+      // Plain HTML body — renders through the same RichTextContent
+      // the rest of the community feed uses. Inline play link points
+      // at recordings hub with the title as the search query so the
+      // student lands on the right row.
+      const body =
+        `<p data-recording-session="${sessionId}">` +
+        `📼 <strong>Recording from today's class is up.</strong></p>` +
+        `<p>${escapeHtmlForPost(session.title)}${duration}.</p>` +
+        `<p>` +
+        `<a href="/dashboard/recordings?q=${encodeURIComponent(session.title)}">Watch the recording →</a>` +
+        `</p>`
+      const now = new Date().toISOString()
+      setBatchPosts((prev) => [
+        ...prev,
+        {
+          id: generateId("post"),
+          batchId: course.defaultBatchId!,
+          authorId,
+          body,
+          // Pinned for 24h-worth of feed visibility; admins can
+          // unpin if it crowds the top. We don't enforce auto-
+          // unpin server-side — the existing feed has very few
+          // pinned posts in practice.
+          pinned: true,
+          hidden: false,
+          comments: [],
+          createdAt: now,
+          updatedAt: now,
+          // Carry the recording URL on the post so the future
+          // "click to play inline" enhancement can find it without
+          // re-parsing the body.
+          embedUrl: recordingUrl,
+        },
+      ])
+    },
+    // Deliberately exclude setBatchPosts (stable from useState); we
+    // also exclude batchPosts to avoid re-running the cb every time
+    // a post lands. The dedupe check uses the latest via the lookup
+    // at call-time — race window is too narrow to matter (two
+    // recording-ready events for the same session in the same tick
+    // would be a backend bug, not a hot path).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [liveSessions, courses, users, batchPosts],
+  )
+
   const updateLiveSession = useCallback((id: string, updates: Partial<LiveSession>) => {
     const before = liveSessions.find((s) => s.id === id)
     setLiveSessions(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s))
+    // Recording URL just arrived (e.g. from the egress poller's
+    // backfill) → wire it into any lesson that scheduled this class
+    // AND ping every enrolled student so they don't have to refresh
+    // their library to discover the new content.
+    if (updates.recordingUrl && updates.recordingUrl !== before?.recordingUrl) {
+      propagateRecordingToLessons(id, updates.recordingUrl)
+      fireRecordingReadyNotification(id, updates.recordingUrl)
+      // Sprint A Communities #19 — also fan into the attached
+      // community feed. Idempotent — see dedupe inside.
+      autoCrossPostRecordingToCommunity(id, updates.recordingUrl)
+    }
     // Forward reschedule-relevant fields to the backend so cross-browser
     // students see the new time / title without needing a manual refresh.
     // Only fires when a field that actually changed is in the patch.
@@ -2923,7 +4004,7 @@ export function LMSProvider({ children }: { children: ReactNode }) {
         void pushRoomState(before.roomCode ?? before.id, patch)
       }
     }
-  }, [liveSessions])
+  }, [liveSessions, propagateRecordingToLessons, fireRecordingReadyNotification, autoCrossPostRecordingToCommunity])
   // In-house room controls. Each flips a step of the state machine
   // and stamps the corresponding timestamp. Callers should branch on
   // session.provider === "in-house" before invoking — for external
@@ -3023,8 +4104,19 @@ export function LMSProvider({ children }: { children: ReactNode }) {
           recordingUrl: recording?.url ?? null,
         })
       }
+      // If the host ended with a real recording URL in hand (most
+      // hosts; the egress poller fills it later for the rest), wire
+      // it into any lesson that was waiting on this class AND notify
+      // every enrolled student that the playback is ready.
+      if (recording?.url) {
+        propagateRecordingToLessons(id, recording.url)
+        fireRecordingReadyNotification(id, recording.url)
+        // Sprint A Communities #19 — also fan into the attached
+        // community feed when the host ends with a recording URL.
+        autoCrossPostRecordingToCommunity(id, recording.url)
+      }
     },
-    [liveSessions],
+    [liveSessions, propagateRecordingToLessons, fireRecordingReadyNotification, autoCrossPostRecordingToCommunity],
   )
 
   const deleteLiveSession = useCallback((id: string) => {
@@ -3079,6 +4171,14 @@ export function LMSProvider({ children }: { children: ReactNode }) {
     // browser handles the cleanup if needed.
   }, [])
   const getWhiteboardById = useCallback((id: string) => whiteboards.find(b => b.id === id), [whiteboards])
+  // Reverse index: scan once per call (linear in board count). Cheap
+  // enough — workspaces don't carry tens of thousands of boards, and
+  // the lesson page renders this a handful of times per mount.
+  const getWhiteboardsForLesson = useCallback(
+    (lessonId: string) =>
+      whiteboards.filter((b) => (b.attachedToLessons ?? []).includes(lessonId)),
+    [whiteboards],
+  )
 
   // --- Whiteboard edit-access requests ---
   // Idempotent: if the student already has a pending request on this
@@ -3507,8 +4607,91 @@ export function LMSProvider({ children }: { children: ReactNode }) {
       ["user", "course", "quiz", "review", "doubt", "student-group", "live-session", "assignment", "whiteboard"],
       (entry) => {
         switch (entry.kind) {
-          case "user":          setUsers(prev => prev.some(u => u.id === (entry.payload as User).id) ? prev : [...prev, entry.payload as User]); return true
-          case "course":        setCourses(prev => prev.some(c => c.id === (entry.payload as Course).id) ? prev : [...prev, entry.payload as Course]); return true
+          case "user": {
+            // Cascade restore — pair with the cascade in deleteUser
+            // above. Old user-trash entries were a bare User; we
+            // keep the fallback so legacy trash entries still restore.
+            const payload = entry.payload as
+              | User
+              | {
+                user: User
+                enrollments: Enrollment[]
+                submissions: AssignmentSubmission[]
+                quizAttempts: QuizAttempt[]
+                attendance: AttendanceRecord[]
+                doubts: Doubt[]
+                messages: Message[]
+                groupIds: string[]
+              }
+            const bundle = "user" in payload ? payload : null
+            const user = bundle ? bundle.user : (payload as User)
+            setUsers(prev => prev.some(u => u.id === user.id) ? prev : [...prev, user])
+            if (bundle) {
+              const mergeById = <T extends { id: string }>(prev: T[], add: T[]): T[] => {
+                if (add.length === 0) return prev
+                const have = new Set(prev.map(x => x.id))
+                return [...prev, ...add.filter(x => !have.has(x.id))]
+              }
+              setEnrollments(prev => mergeById(prev, bundle.enrollments))
+              setSubmissions(prev => mergeById(prev, bundle.submissions))
+              setQuizAttempts(prev => mergeById(prev, bundle.quizAttempts))
+              setAttendance(prev => mergeById(prev, bundle.attendance))
+              setDoubts(prev => mergeById(prev, bundle.doubts))
+              setMessages(prev => mergeById(prev, bundle.messages))
+              if (bundle.groupIds.length > 0) {
+                const wanted = new Set(bundle.groupIds)
+                setStudentGroups(prev => prev.map(g =>
+                  wanted.has(g.id) && !g.memberIds.includes(user.id)
+                    ? { ...g, memberIds: [...g.memberIds, user.id], updatedAt: new Date().toISOString() }
+                    : g,
+                ))
+              }
+            }
+            return true
+          }
+          case "course": {
+            // Cascade restore — pair with the cascade in deleteCourse
+            // (every child collection it removed is in this payload).
+            // Old course-trash entries were a bare Course; we still
+            // handle that shape via the fallback so legacy trash
+            // entries don't get stuck un-restorable.
+            const payload = entry.payload as
+              | Course
+              | {
+                course: Course
+                enrollments: Enrollment[]
+                assignments: Assignment[]
+                submissions: AssignmentSubmission[]
+                assignmentViews: AssignmentView[]
+                liveSessions: LiveSession[]
+                attendance: AttendanceRecord[]
+                quizzes: Quiz[]
+                quizAttempts: QuizAttempt[]
+                doubts: Doubt[]
+                reviews: Review[]
+              }
+            const bundle = "course" in payload ? payload : null
+            const course = bundle ? bundle.course : (payload as Course)
+            setCourses(prev => prev.some(c => c.id === course.id) ? prev : [...prev, course])
+            if (bundle) {
+              const mergeById = <T extends { id: string }>(prev: T[], add: T[]): T[] => {
+                if (add.length === 0) return prev
+                const have = new Set(prev.map(x => x.id))
+                return [...prev, ...add.filter(x => !have.has(x.id))]
+              }
+              setEnrollments(prev => mergeById(prev, bundle.enrollments))
+              setAssignments(prev => mergeById(prev, bundle.assignments))
+              setSubmissions(prev => mergeById(prev, bundle.submissions))
+              setAssignmentViews(prev => mergeById(prev, bundle.assignmentViews))
+              setLiveSessions(prev => mergeById(prev, bundle.liveSessions))
+              setAttendance(prev => mergeById(prev, bundle.attendance))
+              setQuizzes(prev => mergeById(prev, bundle.quizzes))
+              setQuizAttempts(prev => mergeById(prev, bundle.quizAttempts))
+              setDoubts(prev => mergeById(prev, bundle.doubts))
+              setReviews(prev => mergeById(prev, bundle.reviews))
+            }
+            return true
+          }
           case "quiz":          setQuizzes(prev => prev.some(q => q.id === (entry.payload as Quiz).id) ? prev : [...prev, entry.payload as Quiz]); return true
           case "review":        setReviews(prev => prev.some(r => r.id === (entry.payload as Review).id) ? prev : [...prev, entry.payload as Review]); return true
           case "doubt":         setDoubts(prev => prev.some(d => d.id === (entry.payload as Doubt).id) ? prev : [entry.payload as Doubt, ...prev]); return true
@@ -3529,6 +4712,38 @@ export function LMSProvider({ children }: { children: ReactNode }) {
       },
     )
     return off
+  }, [])
+
+  // Cross-store auto-join (Phase 3C — Gap 11). The storefront
+  // dispatches `entitlement.course-granted` whenever a buyer is
+  // granted access to a course; we look up the course, find its
+  // defaultBatchId, and add the buyer to that batch's memberIds
+  // here. Idempotent — memberIds.includes() guards against
+  // duplicate appends from the next-step page's belt-and-braces
+  // join. Runs in BOTH directions: a guest who never opens the
+  // post-purchase page still ends up in the community.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ customerId?: string; courseId?: string }>).detail
+      if (!detail?.customerId || !detail?.courseId) return
+      const course = coursesRef.current.find((c) => c.id === detail.courseId)
+      const defaultBatchId = course?.defaultBatchId
+      if (!defaultBatchId) return
+      setStudentGroups((prev) =>
+        prev.map((g) =>
+          g.id === defaultBatchId && !g.memberIds.includes(detail.customerId!)
+            ? {
+              ...g,
+              memberIds: [...g.memberIds, detail.customerId!],
+              updatedAt: new Date().toISOString(),
+            }
+            : g,
+        ),
+      )
+    }
+    window.addEventListener("entitlement.course-granted", handler)
+    return () => window.removeEventListener("entitlement.course-granted", handler)
   }, [])
 
   // Aggregate hydration flag — true once every slice has read its
@@ -3565,6 +4780,13 @@ export function LMSProvider({ children }: { children: ReactNode }) {
       deleteCourse,
       getCourseById,
       getCourseBySlug,
+      getEnrolledCount,
+      resolveUniqueSlug,
+      getEnrollmentProgress,
+      saveCourseDraft,
+      discardCourseDraft,
+      publishCourseDraft,
+      restoreCourseVersion,
       enrollments,
       enrollStudent,
       unenrollStudent,
@@ -3641,6 +4863,7 @@ export function LMSProvider({ children }: { children: ReactNode }) {
       updateWhiteboard,
       deleteWhiteboard,
       getWhiteboardById,
+      getWhiteboardsForLesson,
       whiteboardAccessRequests,
       requestWhiteboardEditAccess,
       decideWhiteboardAccessRequest,

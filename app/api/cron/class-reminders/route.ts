@@ -25,8 +25,12 @@
 // while any dashboard / student-portal tab is open.
 
 import { NextResponse, type NextRequest } from "next/server"
-import { promises as fs } from "fs"
-import path from "path"
+import {
+  SYSTEM_SLUG,
+  listSlugs,
+  loadPortalState,
+  upsertPortalKey,
+} from "@/lib/portal-state-client"
 import { sendEmail } from "@/lib/zepto"
 import { sendWhatsApp } from "@/lib/whatsapp"
 import {
@@ -55,9 +59,6 @@ interface PortalConfig {
   brand?: PortalBrand
 }
 
-function dataDir(): string {
-  return path.join(process.cwd(), ".portal-state")
-}
 function appBase(): string {
   return (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/$/, "")
 }
@@ -67,14 +68,15 @@ function genId(prefix: string): string {
 }
 
 export async function POST(_req: NextRequest) {
-  let entries: string[] = []
-  try {
-    entries = await fs.readdir(dataDir())
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return NextResponse.json({ ok: true, scanned: { tenants: 0, sessions: 0, eligible: 0 }, sent: { inApp: 0, email: 0, whatsapp: 0 } })
-    }
-    return NextResponse.json({ ok: false, error: (err as Error).message }, { status: 500 })
+  // Enumerate live tenants from the DB and skip the reserved system
+  // namespace — it holds caches, not session data.
+  const slugs = (await listSlugs()).filter((s) => s !== SYSTEM_SLUG)
+  if (slugs.length === 0) {
+    return NextResponse.json({
+      ok: true,
+      scanned: { tenants: 0, sessions: 0, eligible: 0 },
+      sent: { inApp: 0, email: 0, whatsapp: 0 },
+    })
   }
 
   let tenantsScanned = 0
@@ -84,17 +86,9 @@ export async function POST(_req: NextRequest) {
   let emailCount = 0
   let whatsappCount = 0
 
-  for (const file of entries) {
-    if (!file.endsWith(".json")) continue
-    const slug = file.slice(0, -".json".length)
-    const filePath = path.join(dataDir(), file)
-    let blob: Record<string, unknown>
-    try {
-      const raw = await fs.readFile(filePath, "utf8")
-      blob = JSON.parse(raw) as Record<string, unknown>
-    } catch {
-      continue
-    }
+  for (const slug of slugs) {
+    const blob = await loadPortalState(slug)
+    if (Object.keys(blob).length === 0) continue
     tenantsScanned++
 
     const sessions = (blob["lms.liveSessions.v1"] as LiveSession[] | undefined) ?? []
@@ -274,12 +268,13 @@ export async function POST(_req: NextRequest) {
     }
 
     if (blobChanged) {
-      blob["lms.liveSessions.v1"] = sessions
-      blob["lms.notifications.v1"] = notifications
-      // Atomic write — same pattern lib/portal-state-server uses.
-      const tmp = `${filePath}.${process.pid}.tmp`
-      await fs.writeFile(tmp, JSON.stringify(blob, null, 2), "utf8")
-      await fs.rename(tmp, filePath)
+      // Persist only the keys we mutated — each is one row write
+      // against (slug, key). Concurrency is the backend's
+      // responsibility now, not a tmp-file rename dance here.
+      await Promise.all([
+        upsertPortalKey(slug, "lms.liveSessions.v1", sessions),
+        upsertPortalKey(slug, "lms.notifications.v1", notifications),
+      ])
     }
   }
 

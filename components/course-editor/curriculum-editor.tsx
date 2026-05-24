@@ -21,7 +21,6 @@ import {
   Sparkles,
   Trash2,
   Type,
-  Unlock,
   Video,
   Webhook,
 } from "lucide-react"
@@ -89,6 +88,11 @@ const TYPE_META: Record<LessonType, { label: string; icon: LucideIcon }> = {
   audio: { label: "Audio", icon: Music },
   quiz: { label: "Quiz", icon: Sparkles },
   live: { label: "Live class", icon: Radio },
+  // Sprint C Recordings #34 — lesson type that references an
+  // existing recording from the library. Reuses Video as the
+  // picker icon (same visual category) but the lesson player
+  // resolves a session id rather than a raw URL.
+  recording: { label: "Recording", icon: Video },
 }
 
 // ============================================================
@@ -215,7 +219,7 @@ export function CurriculumEditor({ modules, onChange, coursePriced, courseId, fa
   }
 
   // Clone an existing lesson and insert it directly after the source so a
-  // teacher can spin up a near-identical lesson (same template / type /
+  // Instructor can spin up a near-identical lesson (same template / type /
   // content URL pattern) without re-typing the form. New attachments get
   // fresh ids so the clone doesn't share refs with the original.
   const duplicateLesson = (moduleId: string, lessonId: string) => {
@@ -355,7 +359,7 @@ function ModuleCard(props: {
   onLessonDragStart: (lessonId: string) => void
   onLessonDragEnd: () => void
   // Faculty list — pass-through for the per-module owner picker.
-  // The picker only appears when there's more than one teacher to
+  // The picker only appears when there's more than one Instructor to
   // choose from, so empty / single-faculty workspaces don't see
   // noise in the UI.
   faculty?: Array<{ id: string; name: string; role?: string }>
@@ -420,9 +424,10 @@ function ModuleCard(props: {
         </button>
         <Input
           value={mod.title}
-          onChange={(e) => props.onUpdate({ title: e.target.value })}
+          onChange={(e) => props.onUpdate({ title: e.target.value.slice(0, 80) })}
           placeholder={`Module ${props.index + 1}`}
-          className="h-8 border-transparent bg-transparent font-medium shadow-none focus-visible:border-border focus-visible:bg-background"
+          maxLength={80}
+          className="h-8 min-w-0 flex-1 border-transparent bg-transparent font-medium shadow-none focus-visible:border-border focus-visible:bg-background"
         />
         <div className="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
           <span>{mod.lessons.length} lesson{mod.lessons.length === 1 ? "" : "s"}</span>
@@ -489,6 +494,47 @@ function ModuleCard(props: {
                   rows={2}
                   placeholder="One-line takeaway — what will students walk away knowing?"
                   className="resize-none text-sm"
+                />
+              </div>
+            )
+          })()}
+
+          {/* Drip unlock (Phase 3B). Number of days after enrollment
+              before this module's lessons become viewable. 0 / blank
+              = available immediately. The lesson player surfaces a
+              "Unlocks on <date>" card for locked modules so students
+              know when to come back. Use this for cohort courses
+              that want to gate Module 2 a week after Module 1. */}
+          {(() => {
+            const offset = mod.unlockOffsetDays ?? 0
+            return (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs text-muted-foreground">
+                    Drip — unlock days after enrollment
+                  </Label>
+                  {offset > 0 && (
+                    <span className="text-[11px] text-amber-700 dark:text-amber-400">
+                      Module locked for first {offset} day{offset === 1 ? "" : "s"}
+                    </span>
+                  )}
+                </div>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={365}
+                  value={offset || ""}
+                  placeholder="0 — available immediately"
+                  onChange={(e) => {
+                    const raw = parseInt(e.target.value, 10)
+                    const next =
+                      !Number.isFinite(raw) || raw <= 0
+                        ? undefined
+                        : Math.min(365, raw)
+                    props.onUpdate({ unlockOffsetDays: next })
+                  }}
+                  className="h-9 max-w-[230px] text-sm"
                 />
               </div>
             )
@@ -632,7 +678,7 @@ function LessonRow({
   const [composerOpen, setComposerOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [lastPublished, setLastPublished] = useState<Assignment | null>(null)
-  // Local quiz dialog — opens when the teacher picks the "Quiz" tile
+  // Local quiz dialog — opens when the Instructor picks the "Quiz" tile
   // in the follow-up composer. Lets us reuse the same builder used by
   // the curriculum editor's lesson-level "Add quiz" surface without
   // creating a second mounting point.
@@ -645,11 +691,11 @@ function LessonRow({
       onDragOver={onDragOver}
       onDrop={onDrop}
       className={cn(
-        "rounded-md border bg-background transition-shadow",
+        "min-w-0 overflow-hidden rounded-md border bg-background transition-shadow",
         open ? "border-primary/30 shadow-sm" : "border-border",
       )}
     >
-      <div className="flex items-center gap-2 px-2 py-1.5">
+      <div className="flex min-w-0 items-center gap-2 px-2 py-1.5">
         <button
           type="button"
           draggable
@@ -762,7 +808,7 @@ function LessonRow({
           onPublished={(a) => { setLastPublished(a); setShareOpen(true) }}
           // Picking the "Quiz" tile in the composer routes here — we
           // close the composer and open the quiz builder so the
-          // teacher has a single follow-up entry point for any kind.
+          // Instructor has a single follow-up entry point for any kind.
           onCreateQuiz={() => setFollowUpQuizOpen(true)}
         />
       )}
@@ -827,6 +873,23 @@ function LessonEditor({
     )
   }, [liveSessions, courseId])
 
+  // Sprint C Recordings #34 — recorded sessions a Instructor can
+  // attach as a lesson. We surface ALL recorded sessions in this
+  // workspace (not just this course's) because cross-course reuse
+  // is the common case: an Intro session recorded for one cohort
+  // gets reused as a lesson inside the next cohort's curriculum.
+  // Sort by recency descending — the most-recent recording is
+  // almost always what the author wants to grab.
+  const recordedSessions = useMemo(() => {
+    return [...liveSessions]
+      .filter((s) => !!s.recordingUrl)
+      .sort(
+        (a, b) =>
+          new Date(b.roomEndedAt ?? b.scheduledAt).getTime() -
+          new Date(a.roomEndedAt ?? a.scheduledAt).getTime(),
+      )
+  }, [liveSessions])
+
   // Course-scoped quizzes. Quizzes are stored globally with a courseId,
   // so we filter to this course's quizzes (and fall back to all if no
   // course is in scope yet).
@@ -857,8 +920,9 @@ function LessonEditor({
           <Label className="text-xs">Title</Label>
           <Input
             value={lesson.title}
-            onChange={(e) => onUpdate({ title: e.target.value })}
+            onChange={(e) => onUpdate({ title: e.target.value.slice(0, 100) })}
             placeholder="Lesson title"
+            maxLength={100}
           />
         </div>
         <div className="space-y-1.5">
@@ -1067,6 +1131,68 @@ function LessonEditor({
             />
           )}
         </div>
+          ) : lesson.type === "recording" ? (
+            // Sprint C Recordings #34 — recording picker. Lesson.content
+            // holds the LiveSession id; the lesson player resolves the
+            // URL + visibility + chapters from the session at render
+            // time, so the lesson tracks the recording (rename a class
+            // → the lesson title doesn't auto-rename but the playback
+            // metadata stays correct).
+            <div className="space-y-1.5">
+              <Label className="text-xs">
+                <Video className="mr-1.5 inline h-3.5 w-3.5" />
+                Pick a recording
+              </Label>
+              {recordedSessions.length === 0 ? (
+                <div className="rounded-md border border-dashed border-border/60 p-3 text-xs text-muted-foreground">
+                  No recorded classes yet. Record a live class with the in-call REC button — it lands
+                  in your{" "}
+                  <Link
+                    href="/dashboard/recordings"
+                    target="_blank"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    recordings library
+                  </Link>{" "}
+                  and you can attach it here in two clicks.
+                </div>
+              ) : (
+                <>
+                  <Select
+                    value={lesson.content}
+                    onValueChange={(v) => onUpdate({ content: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pick a recorded class…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {recordedSessions.map((s) => {
+                        const when = new Date(s.roomEndedAt ?? s.scheduledAt)
+                        const dur = s.durationMinutes ? ` · ${s.durationMinutes} min` : ""
+                        return (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.title} · {when.toLocaleDateString()}
+                            {dur}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                    <span>
+                      Resolves to the recording&apos;s URL + chapters at playback.
+                    </span>
+                    <Link
+                      href="/dashboard/recordings"
+                      target="_blank"
+                      className="font-medium text-primary hover:underline"
+                    >
+                      Manage all →
+                    </Link>
+                  </div>
+                </>
+              )}
+            </div>
       ) : lesson.type === "embed" ? (
         // Embeds are URL-only (Canva/Notion/Figma/Slides don't upload — you
         // share their link). Keep the bare input so we don't tempt people
@@ -1136,9 +1262,30 @@ function LessonEditor({
         onChange={(a) => onUpdate({ attachments: a })}
       />
 
+      {/* Follow-ups affordance. Creators routinely ask "how do
+          students get nudged about this lesson?" while they're
+          still building the curriculum — answer it here, where the
+          question lives, instead of hiding the answer in docs. The
+          actual attachment of quizzes / assignments / live sessions
+          happens from the lesson's detail page once the course
+          exists; this block just sets expectations + names the
+          delivery channels. */}
+      <div className="rounded-md border border-border/60 bg-background p-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Follow-ups after this lesson
+        </p>
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          Attach a quiz, assignment, or live class to this lesson once the course is saved. We notify enrolled students automatically.
+        </p>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">Notified via in-app, email, and WhatsApp on publish.</span>
+          {" "}Channels honour each student&apos;s notification preferences.
+        </p>
+      </div>
+
       {/* Transcript — optional. Surfaced as a <details> so it stays
           collapsed by default (only ~5% of lessons get one) but is one
-          click away when a teacher wants to add captions / a written
+          click away when a Instructor wants to add captions / a written
           version for accessibility + SEO. */}
       {(lesson.type === "video" || lesson.type === "audio") && (
         <details className="rounded-md border border-border/60 bg-background p-3 [&[open]>summary]:mb-2">
@@ -1345,91 +1492,119 @@ function AttachmentsEditor({
       {attachments.length > 0 && (
         <ul className="mt-2 space-y-1.5">
           {attachments.map((a) => (
-            // min-w-0 is required on the flex container, otherwise the
-            // unbreakable data: URL below pushes the <li> to its intrinsic
-            // width and blows out the whole page horizontally.
-            <li key={a.id} className="flex min-w-0 items-center gap-2 rounded-md border border-border/60 px-2 py-1.5">
-              <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-              <Input
-                value={a.filename}
-                onChange={(e) => update(a.id, { filename: e.target.value })}
-                className="h-7 max-w-[180px] text-xs"
-              />
-              {/* min-w-0 + block here so `truncate` actually clips the URL
-                  instead of the anchor expanding to fit the full string. */}
+            // Two-row layout per attachment. The earlier single-row
+            // version overflowed horizontally on narrow lesson panels:
+            // a long file URL + fixed-width filename input + three
+            // pills + a trash button add up to a minimum row width
+            // wider than the column, and even truncate + min-w-0 on the
+            // URL anchor couldn't fix it once the sibling pills exceeded
+            // the available space.
+            //
+            // Layout now:
+            //   row 1 — Paperclip · filename input · pills · trash
+            //   row 2 — URL anchor on its own line, full-width truncate
+            // Wrap is `min-w-0 overflow-hidden` so nothing inside can
+            // push the page sideways.
+            <li
+              key={a.id}
+              className="min-w-0 overflow-hidden rounded-md border border-border/60 px-2 py-1.5"
+            >
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <Input
+                  value={a.filename}
+                  onChange={(e) => update(a.id, { filename: e.target.value })}
+                  className="h-7 min-w-0 flex-1 text-xs"
+                />
+                <button
+                  type="button"
+                  onClick={() => update(a.id, { mandatory: !a.mandatory })}
+                  className={cn(
+                    "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium",
+                    a.mandatory ? "bg-accent/15 text-accent" : "bg-muted text-muted-foreground",
+                  )}
+                  title="Toggle mandatory"
+                >
+                  {a.mandatory ? "Required" : "Optional"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => update(a.id, { downloadable: !a.downloadable })}
+                  className={cn(
+                    "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium",
+                    a.downloadable !== false ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
+                  )}
+                  title="Toggle downloadable"
+                >
+                  {a.downloadable !== false ? "Downloadable" : "View only"}
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => remove(a.id)}
+                  className="h-7 w-7 shrink-0 text-destructive hover:text-destructive"
+                  aria-label="Remove attachment"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              {/* URL on its own row. `min-w-0` + `block truncate` makes
+                  the anchor clip rather than expand to fit the full
+                  string — important for `data:` URLs and signed-S3
+                  URLs that can be 500+ chars. */}
               <a
                 href={a.url}
                 target="_blank"
                 rel="noreferrer"
-                className="block h-7 min-w-0 flex-1 truncate rounded border border-border/60 bg-muted/40 px-2 py-1 leading-5 text-xs text-muted-foreground hover:bg-muted"
+                className="mt-1.5 block min-w-0 truncate rounded border border-border/60 bg-muted/40 px-2 py-1 text-xs leading-5 text-muted-foreground hover:bg-muted"
                 title={a.url.startsWith("data:") ? "Inline data URL — click to open in a new tab" : a.url}
               >
                 {a.url.startsWith("data:")
                   ? `data:${a.url.slice(5, a.url.indexOf(";"))} · inline upload`
                   : a.url}
               </a>
-              <button
-                type="button"
-                onClick={() => update(a.id, { mandatory: !a.mandatory })}
-                className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                  a.mandatory ? "bg-accent/15 text-accent" : "bg-muted text-muted-foreground",
-                )}
-                title="Toggle mandatory"
-              >
-                {a.mandatory ? "Required" : "Optional"}
-              </button>
-              <button
-                type="button"
-                onClick={() => update(a.id, { downloadable: !a.downloadable })}
-                className={cn(
-                  "rounded px-1.5 py-0.5 text-[10px] font-medium",
-                  a.downloadable !== false ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground",
-                )}
-                title="Toggle downloadable"
-              >
-                {a.downloadable !== false ? "Downloadable" : "View only"}
-              </button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => remove(a.id)}
-                className="h-7 w-7 text-destructive hover:text-destructive"
-                aria-label="Remove attachment"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
             </li>
           ))}
         </ul>
       )}
-      <div className="mt-2 flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-        >
-          <Paperclip className="mr-1.5 h-3.5 w-3.5" />
-          {uploading ? "Uploading…" : "Upload file"}
-        </Button>
-        <Input
-          value={draftFilename}
-          onChange={(e) => setDraftFilename(e.target.value)}
-          placeholder="Name (optional)"
-          className="h-8 max-w-[180px] text-xs"
-        />
-        <Input
-          value={draftUrl}
-          onChange={(e) => setDraftUrl(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && addByUrl()}
-          placeholder="or paste a URL (Drive, S3…)"
-          className="h-8 flex-1 text-xs"
-        />
-        <Button size="sm" onClick={addByUrl} disabled={!draftUrl.trim()}>
-          <Plus className="mr-1 h-3.5 w-3.5" /> Add
-        </Button>
+      {/* Two-row add layout — same min-w-0 / overflow-hidden defence
+          as the existing-attachment rows above. Row 1: Upload button
+          + the small "Name" hint input. Row 2: the URL paste field
+          + Add button. Wrapping the whole block in min-w-0 +
+          overflow-hidden guarantees a long pasted URL can never push
+          the page sideways. */}
+      <div className="mt-2 min-w-0 space-y-2 overflow-hidden">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="shrink-0"
+          >
+            <Paperclip className="mr-1.5 h-3.5 w-3.5" />
+            {uploading ? "Uploading…" : "Upload file"}
+          </Button>
+          <Input
+            value={draftFilename}
+            onChange={(e) => setDraftFilename(e.target.value)}
+            placeholder="Name (optional)"
+            className="h-8 min-w-0 flex-1 text-xs"
+          />
+        </div>
+        <div className="flex min-w-0 items-center gap-2">
+          <Input
+            value={draftUrl}
+            onChange={(e) => setDraftUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addByUrl()}
+            placeholder="or paste a URL (Drive, S3…)"
+            className="h-8 min-w-0 flex-1 text-xs"
+          />
+          <Button size="sm" onClick={addByUrl} disabled={!draftUrl.trim()} className="shrink-0">
+            <Plus className="mr-1 h-3.5 w-3.5" /> Add
+          </Button>
+        </div>
         <input
           ref={fileInputRef}
           type="file"

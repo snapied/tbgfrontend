@@ -31,9 +31,19 @@ import {
   GridLayout,
   ParticipantTile,
   ControlBar,
+  // LayoutContextProvider wraps any subtree that uses LiveKit's
+  // layout-aware components — most prominently ControlBar (which
+  // reads pinned-tile / chat-open state from the context). Without
+  // it, ControlBar throws "Tried to access LayoutContext context
+  // outside a LayoutContextProvider provider." on mount. Newer
+  // @livekit/components-react versions decoupled it from the
+  // VideoConference component so we have to mount it ourselves.
+  LayoutContextProvider,
   useTracks,
+  useParticipants,
+  useRoomContext,
 } from "@livekit/components-react"
-import { Track, VideoPresets } from "livekit-client"
+import { RoomEvent, Track, VideoPresets } from "livekit-client"
 import "@livekit/components-styles"
 import {
   LIVEKIT_URL,
@@ -50,6 +60,11 @@ interface LiveKitRoomProps {
   user: LiveKitTokenUser
   /** When true, the user is granted `roomAdmin` permission (mute/kick others). */
   isHost: boolean
+  /** Per-class chat enablement. Forwarded to the default
+   *  LiveKitVideoUI's ControlBar. Defaults to true; only the
+   *  default child reads this — custom `children` should consume
+   *  it themselves if they want to honour the toggle. */
+  chatEnabled?: boolean
   onLeft?: () => void
   className?: string
   /**
@@ -65,6 +80,7 @@ export function LiveKitRoom({
   roomCode,
   user,
   isHost,
+  chatEnabled = true,
   onLeft,
   className,
   children,
@@ -164,7 +180,7 @@ export function LiveKitRoom({
         style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}
         onDisconnected={() => onLeft?.()}
       >
-        {children ?? <LiveKitVideoUI />}
+        {children ?? <LiveKitVideoUI isHost={isHost} chatEnabled={chatEnabled} />}
         <RoomAudioRenderer />
         <LiveCaptions speakerName={user.name} />
       </LKRoom>
@@ -176,7 +192,16 @@ export function LiveKitRoom({
 // of LiveKitRoom that want the default call surface can render it inside
 // their own layout while sharing the LiveKit connection with adjacent
 // surfaces (whiteboard, etc.).
-export function LiveKitVideoUI() {
+export function LiveKitVideoUI({
+  isHost = false,
+  chatEnabled = true,
+}: {
+  isHost?: boolean
+  /** Per-class override for the LiveKit ControlBar chat icon.
+   *  Defaults to enabled. Instructors running focused / recording-
+   *  only sessions can flip this off on the class detail page. */
+  chatEnabled?: boolean
+} = {}) {
   // No placeholders. The bundled placeholder logic in @livekit/components-react
   // races the real-track swap and throws "Element not part of the array …
   // _camera_placeholder not in _camera_TR_xxx" inside GridLayout/FocusLayout.
@@ -191,8 +216,22 @@ export function LiveKitVideoUI() {
   )
 
   return (
-    <>
+    // Wrap the whole UI subtree in LayoutContextProvider so the
+    // ControlBar (and chat sub-panel) can read pinned/focused-tile
+    // state. The provider needs to be a parent of every layout-aware
+    // child — wrapping the entire return value is the smallest safe
+    // change. Without this wrapper the host page throws on mount.
+    <LayoutContextProvider>
       <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+        {/* Host-only pill: live status + participant count + recording
+            indicator. Pinned top-right, doesn't interfere with the
+            video grid below it. Students get a smaller compliance
+            banner via LiveRecordingBanner instead. */}
+        {isHost && <LiveIndicatorPill />}
+        {/* All-participants compliance banner — "this class is being
+            recorded" must be visible whenever the room is recording.
+            Renders only when recording is actually on. */}
+        <LiveRecordingBanner hideForHost={isHost} />
         {tracks.length > 0 ? (
           <GridLayout tracks={tracks} style={{ height: "100%" }}>
             <ParticipantTile />
@@ -213,9 +252,189 @@ export function LiveKitVideoUI() {
         )}
       </div>
       <ControlBar
-        controls={{ microphone: true, camera: true, screenShare: true, chat: false, leave: true }}
+        // Chat is enabled — LiveKit's built-in panel covers the
+        // 80% case (text, slow-mode-by-host, message history while
+        // present). Custom moderation (pin, mute, slow-mode toggle)
+        // is a follow-up; the gap between "no chat" and "any chat"
+        // is the bigger UX win.
+        controls={{ microphone: true, camera: true, screenShare: true, chat: chatEnabled, leave: true }}
         variation="minimal"
       />
-    </>
+    </LayoutContextProvider>
+  )
+}
+
+// Host-only status pill. Mounts inside LiveKitVideoUI so it inherits
+// the LiveKit room context — no prop drilling. Renders:
+//   🟢 LIVE · N watching · ◉ Recording (when active)
+//
+// Participant count uses LiveKit's `useParticipants` which includes
+// remote participants only — we subtract the host themselves from
+// the count rather than the SDK doing it, because the local
+// participant is identified separately and a "watching" count
+// shouldn't include the broadcaster.
+function LiveIndicatorPill() {
+  const participants = useParticipants()
+  const room = useRoomContext()
+  const remoteCount = Math.max(0, participants.length - 1)
+  const [isRecording, setIsRecording] = useState<boolean>(
+    () => room?.isRecording ?? false,
+  )
+  // LiveKit emits a Room event when recording status flips; subscribe
+  // so the pill updates without forcing a parent re-render. Default
+  // state is read above so initial paint is correct.
+  useEffect(() => {
+    if (!room) return
+    const sync = () => setIsRecording(room.isRecording)
+    room.on(RoomEvent.RecordingStatusChanged, sync)
+    sync()
+    return () => {
+      room.off(RoomEvent.RecordingStatusChanged, sync)
+    }
+  }, [room])
+
+  return (
+    <div
+      // pointer-events-none so this never blocks clicks on tiles
+      // beneath it. The badge itself is purely informational.
+      style={{
+        position: "absolute",
+        top: 12,
+        right: 12,
+        zIndex: 20,
+        pointerEvents: "none",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "4px 10px",
+        borderRadius: 999,
+        background: "rgba(0,0,0,0.72)",
+        color: "white",
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
+        backdropFilter: "blur(8px)",
+        boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
+      }}
+      aria-live="polite"
+    >
+      <span
+        style={{
+          display: "inline-block",
+          width: 8,
+          height: 8,
+          borderRadius: "50%",
+          background: "#22c55e",
+          boxShadow: "0 0 0 4px rgba(34,197,94,0.18)",
+          animation: "lk-live-pulse 2s ease-in-out infinite",
+        }}
+      />
+      <span>Live</span>
+      <span style={{ opacity: 0.6 }}>·</span>
+      <span style={{ textTransform: "none", fontWeight: 500 }}>
+        {remoteCount} watching
+      </span>
+      {isRecording && (
+        <>
+          <span style={{ opacity: 0.6 }}>·</span>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              color: "#fca5a5",
+            }}
+          >
+            <span
+              style={{
+                display: "inline-block",
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                background: "#ef4444",
+                animation: "lk-rec-pulse 1.4s ease-in-out infinite",
+              }}
+            />
+            Recording
+          </span>
+        </>
+      )}
+      {/* Inline keyframes so we don't need a separate CSS file or
+          a tailwind utility. Repeats are bounded to two animations
+          to keep the GPU work negligible. */}
+      <style>{`
+        @keyframes lk-live-pulse {
+          0%, 100% { box-shadow: 0 0 0 4px rgba(34,197,94,0.18); }
+          50%      { box-shadow: 0 0 0 6px rgba(34,197,94,0.05); }
+        }
+        @keyframes lk-rec-pulse {
+          0%, 100% { opacity: 1; }
+          50%      { opacity: 0.4; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// Compliance banner — visible to every participant whenever the
+// room is being recorded. Required by privacy law in most regions
+// (GDPR, CCPA, India's DPDP Act). Renders a slim red bar at the
+// top of the video pane; hides itself if the host already sees the
+// recording indicator in the host pill (no double-banner stack).
+function LiveRecordingBanner({ hideForHost }: { hideForHost: boolean }) {
+  const room = useRoomContext()
+  const [isRecording, setIsRecording] = useState<boolean>(
+    () => room?.isRecording ?? false,
+  )
+  useEffect(() => {
+    if (!room) return
+    const sync = () => setIsRecording(room.isRecording)
+    room.on(RoomEvent.RecordingStatusChanged, sync)
+    sync()
+    return () => {
+      room.off(RoomEvent.RecordingStatusChanged, sync)
+    }
+  }, [room])
+  if (!isRecording) return null
+  if (hideForHost) return null
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 12,
+        left: "50%",
+        transform: "translateX(-50%)",
+        zIndex: 20,
+        pointerEvents: "none",
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "3px 10px",
+        borderRadius: 999,
+        background: "rgba(239,68,68,0.92)",
+        color: "white",
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif",
+        fontSize: 11,
+        fontWeight: 600,
+        letterSpacing: "0.04em",
+      }}
+      role="status"
+    >
+      <span
+        style={{
+          display: "inline-block",
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: "white",
+          animation: "lk-rec-pulse 1.4s ease-in-out infinite",
+        }}
+      />
+      This class is being recorded
+    </div>
   )
 }

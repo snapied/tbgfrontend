@@ -141,7 +141,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
                   </>
                 ) : (
                   <>
-                    <UserCheck className="h-3 w-3" /> Teacher-graded
+                      <UserCheck className="h-3 w-3" /> Instructor-graded
                   </>
                 )}
               </span>

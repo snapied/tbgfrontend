@@ -20,6 +20,9 @@
 // strip at the bottom.
 
 import { use, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
+import { LateJoinerRecap } from "@/components/classes/late-joiner-recap"
+import { useReconnectGuard } from "@/lib/live-class-features"
 import Link from "next/link"
 import {
   Bell,
@@ -38,6 +41,8 @@ import { Input } from "@/components/ui/input"
 import { useLMS, type LiveSession } from "@/lib/lms-store"
 import { useTenantBrand } from "@/lib/tenant-brand"
 import { LiveKitRoom, LiveKitVideoUI } from "@/components/classes/livekit-room"
+import { AgendaList } from "@/components/classes/agenda-editor"
+import { StudentPreflight } from "@/components/classes/student-preflight"
 import { WhiteboardCanvas } from "@/components/whiteboard/whiteboard-canvas"
 import { useWhiteboardAccess } from "@/lib/whiteboard-access"
 import { cn } from "@/lib/utils"
@@ -79,7 +84,17 @@ export default function LiveClassPage({
   params: Promise<{ tenant: string; sessionId: string }>
 }) {
   const { tenant, sessionId } = use(params)
-  const { liveSessions, getCourseById, getUserById, startLiveRoom, currentUser } = useLMS()
+  const {
+    liveSessions,
+    getCourseById,
+    getUserById,
+    startLiveRoom,
+    currentUser,
+    // Sprint A Communities #20 — for the post-class "join the
+    // community" CTA on EndedScreen.
+    studentGroups,
+    addStudentsToGroup,
+  } = useLMS()
   const brand = useTenantBrand()
   const nameState = useCachedDisplayName()
 
@@ -234,7 +249,7 @@ export default function LiveClassPage({
   if (session && session.provider !== "in-house") {
     // External provider — just forward to the meeting URL with a
     // friendly card so the student doesn't land in a "what is this"
-    // moment. Teachers using Zoom/Meet shouldn't lose their flow.
+    // moment. Instructors using Zoom/Meet shouldn't lose their flow.
     return (
       <main className="mx-auto flex min-h-screen max-w-2xl flex-col items-center justify-center px-6 text-center">
         <h1 className="font-serif text-2xl font-bold">Joining your class…</h1>
@@ -328,12 +343,29 @@ export default function LiveClassPage({
     )
   }
 
+  // Sprint A Communities #20 — surface the attached community on the
+  // post-class wrap screen for students who attended but aren't yet
+  // members. Resolve the community via course.defaultBatchId, then
+  // check the current user's membership. We pass the resolved
+  // {id, name, isMember} so EndedScreen can render the join CTA
+  // without re-resolving stores.
+  const attachedCommunity = (() => {
+    if (!course?.defaultBatchId) return null
+    const group = studentGroups.find((g) => g.id === course.defaultBatchId)
+    if (!group) return null
+    const memberIds = group.memberIds ?? []
+    const isMember = currentUser ? memberIds.includes(currentUser.id) : false
+    return { id: group.id, name: group.name, isMember, memberCount: memberIds.length }
+  })()
+
   // Ended screen
   return (
     <EndedScreen
       session={session}
       tenant={tenant}
       courseTitle={course?.title}
+      community={attachedCommunity}
+      currentUserId={currentUser?.id}
     />
   )
 }
@@ -358,6 +390,7 @@ function WaitingRoom({
   punctuality: PunctualityStat
 }) {
   const [now, setNow] = useState(() => Date.now())
+  const [preflightOpen, setPreflightOpen] = useState(false)
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(t)
@@ -413,7 +446,24 @@ function WaitingRoom({
             </span>
             Waiting room
           </Badge>
+          {/* Preflight test — sits adjacent to the badge so it
+              feels like a paired affordance ("you're waiting · while
+              you wait, check your setup"). Skippable; doesn't block
+              joining when the host opens the room. */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPreflightOpen(true)}
+            className="ml-2 h-7 text-xs"
+          >
+            Quick setup check
+          </Button>
         </div>
+        <StudentPreflight
+          open={preflightOpen}
+          onOpenChange={setPreflightOpen}
+          onJoin={() => setPreflightOpen(false)}
+        />
 
         {/* Hero countdown card */}
         <div className="mx-auto mt-8 max-w-5xl">
@@ -561,6 +611,30 @@ function WaitingRoom({
             </CardContent>
           </Card>
         </div>
+
+        {/* Instructor's agenda — pulled straight from the LiveSession
+            record so what shows here matches what the teacher edited
+            on the class detail page. Hidden when no agenda is set so
+            silent classes don't get an awkward empty card. */}
+        {session.agenda && session.agenda.length > 0 && (
+          <div className="mx-auto mt-5 max-w-5xl">
+            <Card className="overflow-hidden border-0 bg-gradient-to-br from-amber-50 to-white shadow-[0_8px_30px_-12px_rgba(0,0,0,0.06)]">
+              <CardContent className="p-6">
+                <div className="flex items-center gap-2.5">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-base text-white shadow-sm">
+                    📋
+                  </span>
+                  <p className="font-serif text-lg font-bold text-amber-900">
+                    Today&rsquo;s plan
+                  </p>
+                </div>
+                <div className="mt-4">
+                  <AgendaList items={session.agenda} />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Do / Skip checklists */}
         <div className="mx-auto mt-5 grid max-w-5xl gap-4 sm:grid-cols-2">
@@ -754,6 +828,56 @@ function InClassShell({
   // own cursor visible to everyone else in the room.
   const [stageTab, setStageTab] = useState<"video" | "whiteboard">("video")
 
+  // Sprint C Classes #6 — minutes-missed at join time. We derive
+  // from roomStartedAt when the host actually started the class
+  // (preferred — accurate) and fall back to scheduledAt for sessions
+  // that never had a startedAt stamp (rare; pre-stamp legacy data).
+  // Computed once on mount because we don't want the recap to keep
+  // updating as time passes — it's a snapshot of "what you missed
+  // before you walked in".
+  const [minutesMissedAtJoin] = useState<number>(() => {
+    const startedMs = session.roomStartedAt
+      ? Date.parse(session.roomStartedAt)
+      : Date.parse(session.scheduledAt)
+    if (!Number.isFinite(startedMs)) return 0
+    const diff = Date.now() - startedMs
+    if (diff <= 60_000) return 0 // ≤ 1 min late = not really late
+    return Math.round(diff / 60_000)
+  })
+
+  // Build the agenda + "current item" hint from the session's
+  // pre-class agenda + minute budgets. We tick the cursor through
+  // items by accumulating per-item minutes against elapsed time at
+  // join. The teacher hasn't marked "done" explicitly in the data
+  // model yet, so we infer "done before me" / "current" from time.
+  const agendaWithProgress = useMemo(() => {
+    const items = session.agenda ?? []
+    if (items.length === 0) return { items: [], currentTitle: null as string | null }
+    const startedMs = session.roomStartedAt
+      ? Date.parse(session.roomStartedAt)
+      : Date.parse(session.scheduledAt)
+    const elapsedMin = Math.max(0, (Date.now() - startedMs) / 60_000)
+    let cursor = 0
+    let currentTitle: string | null = null
+    const annotated = items.map((it) => {
+      const minutes = it.minutes ?? 5
+      const itemEnd = cursor + minutes
+      const status = elapsedMin >= itemEnd ? "done" : elapsedMin >= cursor ? "current" : "future"
+      if (status === "current" && !currentTitle) currentTitle = it.title
+      cursor = itemEnd
+      return { title: it.title, minutes: it.minutes, done: status === "done" }
+    })
+    return { items: annotated, currentTitle }
+  }, [session.agenda, session.roomStartedAt, session.scheduledAt])
+
+  // Sprint C Classes #28 — reconnect guard. Surfaces an overlay
+  // when the participant loses network, then a brief "welcome back
+  // — you missed Ns" banner when they return. The actual LiveKit
+  // SDK has its own reconnect logic; this wrapper adds the user-
+  // facing "missed N seconds" copy + recap nudge that a pure SDK
+  // toast misses.
+  const reconnect = useReconnectGuard()
+
   return (
     <main className="fixed inset-0 z-50 flex flex-col bg-background overflow-hidden">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 bg-card px-4">
@@ -808,6 +932,70 @@ function InClassShell({
           {nameState.displayName ? `Joined as ${nameState.displayName}` : ""}
         </span>
       </div>
+      {/* Sprint C Classes #6 — late-joiner recap. Floats at the top
+          of the stage area for ≤45s, dismiss-on-Got-it. Renders
+          nothing when the student joined on time (minutesMissed = 0).
+          Outside the LiveKit wrapper so it sits above the call
+          chrome without competing with Jitsi's iframe layout. */}
+      {!hasLeft && nameState.displayName && minutesMissedAtJoin > 0 && (
+        <div className="px-3 pt-2">
+          <LateJoinerRecap
+            minutesMissed={minutesMissedAtJoin}
+            agenda={agendaWithProgress.items}
+            currentItem={agendaWithProgress.currentTitle}
+            summary={
+              session.summary && session.summary.length > 0
+                ? session.summary
+                : undefined
+            }
+          />
+        </div>
+      )}
+
+      {/* Sprint C Classes #28 — reconnect overlay. Two render paths:
+          (a) Offline now → full-screen modal blocks the call (the
+              user can't do anything without network anyway).
+          (b) Just-reconnected → top banner with the seconds-away
+              count + Got-it button to acknowledge. */}
+      {!reconnect.online && !hasLeft && (
+        <div
+          role="alertdialog"
+          aria-label="Reconnecting"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur"
+        >
+          <div className="max-w-sm space-y-3 rounded-xl border border-amber-500/40 bg-card p-6 text-center shadow-2xl">
+            <span className="mx-auto inline-flex h-3 w-3">
+              <span className="absolute h-3 w-3 animate-ping rounded-full bg-amber-500/70" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-500" />
+            </span>
+            <p className="text-sm font-semibold">Trying to reconnect…</p>
+            <p className="text-[12px] text-muted-foreground">
+              Your connection dropped. We&apos;ll bring you back in as soon as it&apos;s up.
+            </p>
+          </div>
+        </div>
+      )}
+      {reconnect.justReconnected && reconnect.offlineSeconds > 0 && !hasLeft && (
+        <div className="px-3 pt-2">
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-[12.5px]">
+            <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+              Welcome back — you missed{" "}
+              {reconnect.offlineSeconds < 60
+                ? `${reconnect.offlineSeconds}s`
+                : `${Math.round(reconnect.offlineSeconds / 60)}m`}
+              .
+            </span>
+            <button
+              type="button"
+              onClick={reconnect.ackReconnect}
+              className="rounded-md border border-emerald-500/30 px-2 py-0.5 text-[11px] font-semibold hover:bg-emerald-500/10"
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-hidden p-2">
         {hasLeft ? (
           <LeftRoomCard tenant={tenant} sessionTitle={session.title} />
@@ -825,7 +1013,7 @@ function InClassShell({
             className="h-full w-full rounded-xl overflow-hidden border border-border/60"
           >
             <div className={cn("h-full w-full flex-col", stageTab === "video" ? "flex" : "hidden")}>
-              <LiveKitVideoUI />
+                  <LiveKitVideoUI chatEnabled={session.chatEnabled !== false} />
             </div>
             <div className={cn("h-full w-full", stageTab === "whiteboard" ? "block" : "hidden")}>
               {/* Whiteboard defaults to private; host toggles open via
@@ -852,12 +1040,43 @@ function EndedScreen({
   session,
   tenant,
   courseTitle,
+  community,
+  currentUserId,
 }: {
   session: LiveSession
   tenant: string
   courseTitle?: string
+    // Sprint A Communities #20 — attached community + member-state.
+    // Null when course has no defaultBatchId or the user isn't signed in.
+    community: {
+      id: string
+      name: string
+      isMember: boolean
+      memberCount: number
+    } | null
+    currentUserId?: string
 }) {
   const recordings = session.recordings ?? []
+  const { addStudentsToGroup } = useLMS()
+  const router = useRouter()
+  const [joining, setJoining] = useState(false)
+  const [justJoined, setJustJoined] = useState(false)
+
+  // The CTA shows only when:
+  //   - A community is attached to the course
+  //   - The user is signed in
+  //   - They aren't already a member
+  // No CTA for guest/anonymous viewers — the join action requires a
+  // user id; we'd just be teasing.
+  const canJoinCommunity = !!(community && currentUserId && !community.isMember)
+  const joinCommunity = () => {
+    if (!community || !currentUserId) return
+    setJoining(true)
+    addStudentsToGroup(community.id, [currentUserId])
+    setJustJoined(true)
+    setJoining(false)
+  }
+
   return (
     <main className="mx-auto min-h-screen max-w-3xl px-6 py-12">
       <Card>
@@ -875,6 +1094,67 @@ function EndedScreen({
               ? "ready below."
               : "processing — we'll have it up shortly."}
           </p>
+
+          {/* Sprint A Communities #20 — community join CTA. The
+              moment-of-impact prompt: the student just spent an hour
+              with the instructor and other learners; this is the
+              warmest possible time to offer them the community as the
+              place to keep that going. We render this BEFORE the
+              recording list because join-to-community is the action
+              with the highest activation lift; recording rewatch can
+              happen from any surface later. */}
+          {canJoinCommunity && community && !justJoined && (
+            <div className="mx-auto mt-2 max-w-md rounded-lg border border-primary/30 bg-primary/5 p-4 text-left">
+              <p className="text-[12px] font-bold uppercase tracking-wider text-primary">
+                Keep learning together
+              </p>
+              <p className="mt-1 text-sm">
+                Want to keep going with this group? Join the{" "}
+                <span className="font-semibold">{community.name}</span> community to
+                ask questions, share progress, and find the next class.
+              </p>
+              {community.memberCount > 0 && (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {community.memberCount.toLocaleString()}{" "}
+                  {community.memberCount === 1 ? "member" : "members"} already inside.
+                </p>
+              )}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" onClick={joinCommunity} disabled={joining}>
+                  {joining ? "Joining…" : "Join the community"}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => router.push(`/dashboard/batches/${community.id}`)}
+                >
+                  Take a look first
+                </Button>
+              </div>
+            </div>
+          )}
+          {/* Confirmation state — replaces the CTA in-place rather
+              than disappearing, so the student can act on the next
+              step (open the community) immediately. */}
+          {justJoined && community && (
+            <div className="mx-auto mt-2 max-w-md rounded-lg border border-success/30 bg-success/5 p-4 text-left">
+              <p className="text-[12px] font-bold uppercase tracking-wider text-success">
+                You&apos;re in
+              </p>
+              <p className="mt-1 text-sm">
+                Welcome to <span className="font-semibold">{community.name}</span>.
+                There&apos;s a recording post waiting for you with the highlights.
+              </p>
+              <Button
+                size="sm"
+                className="mt-2"
+                onClick={() => router.push(`/dashboard/batches/${community.id}`)}
+              >
+                Open community →
+              </Button>
+            </div>
+          )}
+
           {recordings.length > 0 && (
             <div className="mt-6 space-y-2 text-left">
               {recordings.map((r) => (

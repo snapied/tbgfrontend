@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import {
   AlertTriangle,
@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { toast } from "sonner"
 import {
   Select,
   SelectContent,
@@ -51,6 +52,7 @@ import {
   seedToDraftCourse,
   type CourseSeed,
 } from "@/lib/course-builder-templates"
+import { AuthRedirectGate } from "@/components/auth/auth-redirect-gate"
 
 const USE_CASES: Array<{ value: TenantUseCase; label: string; icon: React.ReactNode }> = [
   { value: "solo-instructor", label: "Solo instructor / creator",  icon: <UserIcon  className="h-4 w-4" /> },
@@ -101,6 +103,36 @@ export default function SignupPage() {
   const [acquisitionDetail, setAcquisitionDetail] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const [globalError, setGlobalError] = useState<string | null>(null)
+  // Sprint C Brand #45 — actual progressive disclosure. Two
+  // visual steps with collapse-expand, not just labels. Step 1 is
+  // identity (workspace + name + email + password + phone). Step 2
+  // adds the qualifying questions (useCase, acquisition, optional
+  // details). Default starts expanded on step 1 + collapsed on
+  // step 2; once step 1 fields are all filled the user can
+  // "Continue → step 2". The submit button gates on all required
+  // fields the same way as before — no functional change to
+  // validation, just clearer pacing.
+  const [step, setStep] = useState<1 | 2>(1)
+  const step1Valid =
+    !!workspaceName.trim() &&
+    !!slug.trim() &&
+    !!ownerName.trim() &&
+    !!ownerEmail.trim() &&
+    passwordValid &&
+    phoneValid
+  // When all step-1 fields fill in, auto-advance to step 2 the
+  // first time. We track a ref so subsequent edits in step 1 don't
+  // keep snapping the user back into step 2.
+  const autoAdvancedRef = useRef(false)
+  useEffect(() => {
+    if (step1Valid && !autoAdvancedRef.current && step === 1) {
+      autoAdvancedRef.current = true
+      // Small delay so the user sees their last keystroke before
+      // the form rolls forward.
+      const t = window.setTimeout(() => setStep(2), 250)
+      return () => window.clearTimeout(t)
+    }
+  }, [step1Valid, step])
   // Referral attribution. Reads ?ref=<code> from the URL first, falls back
   // to the pending-ref slot written by the /r/<code> landing page.
   const [refCode, setRefCode] = useState<string | null>(null)
@@ -170,15 +202,38 @@ export default function SignupPage() {
     return /^[^@]+@[^@]+\.[^@]+$/.test(ownerEmail) ? null : "That doesn't look like an email."
   }, [ownerEmail])
 
-  const canSubmit =
-    !!workspaceName.trim() &&
-    !!slug && !slugError &&
-    !!ownerName.trim() &&
-    !!ownerEmail && !emailError &&
-    passwordValid &&         // zxcvbn score ≥ MIN_PASSWORD_SCORE
-    phoneValid &&            // WhatsApp number is required + must validate
-    !!useCase &&
-    !!acquisition
+  // Compute the per-field reasons the form isn't submittable. Same
+  // checks `canSubmit` does, but exposed as a list so the UI can
+  // render a "what's missing" hint instead of leaving the user
+  // staring at a greyed-out button trying to guess what's wrong.
+  // Order matches the visual field order — easier to scan.
+  const missingFields = useMemo(() => {
+    const m: string[] = []
+    if (!workspaceName.trim()) m.push("Academy / workspace name")
+    if (!slug) m.push("Workspace URL")
+    else if (slugError) m.push(`Workspace URL (${slugError})`)
+    if (!ownerName.trim()) m.push("Your name")
+    if (!ownerEmail) m.push("Email")
+    else if (emailError) m.push(`Email (${emailError})`)
+    if (!passwordValid) m.push("Password (needs 'Good' strength or stronger)")
+    if (!phoneValid) m.push("WhatsApp number")
+    if (!useCase) m.push("What kind of academy")
+    if (!acquisition) m.push("How did you hear about us")
+    return m
+  }, [
+    workspaceName,
+    slug,
+    slugError,
+    ownerName,
+    ownerEmail,
+    emailError,
+    passwordValid,
+    phoneValid,
+    useCase,
+    acquisition,
+  ])
+
+  const canSubmit = missingFields.length === 0
 
   const handleSubmit = async () => {
     setGlobalError(null)
@@ -224,6 +279,11 @@ export default function SignupPage() {
           password,
           ownerName: result.tenant.ownerName,
           workspaceName: result.tenant.name,
+          // Pass the frontend's slug to the backend so the two
+          // stores agree on the tenant identifier. Without this,
+          // a fresh-browser login would have no way to know which
+          // tenant to switch into.
+          workspaceSlug: result.tenant.slug,
         }),
       })
       if (reg.ok) {
@@ -271,6 +331,12 @@ export default function SignupPage() {
     // showing "Signed out". Written directly to localStorage because the
     // LMSProvider mounted at /signup won't see the new tenant's keys until
     // the page reloads — which we do below.
+    //
+    // Critical: we ALSO stamp the `currentUserId` key + clear the
+    // signed-out marker. Without that, the dashboard's auth gate
+    // resolves `currentUser === null` (the LMS store doesn't promote
+    // anyone unless explicitly told who they are) and bounces the
+    // freshly-signed-up user straight from /onboarding → /login.
     try {
       const ownerUser = {
         id: `user-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -284,7 +350,28 @@ export default function SignupPage() {
         `thebigclass.t.${result.tenant.slug}.lms.users.v1`,
         JSON.stringify([ownerUser]),
       )
-    } catch { /* ignore quota errors */ }
+      window.localStorage.setItem(
+        `thebigclass.t.${result.tenant.slug}.lms.currentUserId.v1`,
+        ownerUser.id,
+      )
+      window.localStorage.removeItem(
+        `thebigclass.t.${result.tenant.slug}.signedOut.v1`,
+      )
+    } catch (err) {
+      // Quota or storage-disabled (private browsing). The signup itself
+      // succeeded on the backend — we just couldn't write the local
+      // mirror. Warn the user so they understand why their first
+      // dashboard load might look empty until the page refetches from
+      // the API. We deliberately don't block — backend is the source
+      // of truth.
+      // eslint-disable-next-line no-console
+      console.warn("[signup] couldn't persist local mirror:", err)
+      toast.warning("Browser storage is full or restricted", {
+        description:
+          "Your account was created. Some local data may not persist; clear your browser cache or disable private browsing for the smoothest experience.",
+        duration: 8000,
+      })
+    }
 
     // Carry the homepage-builder seed through. If the visitor used the
     // "build a course in 60 seconds" widget, drop their generated course
@@ -340,6 +427,7 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen bg-background">
+      <AuthRedirectGate />
       {/* Top bar */}
       <header className="border-b border-border bg-card/80">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4">
@@ -351,7 +439,7 @@ export default function SignupPage() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-5xl gap-8 px-4 py-10 sm:py-14 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
+      <main id="main-content" className="mx-auto grid max-w-5xl gap-8 px-4 py-10 sm:py-14 lg:grid-cols-[1.05fr_1fr] lg:gap-12">
         {/* Pitch */}
         <section className="space-y-6">
           <div>
@@ -363,7 +451,7 @@ export default function SignupPage() {
             )}
             <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
               <Sparkles className="h-3 w-3" />
-              Free for 14 days · no card
+              Free plan, no card · 30-day refund on paid
             </span>
             <h1 className="mt-3 font-serif text-4xl font-extrabold tracking-tight sm:text-5xl">
               Launch your academy in 3 minutes.
@@ -426,7 +514,7 @@ export default function SignupPage() {
               Courses, live classes, quizzes, assignments, certificates, storefront, performance.
             </Feat>
             <Feat title="No card to start">
-              Free trial. Paid plans only kick in when you grow past usage limits.
+              Workspace runs on the free Starter plan forever. Upgrade only when you outgrow it — every paid plan ships with a 30-day money-back window.
             </Feat>
           </ul>
           
@@ -446,7 +534,20 @@ export default function SignupPage() {
             <CardContent className="p-6 sm:p-7 space-y-5">
               <div>
                 <h2 className="text-lg font-semibold">Create your workspace</h2>
-                <p className="mt-0.5 text-sm text-muted-foreground">Five fields, then you&apos;re in.</p>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  Two short steps — your account first, then a couple of details about your academy.
+                </p>
+                {/* Sprint C Brand #45 — step indicator. "1" matches
+                    the step-2 divider that lives above the use-case
+                    block; gives the visitor a visual anchor for how
+                    far they've gotten without forcing a real multi-
+                    page wizard. */}
+                <div className="mt-3 inline-flex items-center gap-2">
+                  <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                    1
+                  </span>
+                  <p className="text-[12.5px] font-semibold">Your account</p>
+                </div>
               </div>
 
               {/* Workspace + slug */}
@@ -537,9 +638,80 @@ export default function SignupPage() {
                   whatsapp
                   placeholder="98765 43210"
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  We use this for class reminders, OTP recovery, and important
+                  account updates. You sign in with email — not your phone.
+                </p>
               </div>
 
-              {/* Use case — required, segmented */}
+              {/* Sprint C Brand #45 — actual two-step progressive
+                  disclosure. When step === 1, the second section is
+                  collapsed behind a "Continue →" button that's
+                  disabled until every step-1 field validates. The
+                  same fields are still all required — we're just
+                  pacing the cognitive load. Auto-advance kicks in
+                  the first time step 1 completes (useEffect above)
+                  so a returning visitor who finishes step 1 doesn't
+                  need to hunt for the continue affordance. */}
+              <div className="border-t border-border/60 pt-4">
+                {step === 1 ? (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="inline-flex items-center gap-2 text-[12.5px] font-semibold">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-bold text-muted-foreground">
+                          2
+                        </span>
+                        About your academy <span className="font-normal text-muted-foreground">· 30 seconds</span>
+                      </p>
+                      <p className="mt-1 text-[11.5px] text-muted-foreground">
+                        Two quick questions so we can seed your workspace with sensible defaults.
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!step1Valid}
+                      onClick={() => setStep(2)}
+                      title={
+                        step1Valid
+                          ? "Continue to step 2"
+                          : "Finish step 1 first"
+                      }
+                    >
+                      Continue →
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="inline-flex items-center gap-2 text-[12.5px] font-semibold">
+                        <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                          2
+                        </span>
+                        About your academy <span className="font-normal text-muted-foreground">· almost done</span>
+                      </p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setStep(1)}
+                        className="text-[11px]"
+                      >
+                        ← Back
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Use case — required, segmented. Hidden in step 1
+                  view so the form reads as "two clean steps". The
+                  fragment wraps multiple sibling blocks (use-case,
+                  acquisition, optional details) inside a single
+                  conditional. */}
+              {step === 2 && (
+              <>
               <div className="space-y-1.5">
                 <Label>What kind of academy is this? <span className="text-destructive">*</span></Label>
                 <div className="grid gap-2 sm:grid-cols-2">
@@ -603,6 +775,8 @@ export default function SignupPage() {
                   </div>
                 </div>
               </details>
+              </>
+              )}{/* end of step-2 conditional */}
 
               {globalError && (
                 <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">

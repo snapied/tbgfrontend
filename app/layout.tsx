@@ -171,8 +171,20 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${playfair.variable} ${geistMono.variable} ${editorFontVars} bg-background`}>
+    <html lang="en" className={`${inter.variable} ${playfair.variable} ${geistMono.variable} ${editorFontVars} bg-background scroll-smooth`}>
       <body className="font-sans antialiased min-h-screen" suppressHydrationWarning>
+        {/* Skip-to-main link — visually hidden until focused via Tab,
+            then anchors the keyboard user directly past the global
+            header so they don't have to walk 20+ tab stops to reach
+            page content. Every public page anchors `id="main-content"`
+            on its `<main>`; layouts that ship their own chrome can
+            reuse the same id. */}
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[100] focus:rounded-md focus:bg-foreground focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-background focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          Skip to main content
+        </a>
         <ConfirmProvider>
           <TenantProvider>
             <OrgSettingsProvider>

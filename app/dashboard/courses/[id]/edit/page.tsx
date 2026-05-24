@@ -1,7 +1,8 @@
 "use client"
 
 import { use, useEffect, useMemo, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
+import { Suspense } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -55,6 +56,7 @@ import { loadCustomTemplates } from "@/lib/custom-templates"
 import { CertificateTemplatePicker } from "@/components/course-editor/certificate-template-picker"
 import { CategoryCombobox } from "@/components/course-editor/category-combobox"
 import { CATEGORY_TAG_SUGGESTIONS } from "@/lib/course-categories"
+import { COURSE_LANGUAGES } from "@/lib/course-languages"
 import { SUPPORTED_CURRENCIES, currencyInfo, formatMoney } from "@/lib/currency"
 import { fireWebhookEvent } from "@/lib/event-dispatcher"
 import { AIGenerateButton } from "@/components/ai/ai-generate-button"
@@ -93,7 +95,7 @@ const COURSE_EDIT_TOUR: TourStep[] = [
 import { toast } from "sonner"
 
 // Resolve a display label for either a built-in template id or a custom
-// template id (custom-xxx) the teacher designed. Used in the status row
+// template id (custom-xxx) the Instructor designed. Used in the status row
 // above the certificate picker.
 function resolveTemplateLabel(id: string): string {
   const builtin = BUILTIN_TEMPLATES.find((t) => t.id === id)
@@ -137,38 +139,83 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       </div>
     )
   }
-  return <EditCoursePageInner course={course} key={course.id} />
+  // Suspense wraps the inner page so `useSearchParams` (used inside
+  // EditCoursePageInner to persist the active tab in the URL) can
+  // be statically pre-rendered without Next yelling about a missing
+  // boundary.
+  return (
+    <Suspense fallback={null}>
+      <EditCoursePageInner course={course} key={course.id} />
+    </Suspense>
+  )
 }
 
 function EditCoursePageInner({ course }: { course: Course }) {
   const id = course.id
   const router = useRouter()
-  const { updateCourse, users, getCourseById } = useLMS()
+  const pathname = usePathname() ?? ""
+  const searchParams = useSearchParams()
+  // Active tab tracked in the URL so a refresh / share-link lands
+  // the visitor on the same tab. Accepts only known tab values.
+  const TAB_VALUES = ["basics", "curriculum", "pricing", "access", "seo"] as const
+  type EditTab = (typeof TAB_VALUES)[number]
+  const tabFromUrl = (searchParams?.get("tab") ?? "") as EditTab | ""
+  const activeTab: EditTab = (TAB_VALUES as readonly string[]).includes(tabFromUrl)
+    ? (tabFromUrl as EditTab)
+    : "basics"
+  const setActiveTab = (next: string) => {
+    const params = new URLSearchParams(searchParams?.toString() ?? "")
+    if (next === "basics") params.delete("tab")
+    else params.set("tab", next)
+    const q = params.toString()
+    // `replace` so back-button doesn't pile up a stack of tab swaps.
+    router.replace(q ? `${pathname}?${q}` : pathname)
+  }
+  const {
+    updateCourse,
+    users,
+    getCourseById,
+    saveCourseDraft,
+    publishCourseDraft,
+    discardCourseDraft,
+  } = useLMS()
   // Faculty pool for the curriculum editor's per-module owner
   // picker + the course-level co-instructor picker. Computed once
   // here so both surfaces stay in sync with whoever's on the team
   // right now.
   const facultyPool = users.filter((u) => u.role === "admin" || u.role === "instructor")
 
-  // ---- Form state, seeded from course ----
-  const [title, setTitle] = useState(course?.title ?? "")
-  const [subtitle, setSubtitle] = useState(course?.subtitle ?? "")
-  const [description, setDescription] = useState(course?.description ?? "")
-  const [thumbnail, setThumbnail] = useState(course?.thumbnail ?? "")
-  const [introVideoUrl, setIntroVideoUrl] = useState(course?.introVideoUrl ?? "")
-  const [category, setCategory] = useState(course?.category ?? "")
-  const [level, setLevel] = useState<"beginner" | "intermediate" | "advanced">(course?.level ?? "beginner")
-  const [language, setLanguage] = useState(course?.language ?? "English")
-  const [tags, setTags] = useState<string[]>(course?.tags ?? [])
-  // Co-instructors — additional teachers who can build / edit
-  // alongside the primary course owner. Stored as a list of User ids
-  // resolved against `users[]` at render time. Empty = solo course.
-  const [coInstructorIds, setCoInstructorIds] = useState<string[]>(course?.coInstructorIds ?? [])
-  const [slug, setSlug] = useState(course?.slug ?? "")
-  const [slugDirty, setSlugDirty] = useState<boolean>(!!course?.slug)
+  // Effective view of the course = canonical fields with the pending
+  // `draft` overlaid. Editing happens against this view so the user
+  // sees their unpublished edits; the public site continues to read
+  // from the canonical fields until Publish is clicked.
+  const seeded: Course = { ...course, ...(course.draft ?? {}) } as Course
+  const hasDraft = !!course.draft && Object.keys(course.draft).length > 0
+
+  // ---- Form state, seeded from course (draft overlaid) ----
+  const [title, setTitle] = useState(seeded.title ?? "")
+  const [subtitle, setSubtitle] = useState(seeded.subtitle ?? "")
+  const [description, setDescription] = useState(seeded.description ?? "")
+  const [thumbnail, setThumbnail] = useState(seeded.thumbnail ?? "")
+  const [introVideoUrl, setIntroVideoUrl] = useState(seeded.introVideoUrl ?? "")
+  const [category, setCategory] = useState(seeded.category ?? "")
+  const [level, setLevel] = useState<"beginner" | "intermediate" | "advanced">(seeded.level ?? "beginner")
+  const [language, setLanguage] = useState(seeded.language ?? "English")
+  const [tags, setTags] = useState<string[]>(seeded.tags ?? [])
+  const [coInstructorIds, setCoInstructorIds] = useState<string[]>(seeded.coInstructorIds ?? [])
+  const [slug, setSlug] = useState(seeded.slug ?? "")
+  // Treat the slug as "auto-derived" whenever it still matches the
+  // slugified title — that way renaming a course keeps the URL in
+  // sync until the user actually types a custom slug. The previous
+  // `!!course?.slug` seeded `true` for every saved course, so a
+  // course renamed from "Math 101" to "Math 201" kept slug
+  // `math-101` forever unless the user clicked the wand.
+  const [slugDirty, setSlugDirty] = useState<boolean>(
+    !!course?.slug && course.slug !== slugify(course.title ?? ""),
+  )
   // SEO fields — initialized from the saved override OR auto-derived from
   // the course's own fields so the form is never blank by default. The
-  // teacher sees the meta filled in with sensible values they can keep,
+  // Instructor sees the meta filled in with sensible values they can keep,
   // tweak, or clear. Whatever ends up in the input is what gets saved.
   //
   // Derived defaults:
@@ -193,14 +240,14 @@ function EditCoursePageInner({ course }: { course: Course }) {
     }
   }, [course?.title, course?.description, course?.category, course?.tags, course?.thumbnail])
 
-  const [seoTitle, setSeoTitle] = useState(course?.seoTitle ?? autoDerivedSeo.title)
-  const [seoDescription, setSeoDescription] = useState(course?.seoDescription ?? autoDerivedSeo.description)
+  const [seoTitle, setSeoTitle] = useState(seeded.seoTitle ?? autoDerivedSeo.title)
+  const [seoDescription, setSeoDescription] = useState(seeded.seoDescription ?? autoDerivedSeo.description)
   const [seoKeywords, setSeoKeywords] = useState(
-    course?.seoKeywords && course.seoKeywords.length > 0
-      ? course.seoKeywords.join(", ")
+    seeded.seoKeywords && seeded.seoKeywords.length > 0
+      ? seeded.seoKeywords.join(", ")
       : autoDerivedSeo.keywords,
   )
-  const [ogImage, setOgImage] = useState(course?.ogImage ?? autoDerivedSeo.ogImage)
+  const [ogImage, setOgImage] = useState(seeded.ogImage ?? autoDerivedSeo.ogImage)
 
   const resetSeoToCourseDefaults = () => {
     setSeoTitle(autoDerivedSeo.title)
@@ -210,19 +257,23 @@ function EditCoursePageInner({ course }: { course: Course }) {
   }
 
   // Pricing
-  const [price, setPrice] = useState((course?.price ?? 0).toString())
-  const [originalPrice, setOriginalPrice] = useState((course?.originalPrice ?? "").toString())
+  const [price, setPrice] = useState((seeded.price ?? 0).toString())
+  const [originalPrice, setOriginalPrice] = useState((seeded.originalPrice ?? "").toString())
   // INR-only on v1. Legacy courses created when USD was selectable
   // still load with their old currency, but new edits cannot switch
   // to a disabled currency through the picker.
-  const [currency, setCurrency] = useState(course?.currency ?? "INR")
-  const [earlyBirdPrice, setEarlyBirdPrice] = useState((course?.earlyBirdPrice ?? "").toString())
-  const [earlyBirdUntil, setEarlyBirdUntil] = useState(course?.earlyBirdUntil?.slice(0, 16) ?? "")
-  const [coupons, setCoupons] = useState<Coupon[]>(course?.coupons ?? [])
+  const [currency, setCurrency] = useState(seeded.currency ?? "INR")
+  const [earlyBirdPrice, setEarlyBirdPrice] = useState((seeded.earlyBirdPrice ?? "").toString())
+  const [earlyBirdUntil, setEarlyBirdUntil] = useState(seeded.earlyBirdUntil?.slice(0, 16) ?? "")
+  const [coupons, setCoupons] = useState<Coupon[]>(seeded.coupons ?? [])
 
-  // Lifecycle
+  // Lifecycle (operational — not part of the draft snapshot;
+  // status/publishAt take effect immediately when toggled).
   const [status, setStatus] = useState<"draft" | "published" | "archived">(course?.status ?? "draft")
   const [publishAt, setPublishAt] = useState(course?.publishAt?.slice(0, 16) ?? "")
+  // Visibility + password are operational gates too — flipping them
+  // should bite immediately so a Instructor who wants to lock the door
+  // doesn't have to think about Publish first.
   const [visibility, setVisibility] = useState<CourseVisibility>(course?.visibility ?? "public")
   const [accessPassword, setAccessPassword] = useState(course?.accessPassword ?? "")
   // Existing courses pre-date the explicit toggle, so we fall back to "has a
@@ -230,17 +281,14 @@ function EditCoursePageInner({ course }: { course: Course }) {
   // their cert behaviour without us flipping the bit silently for any course
   // that genuinely shouldn't issue one.
   const [certificateEligible, setCertificateEligible] = useState<boolean>(
-    course?.certificateEligible ?? !!course?.certificateTemplate,
+    seeded.certificateEligible ?? !!seeded.certificateTemplate,
   )
-  // Accepts either a built-in template id (TemplateType) or a custom template
-  // id like "custom-xxx". Falls back to "modern" only when there's no course
-  // value at all.
   const [certificateTemplate, setCertificateTemplate] = useState<string>(
-    course?.certificateTemplate ?? "modern",
+    seeded.certificateTemplate ?? "modern",
   )
 
   // Curriculum
-  const [modules, setModules] = useState<Module[]>(course?.modules ?? [])
+  const [modules, setModules] = useState<Module[]>(seeded.modules ?? [])
 
   // Save/auto-save state
   const [saving, setSaving] = useState(false)
@@ -255,53 +303,52 @@ function EditCoursePageInner({ course }: { course: Course }) {
   const { confirmLeave } = useUnsavedChangesGuard(dirty || saving)
 
   const [regeneratingCover, setRegeneratingCover] = useState(false)
+  const [regeneratingOg, setRegeneratingOg] = useState(false)
+
+  // Build the CourseSeed used by the cover/OG image generator. Same
+  // category → hue mapping the cover-regen used inline; extracting
+  // it lets the OG generator and the autosave fallback both reuse
+  // the result without duplicating the lookup table.
+  const buildSeed = () => {
+    const norm = (category || "").toLowerCase()
+    let seedCat:
+      | "math" | "yoga" | "coding" | "finance" | "language"
+      | "exam-prep" | "creative" | "wellness" | "business" | "general" = "general"
+    if (norm.includes("math") || norm.includes("edu")) seedCat = "math"
+    else if (norm.includes("yoga") || norm.includes("fitness")) seedCat = "yoga"
+    else if (norm.includes("cod") || norm.includes("tech")) seedCat = "coding"
+    else if (norm.includes("fin") || norm.includes("money")) seedCat = "finance"
+    else if (norm.includes("lang")) seedCat = "language"
+    else if (norm.includes("exam") || norm.includes("prep")) seedCat = "exam-prep"
+    else if (norm.includes("creat") || norm.includes("art")) seedCat = "creative"
+    else if (norm.includes("well") || norm.includes("health")) seedCat = "wellness"
+    else if (norm.includes("bus")) seedCat = "business"
+
+    const CATEGORY_HUE = {
+      math: 210, yoga: 265, coding: 150, finance: 45, language: 340,
+      "exam-prep": 195, creative: 20, wellness: 170, business: 285, general: 230,
+    }
+    return {
+      rawInput: title,
+      topic: title,
+      category: seedCat,
+      audienceHint: subtitle || undefined,
+      brandHue: CATEGORY_HUE[seedCat] || 230,
+      modules: modules.map((m) => ({
+        title: m.title,
+        lessons: (m.lessons || []).map((l) => l.title),
+      })),
+      priceInr: parseFloat(price) || 0,
+      promiseLines: [],
+      sampleStudentName: "Student",
+    }
+  }
 
   const handleRegenerateCover = async () => {
     setRegeneratingCover(true)
     try {
-      // Reconstruct seed category
-      const norm = (category || "").toLowerCase()
-      let seedCat: "math" | "yoga" | "coding" | "finance" | "language" | "exam-prep" | "creative" | "wellness" | "business" | "general" = "general"
-      if (norm.includes("math") || norm.includes("edu")) seedCat = "math"
-      else if (norm.includes("yoga") || norm.includes("fitness")) seedCat = "yoga"
-      else if (norm.includes("cod") || norm.includes("tech")) seedCat = "coding"
-      else if (norm.includes("fin") || norm.includes("money")) seedCat = "finance"
-      else if (norm.includes("lang")) seedCat = "language"
-      else if (norm.includes("exam") || norm.includes("prep")) seedCat = "exam-prep"
-      else if (norm.includes("creat") || norm.includes("art")) seedCat = "creative"
-      else if (norm.includes("well") || norm.includes("health")) seedCat = "wellness"
-      else if (norm.includes("bus")) seedCat = "business"
-
-      const CATEGORY_HUE = {
-        math:        210,
-        yoga:        265,
-        coding:      150,
-        finance:     45,
-        language:    340,
-        "exam-prep": 195,
-        creative:    20,
-        wellness:    170,
-        business:    285,
-        general:     230,
-      }
-
-      const seed = {
-        rawInput: title,
-        topic: title,
-        category: seedCat,
-        audienceHint: subtitle || undefined,
-        brandHue: CATEGORY_HUE[seedCat] || 230,
-        modules: modules.map((m) => ({
-          title: m.title,
-          lessons: (m.lessons || []).map((l) => l.title),
-        })),
-        priceInr: parseFloat(price) || 0,
-        promiseLines: [],
-        sampleStudentName: "Student",
-      }
-
       const { composeCoverPng } = await import("@/lib/cover-image-compose")
-      const baked = await composeCoverPng(seed)
+      const baked = await composeCoverPng(buildSeed())
       if (baked) {
         setThumbnail(baked)
         setDirty(true)
@@ -310,6 +357,61 @@ function EditCoursePageInner({ course }: { course: Course }) {
       console.error("Failed to regenerate designed cover:", err)
     } finally {
       setRegeneratingCover(false)
+    }
+  }
+
+  // Generate a social-share image from the same seed used for the
+  // course cover. Falls back to that machinery so the OG image and
+  // the thumbnail look like they belong to the same course.
+  const handleGenerateOgImage = async () => {
+    setRegeneratingOg(true)
+    try {
+      const { composeCoverPng } = await import("@/lib/cover-image-compose")
+      const baked = await composeCoverPng(buildSeed())
+      if (baked) {
+        // The composer returns a data: URL; the autosave path will
+        // upload it to R2 alongside the thumbnail when the user
+        // hits Save. Until then it renders inline in the preview.
+        setOgImage(baked)
+        setDirty(true)
+        toast.success("Generated a social-share image. Tweak or replace anytime.")
+      } else {
+        toast.error("Couldn't generate one — try again or upload manually.")
+      }
+    } catch (err) {
+      console.error("Failed to generate OG image:", err)
+      toast.error("Couldn't generate one — try again or upload manually.")
+    } finally {
+      setRegeneratingOg(false)
+    }
+  }
+
+  // One-tap fill: copy the current course thumbnail into the OG
+  // image field. Useful when the cover is already on-brand and the
+  // Instructor just hadn't gotten around to repeating it in SEO.
+  const handleUseCoverAsOg = () => {
+    if (!thumbnail) return
+    setOgImage(thumbnail)
+    setDirty(true)
+    toast.success("Using the course cover as the social-share image.")
+  }
+
+  // Autosave fallback: when the Instructor publishes and ogImage is
+  // still empty, automatically copy the cover (or generate a fresh
+  // one if there's no cover either) so the social preview never
+  // ships blank.
+  const ensureSocialShareImage = async () => {
+    if (ogImage.trim()) return
+    if (thumbnail) {
+      setOgImage(thumbnail)
+      return
+    }
+    try {
+      const { composeCoverPng } = await import("@/lib/cover-image-compose")
+      const baked = await composeCoverPng(buildSeed())
+      if (baked) setOgImage(baked)
+    } catch {
+      /* silent — OG image stays blank, public site falls back to title */
     }
   }
 
@@ -322,7 +424,7 @@ function EditCoursePageInner({ course }: { course: Course }) {
     setDirty(true)
   }, [
     title, subtitle, description, thumbnail, introVideoUrl, category, level, language,
-    tags, slug, price, originalPrice, currency, earlyBirdPrice, earlyBirdUntil, coupons,
+    tags, coInstructorIds, slug, price, originalPrice, currency, earlyBirdPrice, earlyBirdUntil, coupons,
     status, publishAt, visibility, accessPassword, certificateEligible, certificateTemplate, modules,
     seoTitle, seoDescription, seoKeywords, ogImage,
   ])
@@ -341,7 +443,7 @@ function EditCoursePageInner({ course }: { course: Course }) {
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dirty, title, subtitle, description, thumbnail, introVideoUrl, category, level,
-      language, tags, slug, price, originalPrice, currency, earlyBirdPrice, earlyBirdUntil,
+      language, tags, coInstructorIds, slug, price, originalPrice, currency, earlyBirdPrice, earlyBirdUntil,
       coupons, status, publishAt, visibility, accessPassword, certificateEligible,
       certificateTemplate, modules, seoTitle, seoDescription, seoKeywords, ogImage])
 
@@ -372,10 +474,6 @@ function EditCoursePageInner({ course }: { course: Course }) {
 
   async function doSave(options: { silent?: boolean } = {}) {
     if (saving) return
-    // Capture the pre-save status so we can detect a draft→published
-    // transition and fire the matching webhook exactly once.
-    const courseBefore = getCourseById(id)
-    const wasPublished = courseBefore?.status === "published"
     setSaving(true)
     let currentThumbnail = thumbnail
     if (thumbnail.startsWith("data:")) {
@@ -386,7 +484,12 @@ function EditCoursePageInner({ course }: { course: Course }) {
         console.error("Failed to upload designed thumbnail on save:", err)
       }
     }
-    updateCourse(id, {
+    // Content fields go to the DRAFT — the public site keeps showing
+    // the last-published version until the Instructor clicks Publish.
+    // Operational fields (status, publishAt, visibility, password)
+    // bypass the draft so they take effect immediately — those are
+    // gates, not content.
+    saveCourseDraft(id, {
       title,
       subtitle: subtitle || undefined,
       description,
@@ -404,10 +507,6 @@ function EditCoursePageInner({ course }: { course: Course }) {
       earlyBirdPrice: earlyBirdPrice ? parseFloat(earlyBirdPrice) : undefined,
       earlyBirdUntil: earlyBirdUntil ? new Date(earlyBirdUntil).toISOString() : undefined,
       coupons: coupons.length > 0 ? coupons : undefined,
-      status,
-      publishAt: publishAt ? new Date(publishAt).toISOString() : undefined,
-      visibility,
-      accessPassword: visibility === "password" ? accessPassword : undefined,
       certificateEligible,
       certificateTemplate,
       modules,
@@ -415,21 +514,56 @@ function EditCoursePageInner({ course }: { course: Course }) {
       totalDuration,
       seoTitle: seoTitle.trim() || undefined,
       seoDescription: seoDescription.trim() || undefined,
-      // Split the comma-separated string the form edits back into an array;
-      // strip empties so trailing commas don't produce blank tags.
       seoKeywords: seoKeywords
         .split(",")
         .map((k) => k.trim())
         .filter(Boolean),
       ogImage: ogImage.trim() || undefined,
     })
-    if (!wasPublished && status === "published") {
-      fireWebhookEvent("course.published", { id, title, slug: slug || slugify(title) })
-    }
+    // Operational flips go straight to the canonical row.
+    updateCourse(id, {
+      status,
+      publishAt: publishAt ? new Date(publishAt).toISOString() : undefined,
+      visibility,
+      accessPassword: visibility === "password" ? accessPassword : undefined,
+    })
     setLastSavedAt(new Date())
     setDirty(false)
     // Settle the spinner briefly even on silent autosaves for nicer UX.
     setTimeout(() => setSaving(false), options.silent ? 250 : 400)
+  }
+
+  // Apply the current pending draft to the canonical fields so the
+  // public site reflects the editor's state. Fires the
+  // course.published webhook the first time a course actually
+  // goes live. Records a new version snapshot — see
+  // /dashboard/courses/[id]/versions for the history.
+  async function doPublishChanges() {
+    if (saving) return
+    // Make sure the social-share image isn't blank before we commit
+    // the publish — falls back to the cover, then generates one if
+    // both are empty. Don't want shared links rendering bare titles.
+    await ensureSocialShareImage()
+    // Save the latest values to draft first so an unsaved-keystroke
+    // doesn't get left behind.
+    await doSave({ silent: true })
+    const courseBefore = getCourseById(id)
+    const wasPublished = courseBefore?.status === "published"
+    publishCourseDraft(id)
+    // If the course wasn't published yet, flip it now too.
+    if (status !== "published") {
+      setStatus("published")
+      updateCourse(id, { status: "published" })
+    }
+    if (!wasPublished) {
+      fireWebhookEvent("course.published", { id, title, slug: slug || slugify(title) })
+    }
+    toast.success("Published — your changes are now live for students.")
+  }
+
+  function doDiscardDraft() {
+    discardCourseDraft(id)
+    toast.success("Discarded unpublished changes. Reload to see the published version.")
   }
 
   return (
@@ -458,11 +592,17 @@ function EditCoursePageInner({ course }: { course: Course }) {
               ) : dirty ? (
                 "Unsaved changes — autosave in 2s"
               ) : lastSavedAt ? (
-                `Saved · ${lastSavedAt.toLocaleTimeString()}`
+                `Draft saved · ${lastSavedAt.toLocaleTimeString()}`
               ) : (
-                "All changes saved"
+                "All changes saved as draft"
               )}
             </p>
+            {(hasDraft || dirty) && (
+              <p className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Unpublished changes — students still see the last published version
+              </p>
+            )}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -473,17 +613,47 @@ function EditCoursePageInner({ course }: { course: Course }) {
               Preview
             </Link>
           </Button>
-          <Button onClick={() => doSave()} disabled={saving} data-tour="course-edit-save">
+          <Button
+            variant="outline"
+            onClick={() => doSave()}
+            disabled={saving || !dirty}
+            data-tour="course-edit-save"
+            title="Save changes to the draft (not yet visible to students)"
+          >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-            Save changes
+            {saving ? "Saving…" : dirty ? "Save draft" : "Saved"}
           </Button>
+          {(hasDraft || dirty) && (
+            <>
+              <Button
+                onClick={() => void doPublishChanges()}
+                disabled={saving}
+                title="Apply the draft to the live course — students will see these changes."
+              >
+                <Globe className="mr-2 h-4 w-4" />
+                Publish changes
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={doDiscardDraft}
+                disabled={saving}
+                title="Throw away the pending draft and return to the published version."
+              >
+                Discard
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         {/* Main */}
-        <Tabs defaultValue="basics" className="space-y-4">
-          <TabsList className="w-full justify-start gap-1" data-tour="course-edit-tabs">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="min-w-0 space-y-4"
+        >
+          <TabsList className="w-full justify-start gap-1 overflow-x-auto" data-tour="course-edit-tabs">
             <TabsTrigger value="basics">Basics</TabsTrigger>
             <TabsTrigger value="curriculum">
               Curriculum
@@ -651,7 +821,45 @@ function EditCoursePageInner({ course }: { course: Course }) {
                   </div>
                   <div className="space-y-2">
                     <Label>Language</Label>
-                    <Input value={language} onChange={(e) => setLanguage(e.target.value)} />
+                    <Select value={language} onValueChange={setLanguage}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {/* Same picker shape as the new-course page —
+                            available 10 first, coming-soon 5 disabled
+                            at the bottom. If the course already has a
+                            language we no longer surface (legacy data
+                            like "German"), we still render it as a
+                            disabled option so the form doesn't show
+                            an empty trigger. */}
+                        {!COURSE_LANGUAGES.some((l) => l.name === language) && language && (
+                          <SelectItem value={language} disabled>
+                            {language}
+                            <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                              Legacy — pick a new one
+                            </span>
+                          </SelectItem>
+                        )}
+                        {COURSE_LANGUAGES.map((lang) => (
+                          <SelectItem
+                            key={lang.name}
+                            value={lang.name}
+                            disabled={!lang.available}
+                          >
+                            {lang.name}
+                            {lang.native && (
+                              <span className="ml-2 text-muted-foreground">({lang.native})</span>
+                            )}
+                            {!lang.available && (
+                              <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                Coming soon
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <div className="space-y-2">
@@ -671,7 +879,7 @@ function EditCoursePageInner({ course }: { course: Course }) {
           {/* --- Curriculum --- */}
           <TabsContent value="curriculum" className="space-y-4">
             {/* Course-level co-instructors. The primary owner stays
-                the headline teacher (shown on the hero, signs the
+                the headline Instructor (shown on the hero, signs the
                 certificate); these are additional contributors. Only
                 renders when there's another faculty member to
                 actually pick. */}
@@ -1024,7 +1232,7 @@ function EditCoursePageInner({ course }: { course: Course }) {
 
             {/* Search engine listing — pre-filled from the course's own
                 title / description / category / thumbnail so the form is
-                never blank. Teacher can edit any field, and the "Reset to
+                never blank. Instructor can edit any field, and the "Reset to
                 course defaults" link below puts everything back. */}
             <Card>
               <CardHeader>
@@ -1107,7 +1315,7 @@ function EditCoursePageInner({ course }: { course: Course }) {
                   </p>
                 </div>
 
-                {/* Live SERP preview — gives the teacher a feel for what
+                {/* Live SERP preview — gives the Instructor a feel for what
                     a Google result will look like before they publish. */}
                 <div className="rounded-md border border-border bg-background p-3">
                   <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1131,13 +1339,52 @@ function EditCoursePageInner({ course }: { course: Course }) {
 
             {/* Social share card — separate image because the course
                 thumbnail (16:9) often doesn't have the right safe area
-                for OG (1.91:1). Falls back to the thumbnail if blank. */}
+                for OG (1.91:1). Falls back to the thumbnail if blank,
+                and on publish we auto-generate one when both are
+                missing so links never ship without a preview. */}
             <Card>
               <CardHeader>
-                <CardTitle>Social share image</CardTitle>
-                <CardDescription>
-                  Shown when this page is shared on Twitter, LinkedIn, WhatsApp, Slack, etc. Falls back to the course thumbnail.
-                </CardDescription>
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <CardTitle>Social share image</CardTitle>
+                    <CardDescription>
+                      Shown on Twitter, LinkedIn, WhatsApp, Slack, etc. We fall back to the cover if blank, and auto-generate one on publish if both are missing.
+                    </CardDescription>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    {thumbnail && thumbnail !== ogImage && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleUseCoverAsOg}
+                        title="Reuse the course cover as the social-share image."
+                      >
+                        Use course cover
+                      </Button>
+                    )}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGenerateOgImage}
+                      disabled={regeneratingOg}
+                      title="Generate a fresh share image with your title + brand colours."
+                    >
+                      {regeneratingOg ? (
+                        <>
+                          <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                          Generating…
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="mr-2 h-3.5 w-3.5" />
+                          Generate
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <FileUploadField
@@ -1149,6 +1396,13 @@ function EditCoursePageInner({ course }: { course: Course }) {
                   showImagePreview
                   hint="Recommended 1200×630, under 1 MB. Keep text in the centre 60%."
                 />
+                {!ogImage && (
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    {thumbnail
+                      ? "No share image yet — we'll use the course cover automatically when you publish."
+                      : "No share image and no course cover — we'll auto-generate one on publish."}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -1175,6 +1429,75 @@ function EditCoursePageInner({ course }: { course: Course }) {
           </Card>
         </aside>
       </div>
+
+      {/* Sticky save bar — the editor's source of truth for the
+          publish state. Mirrors the header buttons but stays visible
+          regardless of scroll position so the Instructor never has to
+          hunt for Publish/Discard after a long curriculum edit.
+          Renders only when there's something unpublished to act on,
+          so a fresh-loaded course doesn't get a permanent footer. */}
+      {(hasDraft || dirty) && (
+        <>
+          {/* Spacer so the fixed bar doesn't cover the bottom of
+              the form. Height matches the bar so scrolling to the
+              very last field still reveals it. */}
+          <div className="h-20" aria-hidden />
+          <div className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-card/80 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.15)]">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-2 text-sm">
+                <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-amber-500" />
+                <span className="font-semibold">Unpublished changes</span>
+                <span className="hidden text-muted-foreground sm:inline">
+                  · Students still see the last published version
+                </span>
+                <span className="hidden text-xs text-muted-foreground md:inline">
+                  {saving
+                    ? "Saving draft…"
+                    : dirty
+                      ? "Autosave in 2s"
+                      : lastSavedAt
+                        ? `Draft saved · ${lastSavedAt.toLocaleTimeString()}`
+                        : "Draft saved"}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={doDiscardDraft}
+                  disabled={saving}
+                  title="Throw away the pending draft and return to the published version."
+                >
+                  Discard
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  asChild
+                  title="Open the public lesson player with the draft applied — see what students will see."
+                >
+                  <Link
+                    href={`/learn/${slug || course.slug}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Eye className="mr-1.5 h-3.5 w-3.5" /> Preview
+                  </Link>
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => void doPublishChanges()}
+                  disabled={saving}
+                  title="Apply the draft to the live course — students will see these changes."
+                >
+                  <Globe className="mr-1.5 h-3.5 w-3.5" />
+                  Publish changes
+                </Button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

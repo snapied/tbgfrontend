@@ -5,7 +5,7 @@
 
 import type { NextRequest } from "next/server"
 
-const STATIC_PATHS = ["/", "/about", "/teachers", "/courses", "/blog", "/contact"]
+const STATIC_PATHS = ["/", "/about", "/instructors", "/courses", "/blog", "/contact"]
 
 export async function GET(
   request: NextRequest,

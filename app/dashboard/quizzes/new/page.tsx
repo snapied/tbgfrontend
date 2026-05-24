@@ -631,7 +631,7 @@ export default function NewQuizPage() {
                         : "border-border hover:bg-muted/40"
                     }`}
                   >
-                    <p className="font-medium">Teacher reviews</p>
+                    <p className="font-medium">Instructor reviews</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       Submissions wait for manual grading.
                     </p>

@@ -23,6 +23,7 @@ import {
   Bell,
   Briefcase,
   CheckCircle2,
+  ClipboardCheck,
   FileQuestion,
   Inbox as InboxIcon,
   Loader2,
@@ -49,6 +50,7 @@ import {
 } from "@/lib/lms-store"
 import { usePortal, type PortalLead } from "@/lib/portal-store"
 import { buildNotifications } from "@/lib/notifications"
+import { getMutedThreadIds } from "@/lib/community-post-prefs"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
 
 const INBOX_TOUR: TourStep[] = [
@@ -84,7 +86,7 @@ const INBOX_TOUR: TourStep[] = [
   },
 ]
 
-type InboxKind = "question" | "discussion" | "batch" | "lead" | "blog"
+type InboxKind = "question" | "discussion" | "batch" | "lead" | "blog" | "quiz"
 type ItemStatus = "active" | "resolved"
 
 interface InboxItem {
@@ -117,6 +119,7 @@ const KIND_LABELS: Record<InboxKind, string> = {
   batch: "Community",
   lead: "Lead",
   blog: "Blog",
+  quiz: "Quiz",
 }
 
 const KIND_ICONS: Record<InboxKind, typeof FileQuestion> = {
@@ -125,6 +128,7 @@ const KIND_ICONS: Record<InboxKind, typeof FileQuestion> = {
   batch: Users2,
   lead: Briefcase,
   blog: MessageCircle,
+  quiz: ClipboardCheck,
 }
 
 // Filter pills — Discussions and Batches were two separate sources
@@ -137,6 +141,11 @@ const FILTERS: { id: "all" | InboxKind; label: string }[] = [
   { id: "batch", label: "Communities" },
   { id: "lead", label: "Leads" },
   { id: "blog", label: "Blog" },
+  // Student quiz submissions surface here via the notification
+  // fallback below — no separate source-row scan because there's no
+  // inline-grade flow inside the inbox (clicking deep-links to the
+  // quiz review page).
+  { id: "quiz", label: "Quizzes" },
 ]
 
 function strip(html: string, max = 140): string {
@@ -327,6 +336,11 @@ export default function InboxPage() {
       }
       // Recent unread in-app notifications addressed to the current user.
       const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000
+      // Per-user muted thread set — community comment notifications
+      // for muted posts get hidden from the inbox so the mute action
+      // actually quiets things. Mentions still pass through (loud
+      // by definition). Read once per filter pass; the Set is O(1).
+      const mutedPostIds = getMutedThreadIds(currentUser.id)
       const eligible = notifications.filter((n) => {
         if (n.userId !== currentUser.id) return false
         if (n.channel !== "in-app") return false
@@ -336,6 +350,13 @@ export default function InboxPage() {
         // Only types that look like something the user can act on.
         // Status pings ("X graded your assignment") stay in the bell.
         const t = n.type
+        if (
+          t === "batch-comment" &&
+          typeof n.meta?.postId === "string" &&
+          mutedPostIds.has(n.meta.postId as string)
+        ) {
+          return false
+        }
         return (
           t === "doubt.received" ||
           t === "doubt.replied" ||
@@ -346,7 +367,12 @@ export default function InboxPage() {
           t === "discussion.received" ||
           t === "batch-post" ||
           t === "batch-comment" ||
-          t === "batch-mention"
+          t === "batch-mention" ||
+          // Student quiz submissions — added so teachers can triage
+          // submissions from the same surface as questions/leads
+          // instead of relying on the bell only. Fired by
+          // submitQuizAttempt in lms-store via quizSubmittedNotification.
+          t === "quiz.submitted"
         )
       })
       for (const n of eligible) {
@@ -360,14 +386,19 @@ export default function InboxPage() {
         if (discussionId && seenDiscussionIds.has(discussionId)) continue
         if (postId && seenPostIds.has(postId)) continue
         // Pick a kind based on the type. Default to "question" — most
-        // notifications that surface here are doubt-related.
+        // notifications that surface here are doubt-related. Quiz
+        // submissions get their own kind so the new "Quizzes" filter
+        // pill can scope to them (and the icon picker renders a
+        // ClipboardCheck instead of the question mark).
         const kind: InboxKind = (n.type.startsWith("lead") || n.type === "enquiry.received")
           ? "lead"
           : n.type.startsWith("discussion")
             ? "discussion"
             : n.type.startsWith("batch")
               ? "batch"
-              : "question"
+              : n.type === "quiz.submitted"
+                ? "quiz"
+                : "question"
         // If the notification IS for a doubt/lead that still exists in
         // the source data, attach replyContext so the inline Reply UI
         // works. This covers the case where the source exists but was
@@ -449,6 +480,7 @@ export default function InboxPage() {
       batch: 0,
       lead: 0,
       blog: 0,
+      quiz: 0,
     }
     for (const i of items) c[i.kind]++
     return c

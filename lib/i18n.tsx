@@ -218,7 +218,7 @@ export interface Dictionary {
 const en: Dictionary = {
   "header.home": "Home",
   "header.courses": "Courses",
-  "header.teachers": "Teachers",
+  "header.teachers": "Instructors",
   "header.blog": "Blog",
   "header.shop": "Shop",
   "header.wallOfLove": "Wall of Love",

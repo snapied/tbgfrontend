@@ -139,11 +139,21 @@ export function classifyStudents(input: EngagementInputs): EngagementRow[] {
   // Pre-compute the champion threshold (top-10% by points). Falls
   // back to "no champion" when the points map is missing or the
   // cohort is too small (< 10 students with non-zero points).
+  //
+  // We only include students with NON-ZERO points in the threshold
+  // ranking — the leaderboard now gives every student a welcome
+  // bonus, so a cohort full of zero-activity rows used to lower the
+  // bar absurdly (anyone above the median got "Champion"). Looking
+  // only at students who've actually earned non-bonus points keeps
+  // the badge meaningful.
   let championThreshold = Infinity
-  if (input.pointsByStudent && input.pointsByStudent.size >= 10) {
-    const points = [...input.pointsByStudent.values()].sort((a, b) => b - a)
-    const cutoffIdx = Math.max(0, Math.floor(points.length * 0.1) - 1)
-    championThreshold = points[cutoffIdx] ?? Infinity
+  if (input.pointsByStudent) {
+    const nonZero = [...input.pointsByStudent.values()].filter((p) => p > 0)
+    if (nonZero.length >= 10) {
+      const points = nonZero.sort((a, b) => b - a)
+      const cutoffIdx = Math.max(0, Math.floor(points.length * 0.1) - 1)
+      championThreshold = points[cutoffIdx] ?? Infinity
+    }
   }
 
   // Earliest enrollment per student — drives the "onboarding" window
@@ -238,4 +248,75 @@ export function classifyStudents(input: EngagementInputs): EngagementRow[] {
     return bd - ad
   })
   return rows
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Stage explainer — surfaces the human reasons behind a stage chip
+// so a teacher tapping it sees "9 days since active, no submissions,
+// no recent quiz" instead of having to reverse-engineer the
+// classifier. Returns:
+//
+//   • reasons: 2–4 bullet-point facts the classifier saw
+//   • suggestion: 1 sentence on what to do about it
+//
+// Inputs mirror the EngagementRow shape so callers can pass a row
+// straight through without extra plumbing.
+// ────────────────────────────────────────────────────────────────────
+
+export interface StageExplanation {
+  stage: LifecycleStage
+  reasons: string[]
+  suggestion: string
+}
+
+export function explainStage(row: EngagementRow): StageExplanation {
+  const reasons: string[] = []
+  const d = row.daysSinceLastActive
+  if (d === null) {
+    reasons.push("Never engaged — no recorded activity yet.")
+  } else if (d === 0) {
+    reasons.push("Active today.")
+  } else if (d === 1) {
+    reasons.push("Last active yesterday.")
+  } else {
+    reasons.push(`Last active ${d} days ago.`)
+  }
+  if (row.points > 0) {
+    reasons.push(`Earned ${row.points} XP across lessons, quizzes, and attendance.`)
+  } else {
+    reasons.push("No XP earned yet — hasn't completed scored work.")
+  }
+  if (row.enrolledAt) {
+    const enrolledMs = Date.parse(row.enrolledAt)
+    if (Number.isFinite(enrolledMs)) {
+      const daysEnrolled = Math.floor((Date.now() - enrolledMs) / 86_400_000)
+      if (daysEnrolled <= 7) {
+        reasons.push(`Enrolled ${daysEnrolled === 0 ? "today" : `${daysEnrolled}d ago`} — still in the onboarding window.`)
+      }
+    }
+  }
+  // Suggestion is stage-specific — each one nudges the teacher
+  // toward the highest-leverage next action.
+  let suggestion: string
+  switch (row.stage) {
+    case "champion":
+      suggestion = "Spotlight them in the community or ask for a testimonial — champions love being seen."
+      break
+    case "active":
+      suggestion = "Keep the momentum — drop a tougher challenge or a 1:1 invite."
+      break
+    case "onboarding":
+      suggestion = "A warm check-in inside the first week is the single biggest retention lever."
+      break
+    case "cooling":
+      suggestion = "Two weeks is the inflection point. Send a check-in nudge before they go silent."
+      break
+    case "at-risk":
+      suggestion = "Last call — send a personal come-back nudge with one specific reason to return."
+      break
+    case "churned":
+      suggestion = "Mostly lost. Try a low-friction re-engagement email; consider archiving if they don't respond."
+      break
+  }
+  return { stage: row.stage, reasons, suggestion }
 }

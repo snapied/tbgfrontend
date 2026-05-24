@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { useLMS, generateId, type Course, type Module } from "@/lib/lms-store"
+import { slugify } from "@/lib/lesson-utils"
 import { usePlan } from "@/lib/use-plan"
 import { PlanGatedCard } from "@/components/dashboard/plan-lock"
 import { isBuiltinTemplateId } from "@/lib/certificate-templates"
@@ -36,6 +37,7 @@ import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/p
 import { AIGenerateButton } from "@/components/ai/ai-generate-button"
 import { aiCourseDescription, aiCourseOutline } from "@/lib/ai-client"
 import { toast } from "sonner"
+import { COURSE_LANGUAGES } from "@/lib/course-languages"
 
 // Step-by-step tour for the Create Course form. Walks through:
 //   1. Welcome (centered intro)
@@ -128,7 +130,12 @@ function NewCoursePageInner() {
   // We block the submit here too so the cap is a real boundary on
   // every entry point, not just the index card.
   const { usageRemaining, limits, hydrated: planHydrated } = usePlan()
-  const remainingCourses = usageRemaining("publishedCourses", courses.length)
+  // Count ONLY currently-published courses against the published-courses
+  // cap. The previous `courses.length` lumped drafts + archived in too,
+  // so a workspace with five drafts on a 5-published plan couldn't create
+  // even a sixth draft (which won't count toward the cap until publish).
+  const publishedCount = courses.filter((c) => c.status === "published").length
+  const remainingCourses = usageRemaining("publishedCourses", publishedCount)
   const atCourseCap =
     planHydrated && remainingCourses !== Infinity && remainingCourses <= 0
   const courseCap = limits.publishedCourses
@@ -312,10 +319,14 @@ function NewCoursePageInner() {
     setSubmitting(true)
 
     const totalLessons = modules.reduce((acc, m) => acc + m.lessons.length, 0)
-    const totalDuration = modules.reduce((acc, m) => 
+    const totalDuration = modules.reduce((acc, m) =>
       acc + m.lessons.reduce((lessonAcc, l) => lessonAcc + l.duration, 0), 0)
 
-    const slug = title.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
+    // Same slug rules as the edit page (`slugify` from lesson-utils):
+    // trim, collapse repeating dashes, strip leading/trailing dashes.
+    // addCourse() further suffixes `-2`/`-3`/… if this collides with
+    // an existing course, so the public URL is always reachable.
+    const slug = slugify(title)
 
     const newCourse: Course = {
       // Reuse the pre-allocated id so any quizzes / live sessions the
@@ -620,11 +631,28 @@ function NewCoursePageInner() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="English">English</SelectItem>
-                    <SelectItem value="Spanish">Spanish</SelectItem>
-                    <SelectItem value="French">French</SelectItem>
-                    <SelectItem value="German">German</SelectItem>
-                    <SelectItem value="Hindi">Hindi</SelectItem>
+                    {/* Available languages lead — those are also live
+                        on the student portal i18n picker. Coming-soon
+                        ones sit at the bottom with the option disabled
+                        so creators see the roadmap without being able
+                        to pick a language students can't read in. */}
+                    {COURSE_LANGUAGES.map((lang) => (
+                      <SelectItem
+                        key={lang.name}
+                        value={lang.name}
+                        disabled={!lang.available}
+                      >
+                        {lang.name}
+                        {lang.native && (
+                          <span className="ml-2 text-muted-foreground">({lang.native})</span>
+                        )}
+                        {!lang.available && (
+                          <span className="ml-2 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            Coming soon
+                          </span>
+                        )}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -782,7 +810,7 @@ function NewCoursePageInner() {
           </Card>
 
           {/* Certificate — Advanced only. Default is OFF so the simple
-              flow doesn't have to make this decision. Teachers turn this
+              flow doesn't have to make this decision. Instructors turn this
               on later from the course detail page if they want it. */}
           {isAdvanced && (
             <Card data-tour="course-certificate">
@@ -856,7 +884,7 @@ function NewCoursePageInner() {
               create from the course settings. */}
           {!isAdvanced && (
             <p className="rounded-md border border-dashed border-border/60 bg-muted/30 p-3 text-[11px] text-muted-foreground">
-              Looking for learning outcomes, certificate, or requirements? Switch to <span className="font-medium text-foreground">Advanced</span> at the top — or set them later from the course&apos;s settings page.
+              Looking for learning outcomes, certificate, or requirements? Switch to <span className="font-medium text-foreground">Advanced</span>&nbsp; at the top — or set them later from the course&apos;s settings page.
             </p>
           )}
         </div>

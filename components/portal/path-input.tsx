@@ -3,14 +3,14 @@
 // Input that opens an autocomplete popover of the tenant's pages when
 // the user is typing an internal path (starts with "/"). Picks include
 // every PortalPage by slug plus the built-in routes (/courses,
-// /teachers, /blog, /contact) the SiteHeader auto-wires.
+// /instructors, /blog, /contact) the SiteHeader auto-wires.
 //
 // Free text still works — typing "https://…" or "mailto:…" just closes
 // the popover. The picker is helpful, never blocking.
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Globe, FileText, Mail, ExternalLink } from "lucide-react"
-import { Input } from "@/components/ui/input"
+import { Globe, FileText, Mail, ExternalLink, LogIn, ShoppingBag, User as UserIcon } from "lucide-react"
+import { StableInput } from "@/components/ui/stable-input"
 import { cn } from "@/lib/utils"
 import { usePortal } from "@/lib/portal-store"
 
@@ -28,11 +28,26 @@ interface PathOption {
   source: "page" | "built-in"
 }
 
+// Built-in destinations the portal router knows about. These ALL
+// resolve cleanly without the teacher having to know exact paths —
+// typing "/lo" → /login surfaces in autocomplete, click it, done.
+// The previous list missed auth + student-portal routes; the
+// "Sign in" CTA placeholder hinted at "/login" but typing exactly
+// "/login" required the teacher to know that's the path. Now it's
+// a suggested completion.
 const BUILT_INS: PathOption[] = [
   { slug: "/courses", label: "Courses", hint: "Course catalog", source: "built-in" },
-  { slug: "/teachers", label: "Teachers", hint: "Faculty showcase", source: "built-in" },
+  { slug: "/instructors", label: "Instructors", hint: "Faculty showcase", source: "built-in" },
   { slug: "/blog", label: "Blog", hint: "Blog index", source: "built-in" },
   { slug: "/contact", label: "Contact", hint: "Contact form", source: "built-in" },
+  { slug: "/store", label: "Shop", hint: "Storefront catalogue", source: "built-in" },
+  { slug: "/pricing", label: "Pricing", hint: "Plan + pricing page", source: "built-in" },
+  // Auth + student-portal routes — required for "Sign in" / "Open
+  // dashboard" style CTAs. Typing /lo → /login, /si → /signup, /my
+  // → /my (student home).
+  { slug: "/login", label: "Sign in", hint: "Login page", source: "built-in" },
+  { slug: "/signup", label: "Sign up", hint: "Tenant registration", source: "built-in" },
+  { slug: "/my", label: "My account", hint: "Student dashboard", source: "built-in" },
 ]
 
 export function PathInput({
@@ -106,21 +121,25 @@ export function PathInput({
   }
 
   // A bit of decoration for the input's left adornment depending on
-  // whether the value is internal, external, or email.
-  const KindIcon = looksInternal
-    ? Globe
-    : value.startsWith("mailto:")
-    ? Mail
-    : value.startsWith("http")
-    ? ExternalLink
-    : Globe
+  // whether the value is internal, external, or email. Special-case
+  // a few known paths so /login renders with a sign-in icon, /store
+  // with a bag, /my with a person — the iconography hints at the
+  // destination type at a glance.
+  const KindIcon = (() => {
+    if (value.startsWith("mailto:")) return Mail
+    if (value.startsWith("http")) return ExternalLink
+    if (value === "/login" || value === "/signup") return LogIn
+    if (value === "/store") return ShoppingBag
+    if (value.startsWith("/my")) return UserIcon
+    return Globe
+  })()
 
   return (
     <div ref={wrapperRef} className="relative flex-1">
       <KindIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      <Input
+      <StableInput
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(v) => onChange(v)}
         onFocus={() => setFocused(true)}
         onKeyDown={(e) => {
           if (e.key === "Escape") {

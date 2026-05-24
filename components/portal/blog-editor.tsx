@@ -34,6 +34,12 @@ import { aiBlogMeta } from "@/lib/ai-client"
 import { stripRichTextTags } from "@/components/editor/rich-text-content"
 import { toast } from "sonner"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
+import { useTenant } from "@/lib/tenant-store"
+import { useVersionedDoc } from "@/lib/versioning"
+import { VersionsSheet } from "@/components/ui/versions-sheet"
+import { useReviewThread } from "@/lib/review-store"
+import { ReviewPanel } from "@/components/ui/review-panel"
+import { History, MessageSquare } from "lucide-react"
 
 const BLOG_NEW_TOUR: TourStep[] = [
   {
@@ -103,6 +109,31 @@ export function BlogEditor({ postId }: BlogEditorProps) {
   const router = useRouter()
   const { posts, upsertPost, deletePost } = usePortal()
   const { currentUser } = useLMS()
+  const { currentTenant } = useTenant()
+
+  // Versioned-doc binding. Snapshots auto-trim past 50 entries; we
+  // capture on every successful publish below + offer manual "Save a
+  // version" from the sheet.
+  const versions = useVersionedDoc<PortalBlogPost>({
+    tenantSlug: currentTenant?.slug ?? "default",
+    kind: "blog-post",
+    artifactId: postId ?? "draft",
+    actor: { id: currentUser?.id, name: currentUser?.name },
+    isEqual: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+  })
+  const [versionsOpen, setVersionsOpen] = useState(false)
+
+  // Reviews bound to this post. New posts (no id yet) get a transient
+  // "draft" thread that collapses when the post is created; in practice
+  // teachers add review notes once a draft exists so this is a minor
+  // edge case.
+  const reviews = useReviewThread({
+    tenantSlug: currentTenant?.slug ?? "default",
+    kind: "blog-post",
+    artifactId: postId ?? "draft",
+    actor: { id: currentUser?.id, name: currentUser?.name },
+  })
+  const [reviewsOpen, setReviewsOpen] = useState(false)
 
   const existing = postId ? posts.find((p) => p.id === postId) : undefined
   const isNew = !existing
@@ -194,6 +225,13 @@ export function BlogEditor({ postId }: BlogEditorProps) {
     }
     
     upsertPost(post)
+    // Capture a version every time the post is saved so a wrong
+    // edit can be undone. Auto-labelled so the user knows whether
+    // it was a publish or a draft save.
+    versions.snapshot(
+      post,
+      post.status === "published" ? "Published" : "Saved as draft",
+    )
     router.push("/dashboard/portal/blog")
   }
 
@@ -231,6 +269,36 @@ export function BlogEditor({ postId }: BlogEditorProps) {
         </div>
         <div className="flex gap-3">
           <TakeATourButton tourId={isNew ? "blog-new-v1" : "blog-edit-v1"} />
+          {!isNew && (
+            <Button
+              variant="outline"
+              onClick={() => setVersionsOpen(true)}
+              className="gap-1.5"
+            >
+              <History className="h-4 w-4" />
+              Versions
+              {versions.history.length > 0 && (
+                <span className="rounded-full bg-muted px-1.5 text-[10px] font-bold text-muted-foreground">
+                  {versions.history.length}
+                </span>
+              )}
+            </Button>
+          )}
+          {!isNew && (
+            <Button
+              variant="outline"
+              onClick={() => setReviewsOpen(true)}
+              className="gap-1.5"
+            >
+              <MessageSquare className="h-4 w-4" />
+              Reviews
+              {reviews.openCount > 0 && (
+                <span className="rounded-full bg-primary/10 px-1.5 text-[10px] font-bold text-primary">
+                  {reviews.openCount}
+                </span>
+              )}
+            </Button>
+          )}
           {!isNew && (
             <Button variant="ghost" onClick={handleDelete} className="text-destructive hover:bg-destructive/10">
               <Trash2 className="mr-2 h-4 w-4" /> Delete
@@ -488,6 +556,79 @@ export function BlogEditor({ postId }: BlogEditorProps) {
           </Card>
         </div>
       </div>
+
+      {/* Versions sheet — pulls the current draft into the diff
+          view so the teacher sees pending vs. last-saved. Restore
+          loads the snapshot back into the form fields (we don't
+          publish automatically — they review then save). */}
+      {!isNew && existing && (
+        <VersionsSheet<PortalBlogPost>
+          open={versionsOpen}
+          onOpenChange={setVersionsOpen}
+          api={versions}
+          current={{
+            ...existing,
+            title,
+            slug: finalSlug,
+            excerpt,
+            coverImage: cover,
+            body,
+            tags,
+            categories,
+            status,
+            seo: { title: seoTitle, description: seoDesc, jsonLd, noindex: noindex || undefined },
+          } as PortalBlogPost}
+          onRestore={(snapshot) => {
+            // Pour the snapshot back into the form. The teacher hits
+            // Save to commit (avoids "I clicked Restore and instantly
+            // overwrote my prod post" panic).
+            setTitle(snapshot.title)
+            setSlug(snapshot.slug)
+            setExcerpt(snapshot.excerpt ?? "")
+            setCover(snapshot.coverImage ?? "")
+            setBody(snapshot.body)
+            setTags(snapshot.tags ?? [])
+            setCategories(snapshot.categories ?? [])
+            setStatus(snapshot.status)
+            setSeoTitle(snapshot.seo?.title ?? "")
+            setSeoDesc(snapshot.seo?.description ?? "")
+            setJsonLd(snapshot.seo?.jsonLd ?? "")
+            setNoindex(!!snapshot.seo?.noindex)
+            toast.success("Restored — review the fields and hit Save to commit.")
+          }}
+          fieldLabels={{
+            title: "Title",
+            slug: "URL slug",
+            excerpt: "Excerpt",
+            coverImage: "Cover image",
+            body: "Body",
+            tags: "Tags",
+            categories: "Categories",
+            status: "Status",
+            seo: "SEO",
+          }}
+        />
+      )}
+
+      {/* Reviews panel — anchored to the fields a co-author is most
+          likely to comment on. Free-floating notes also welcome. */}
+      {!isNew && (
+        <ReviewPanel
+          open={reviewsOpen}
+          onOpenChange={setReviewsOpen}
+          api={reviews}
+          title={`Reviews · ${existing?.title ?? "Post"}`}
+          description="Threaded notes anchored to specific fields of this post."
+          anchorOptions={[
+            { kind: "field", target: "title", label: "Title" },
+            { kind: "field", target: "excerpt", label: "Excerpt" },
+            { kind: "field", target: "body", label: "Body" },
+            { kind: "field", target: "coverImage", label: "Cover image" },
+            { kind: "field", target: "tags", label: "Tags" },
+            { kind: "field", target: "seo", label: "SEO" },
+          ]}
+        />
+      )}
     </div>
   )
 }

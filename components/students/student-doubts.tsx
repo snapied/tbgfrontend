@@ -5,7 +5,7 @@
 // either side resolve a thread. Each reply fires an in-app
 // notification + email to the other party so threads don't go silent.
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   CheckCircle2,
   CircleDot,
@@ -13,6 +13,13 @@ import {
   Send,
   Trash2,
 } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -55,6 +62,51 @@ export function StudentDoubtsPanel({ studentId }: Props) {
   const confirm = useConfirm()
   const doubts = getDoubtsForStudent(studentId)
   const student = getUserById(studentId)
+
+  // Filter + sort state. Filters live in component state (not URL)
+  // because this panel is one tab of a detail page — pushing into
+  // URL means colliding with the existing ?tab= state and other
+  // tab-specific filters that may land later. State scope: per
+  // panel mount.
+  const [statusFilter, setStatusFilter] = useState<"all" | "open" | "resolved">("all")
+  const [courseFilter, setCourseFilter] = useState<string>("all")
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "most-replies">("newest")
+
+  // Build the course-filter options from the doubts themselves —
+  // showing a list of every course in the workspace would dwarf
+  // the panel when most students only have doubts on 1–2 courses.
+  const courseOptions = useMemo(() => {
+    const ids = new Set<string>()
+    for (const d of doubts) {
+      if (d.courseId) ids.add(d.courseId)
+    }
+    return Array.from(ids)
+      .map((id) => ({ id, title: getCourseById(id)?.title ?? "Untitled" }))
+      .sort((a, b) => a.title.localeCompare(b.title))
+  }, [doubts, getCourseById])
+
+  const visibleDoubts = useMemo(() => {
+    let list = doubts.slice()
+    if (statusFilter !== "all") {
+      list = list.filter((d) => d.status === statusFilter)
+    }
+    if (courseFilter !== "all") {
+      list = list.filter((d) => d.courseId === courseFilter)
+    }
+    list.sort((a, b) => {
+      if (sortBy === "most-replies") {
+        return (b.replies?.length ?? 0) - (a.replies?.length ?? 0)
+      }
+      const ams = Date.parse(a.createdAt)
+      const bms = Date.parse(b.createdAt)
+      if (sortBy === "oldest") return ams - bms
+      return bms - ams
+    })
+    return list
+  }, [doubts, statusFilter, courseFilter, sortBy])
+
+  const openCount = doubts.filter((d) => d.status === "open").length
+  const resolvedCount = doubts.length - openCount
 
   const onReply = async (doubt: Doubt, body: string) => {
     if (!currentUser) return
@@ -136,36 +188,100 @@ export function StudentDoubtsPanel({ studentId }: Props) {
           Doubts &amp; questions
         </CardTitle>
         <CardDescription>
-          {doubts.length} thread{doubts.length === 1 ? "" : "s"} from this student.
+          {openCount} open · {resolvedCount} resolved · {doubts.length} total
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {doubts.map((d) => (
-          <DoubtThread
-            key={d.id}
-            doubt={d}
-            courseTitle={d.courseId ? getCourseById(d.courseId)?.title : undefined}
-            authorName={getUserById(d.studentId)?.name ?? "Student"}
-            getReplierName={(id) => getUserById(id)?.name ?? "Teacher"}
-            onReply={(body) => onReply(d, body)}
-            onResolve={() => setDoubtStatus(d.id, d.status === "open" ? "resolved" : "open")}
-            onDelete={async () => {
-              const ok = await confirm({
-                title: "Delete this question?",
-                description: "All replies are moved to Trash with it — you can restore them within 7 days.",
-                destructive: true,
-              })
-              if (!ok) return
-              deleteDoubt(d.id)
-              toastUndoableDelete({
-                kind: "doubt",
-                ids: d.id,
-                label: d.title,
-                itemNoun: "question",
-              })
-            }}
-          />
-        ))}
+        {/* Filters row. Status segmented control mirrors the
+            engagement-page chip-row idiom; course filter only
+            renders when there's >1 course to pick from. */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
+          <div className="inline-flex items-center gap-0.5 rounded-md border border-border p-0.5">
+            {(["all", "open", "resolved"] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                className={cn(
+                  "rounded px-2.5 py-1 text-xs font-medium capitalize transition-colors",
+                  statusFilter === s
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {s === "all" ? "All" : s}
+                {s === "open" && openCount > 0 && (
+                  <span className="ml-1 opacity-70">({openCount})</span>
+                )}
+                {s === "resolved" && resolvedCount > 0 && (
+                  <span className="ml-1 opacity-70">({resolvedCount})</span>
+                )}
+              </button>
+            ))}
+          </div>
+          {courseOptions.length > 1 && (
+            <Select value={courseFilter} onValueChange={setCourseFilter}>
+              <SelectTrigger className="h-8 w-44 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All courses</SelectItem>
+                {courseOptions.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
+            <SelectTrigger className="h-8 w-40 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest first</SelectItem>
+              <SelectItem value="oldest">Oldest first</SelectItem>
+              <SelectItem value="most-replies">Most replies</SelectItem>
+            </SelectContent>
+          </Select>
+          {visibleDoubts.length !== doubts.length && (
+            <span className="ml-auto text-xs text-muted-foreground">
+              Showing {visibleDoubts.length} of {doubts.length}
+            </span>
+          )}
+        </div>
+        {visibleDoubts.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            No questions match these filters.
+          </p>
+        ) : (
+          visibleDoubts.map((d) => (
+            <DoubtThread
+              key={d.id}
+              doubt={d}
+              courseTitle={d.courseId ? getCourseById(d.courseId)?.title : undefined}
+              authorName={getUserById(d.studentId)?.name ?? "Student"}
+              getReplierName={(id) => getUserById(id)?.name ?? "Instructor"}
+              onReply={(body) => onReply(d, body)}
+              onResolve={() => setDoubtStatus(d.id, d.status === "open" ? "resolved" : "open")}
+              onDelete={async () => {
+                const ok = await confirm({
+                  title: "Delete this question?",
+                  description: "All replies are moved to Trash with it — you can restore them within 7 days.",
+                  destructive: true,
+                })
+                if (!ok) return
+                deleteDoubt(d.id)
+                toastUndoableDelete({
+                  kind: "doubt",
+                  ids: d.id,
+                  label: d.title,
+                  itemNoun: "question",
+                })
+              }}
+            />
+          ))
+        )}
       </CardContent>
     </Card>
   )
@@ -267,8 +383,12 @@ export function DoubtThread({
                       context: courseTitle,
                       tone: "detailed",
                     })
-                    if ("error" in r) return
+                    if ("error" in r) {
+                      toast.error(`Couldn't draft a reply: ${r.error}`)
+                      return
+                    }
                     setBody(r.content)
+                    toast.success("Drafted — edit before sending.")
                   }}
                 />
               </div>

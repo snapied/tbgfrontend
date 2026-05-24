@@ -112,10 +112,19 @@ export function StudentForm({ mode, initial, onSave }: Props) {
         }
       : EMPTY,
   )
-  const [phoneValid, setPhoneValid] = useState(!!initial?.phone)
+  // On EDIT we treat an existing phone as already-valid so the user
+  // can save changes to OTHER fields without re-validating phone
+  // (the PhoneInput emits valid=true only once they touch it). On
+  // CREATE we still gate on PhoneInput's emitted valid flag.
+  const [phoneTouched, setPhoneTouched] = useState(false)
+  const [phoneValidEmitted, setPhoneValidEmitted] = useState(!!initial?.phone)
   const [resumeBusy, setResumeBusy] = useState(false)
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // Filename of the most recent resume upload — populated by the
+  // FileUploader after a successful upload so the preview shows a
+  // friendly name instead of a 200-char signed URL.
+  const [resumeFilename, setResumeFilename] = useState<string | undefined>(undefined)
   // Invite toggles only apply on create. On edit we hide the card.
   const [inviteEmail, setInviteEmail] = useState(true)
   const [inviteWhatsapp, setInviteWhatsapp] = useState(true)
@@ -159,10 +168,28 @@ export function StudentForm({ mode, initial, onSave }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft.postalCode])
 
+  // Duplicate-email guard: another user with the same email blocks
+  // save (case-insensitive, edit-mode ignores ITSELF). Avoids the
+  // silent dupe row that the store would otherwise accept.
+  const emailLower = draft.email.trim().toLowerCase()
+  const duplicateEmail = !!emailLower && users.some(
+    (u) => u.id !== initial?.id && u.email.toLowerCase() === emailLower,
+  )
+
+  // On edit, an existing phone counts as valid unless the user
+  // re-touched the field and it's now invalid. On create the
+  // PhoneInput's `valid` callback is the gate.
+  const phoneAcceptable = isEdit
+    ? !phoneTouched
+      ? true
+      : phoneValidEmitted
+    : phoneValidEmitted
+
   const valid =
     draft.name.trim().length > 0 &&
     isValidEmail(draft.email.trim()) &&
-    phoneValid &&
+    !duplicateEmail &&
+    phoneAcceptable &&
     (!draft.linkedInUrl || isUrlish(draft.linkedInUrl)) &&
     (!draft.githubUrl || isUrlish(draft.githubUrl)) &&
     (!draft.twitterUrl || isUrlish(draft.twitterUrl)) &&
@@ -173,16 +200,28 @@ export function StudentForm({ mode, initial, onSave }: Props) {
     try {
       const { url } = await uploadAsset(file, "students")
       set("resumeUrl", url)
+      setResumeFilename(file.name)
+    } catch (err) {
+      // Don't swallow the failure silently — uploadAsset can throw on
+      // network / size / mime errors and the teacher would otherwise
+      // see the busy state vanish without any file appearing.
+      toast.error(
+        `Couldn't upload resume: ${(err as Error).message ?? "unknown error"}. Try a smaller PDF or use a hosted link.`,
+      )
     } finally {
       setResumeBusy(false)
     }
   }
-  
+
   const onAvatarFile = async (file: File) => {
     setAvatarBusy(true)
     try {
       const { url } = await uploadAsset(file, "students")
       set("avatar", url)
+    } catch (err) {
+      toast.error(
+        `Couldn't upload photo: ${(err as Error).message ?? "unknown error"}. Try a smaller image.`,
+      )
     } finally {
       setAvatarBusy(false)
     }
@@ -317,7 +356,9 @@ export function StudentForm({ mode, initial, onSave }: Props) {
             disabled={!valid || submitting}
             data-tour="student-save"
           >
-            {isEdit ? "Save changes" : "Add student"}
+            {submitting
+              ? (isEdit ? "Saving…" : "Adding…")
+              : (isEdit ? "Save changes" : "Add student")}
           </Button>
         </div>
       </div>
@@ -336,15 +377,32 @@ export function StudentForm({ mode, initial, onSave }: Props) {
                 <Input value={draft.name} onChange={(e) => set("name", e.target.value)} placeholder="Aanya Sharma" />
               </Field>
               <Field label="Email *">
-                <Input type="email" value={draft.email} onChange={(e) => set("email", e.target.value)} placeholder="aanya@example.com" />
+                <Input
+                  type="email"
+                  value={draft.email}
+                  onChange={(e) => set("email", e.target.value)}
+                  placeholder="aanya@example.com"
+                  autoComplete="email"
+                  inputMode="email"
+                  aria-invalid={!!draft.email && (!isValidEmail(draft.email) || duplicateEmail)}
+                />
                 {draft.email && !isValidEmail(draft.email) && (
-                  <p className="mt-1 text-[11px] text-destructive">Doesn't look like a valid email.</p>
+                  <p className="mt-1 text-[11px] text-destructive">Doesn&apos;t look like a valid email.</p>
+                )}
+                {draft.email && isValidEmail(draft.email) && duplicateEmail && (
+                  <p className="mt-1 text-[11px] text-destructive">
+                    Another student is already using this email. Pick a different one or open their profile instead.
+                  </p>
                 )}
               </Field>
               <Field label="WhatsApp number *">
                 <PhoneInput
                   value={draft.phone ?? ""}
-                  onChange={(e164, valid) => { set("phone", e164); setPhoneValid(valid) }}
+                  onChange={(e164, valid) => {
+                    set("phone", e164)
+                    setPhoneValidEmitted(valid)
+                    setPhoneTouched(true)
+                  }}
                   whatsapp
                   required
                   placeholder="98765 43210"
@@ -384,10 +442,14 @@ export function StudentForm({ mode, initial, onSave }: Props) {
               <Field label="Short bio">
                 <Textarea
                   value={draft.bio ?? ""}
-                  onChange={(e) => set("bio", e.target.value)}
+                  onChange={(e) => set("bio", e.target.value.slice(0, 280))}
                   placeholder="Frontend developer, batch of 2026"
                   className="min-h-20"
+                  maxLength={280}
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {(draft.bio ?? "").length}/280
+                </p>
               </Field>
             </CardContent>
           </Card>
@@ -548,29 +610,43 @@ export function StudentForm({ mode, initial, onSave }: Props) {
                   busy={resumeBusy}
                   hasFile={!!draft.resumeUrl}
                   onFile={onResumeFile}
-                  onClear={() => set("resumeUrl", undefined)}
-                  previewLabel={draft.resumeUrl}
+                  onClear={() => {
+                    set("resumeUrl", undefined)
+                    setResumeFilename(undefined)
+                  }}
+                  previewLabel={resumeFilename ?? filenameFromUrl(draft.resumeUrl)}
                   label={draft.resumeUrl ? "Replace resume" : "Upload resume"}
                 />
                 {draft.resumeUrl && (
-                  <p className="mt-2 break-all text-[11px] text-muted-foreground">
-                    Stored at <a href={draft.resumeUrl} target="_blank" rel="noopener noreferrer" className="text-primary underline">{draft.resumeUrl}</a>
+                  <p className="mt-2 text-[11px] text-muted-foreground">
+                    <a
+                      href={draft.resumeUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline"
+                    >
+                      Open resume in new tab
+                    </a>
                   </p>
                 )}
               </Field>
               <Field label="Internal notes">
                 <Textarea
                   value={draft.notes ?? ""}
-                  onChange={(e) => set("notes", e.target.value)}
+                  onChange={(e) => set("notes", e.target.value.slice(0, 1500))}
                   placeholder="Anything else — scholarship status, special requirements, etc."
                   className="min-h-24"
+                  maxLength={1500}
                 />
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {(draft.notes ?? "").length}/1500 · only you can see these
+                </p>
               </Field>
             </CardContent>
           </Card>
 
           {/* Invite — Phase A from the design doc. Fires email +
-              WhatsApp the moment the student is created. Teacher can
+              WhatsApp the moment the student is created. Instructor can
               flip either off (e.g. during a CSV import) and re-invite
               later from the student detail page. Hidden on edit. */}
           {!isEdit && (
@@ -636,6 +712,20 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function isUrlish(s: string): boolean {
   return /^https?:\/\/[^\s]+$/i.test(s.trim())
+}
+
+// Best-effort filename pull from a CDN URL — drops query/hash and
+// returns the last path segment. Returns undefined when the URL
+// doesn't parse so callers can fall back to their own label.
+function filenameFromUrl(url?: string): string | undefined {
+  if (!url) return undefined
+  try {
+    const u = new URL(url)
+    const last = u.pathname.split("/").filter(Boolean).pop()
+    return last ? decodeURIComponent(last) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 function FileUploader({

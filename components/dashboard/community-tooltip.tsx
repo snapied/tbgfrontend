@@ -58,7 +58,7 @@ const POINTS: Array<{
   {
     Icon: Heart,
     label: "A staff or peer room",
-    body: "Teachers-only chats, working groups, after-class hangouts. Flip the &ldquo;teachers-only&rdquo; flag in access settings.",
+    body: "Instructors-only chats, working groups, after-class hangouts. Flip the &ldquo;teachers-only&rdquo; flag in access settings.",
     tone: "success",
   },
   {

@@ -254,7 +254,7 @@ export default function MyQuizzesPage() {
 }
 
 // Compact stacked-row design matching the teacher's quizzes list.
-// Title + status chip + "Teacher-graded" hint on the headline; a
+// Title + status chip + "Instructor-graded" hint on the headline; a
 // one-line course / score / remaining-attempts strip below; and a
 // small CTA on the right. Whole row is clickable when the primary
 // action is "open the quiz".
@@ -283,7 +283,7 @@ function QuizListRow({ row, slug }: { row: QuizRow; slug: string }) {
         <div className="flex flex-wrap items-center gap-2">
           <p className="line-clamp-1 font-medium text-foreground">{quiz.title}</p>
           <Badge variant="secondary" className="shrink-0 text-[10px] font-normal">
-            {quiz.gradingMode === "teacher" ? "Teacher-graded" : "Auto-graded"}
+            {quiz.gradingMode === "teacher" ? "Instructor-graded" : "Auto-graded"}
           </Badge>
           <Badge variant={meta.variant} className="shrink-0">
             <meta.Icon className="mr-1 h-3 w-3" />

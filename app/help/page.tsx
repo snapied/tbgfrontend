@@ -100,6 +100,17 @@ const LIVE_CLASSES: Topic[] = [
 // same things. Articles are also slotted into their category groups above.
 const WHATS_NEW: Topic[] = [
   { href: "/whats-new",                       title: "The running changelog",             body: "Every meaningful improvement we've shipped — recording, inbox, community, onboarding.", icon: Sparkles,      status: "new" },
+  { href: "/help/fuzzy-search-and-slash",     title: "Fuzzy search + the “/” shortcut",   body: "Press / anywhere on a list page to focus search. Typos still find the row.",                  icon: Sparkles,       status: "new" },
+  { href: "/help/engagement-bottom-actions",  title: "Send a check-in or come-back nudge", body: "Two persistent buttons at the bottom of the engagement table. Selection optional.",          icon: Bell,           status: "new" },
+  { href: "/help/tab-persistence",            title: "Tabs stay where you left them",     body: "Refresh the brand editor or a student detail page — your tab is still active.",                icon: Sparkles,       status: "new" },
+  { href: "/help/customer-urls-add-to-nav",   title: "Add a customer URL to your nav",    body: "Sign in / library / shop — one click drops the link straight into your header.",             icon: Globe,          status: "new" },
+  { href: "/help/payouts-gateway-fees",       title: "What Razorpay's gateway fee really costs", body: "Why we don't quote a fixed % — fees vary by method. Straight to Razorpay's live pricing.", icon: CreditCard,    status: "new" },
+  { href: "/help/leaderboard-gamification",   title: "Levels, badges, and streaks",       body: "Seven levels (Newcomer → Legend), 16 badges, daily streaks. Day-one points so nobody sees an empty board.", icon: Sparkles,    status: "new" },
+  { href: "/help/engagement-table",           title: "Engagement — at-risk students at a glance", body: "Lifecycle stage chips per student. Bulk-nudge a stage with one click.", icon: Users,    status: "new" },
+  { href: "/help/cohort-window",              title: "Cohort start + end dates",          body: "Time-box a community to a launch date. Banner counts down, then archives when it wraps.", icon: Sparkles,    status: "new" },
+  { href: "/help/drip-modules",               title: "Drip — release modules over time",  body: "Lock Module 2 until Day 7. Students see 'Unlocks on <date>' instead of the lesson list.", icon: Sparkles,    status: "new" },
+  { href: "/help/whiteboard-edit-requests",   title: "Whiteboard edit access — request + approve", body: "Students ask, you approve from a dropdown on the board. Notifications both ways.", icon: Sparkles,    status: "new" },
+  { href: "/help/community-auto-join",        title: "Auto-join buyers into a course's community", body: "Set defaultBatchId once. Every enrollment lands in the right room — no second sale.", icon: Users,    status: "new" },
   { href: "/help/course-ai-draft",            title: "Draft a course from just the title (AI)", body: "Type a title, let AI fill description + curriculum.",                              icon: Sparkles,        status: "new" },
   { href: "/help/trial-and-plan-badge",       title: "Plan + trial badge in the sidebar",   body: "Always-visible pill: plan name, days left in trial, or 'payment overdue'.",      icon: CreditCard,      status: "new" },
   { href: "/help/cancel-with-reason",         title: "Cancel — with or without deleting data", body: "Reason + free-text + a separate 'deactivate the workspace' toggle.",          icon: ShieldCheck,    status: "new" },
@@ -133,6 +144,20 @@ const AUDIENCE: Topic[] = [
 ]
 
 const FOR_CREATORS: Topic[] = [
+  {
+    href: "/help/students",
+    title: "How student onboarding works",
+    body: "Invite link, CSV import, or manual add — when to use which, and what the student actually sees.",
+    icon: GraduationCap,
+    status: "new",
+  },
+  {
+    href: "/help/experiments",
+    title: "Run experiments on your portal",
+    body: "A/B test hero CTAs, price displays, or anything else. Sticky assignments + conversion reporting included.",
+    icon: Sparkles,
+    status: "new",
+  },
   {
     href: "/help/faculty",
     title: "Invite a faculty member",

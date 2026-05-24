@@ -102,12 +102,18 @@ export default function AssignmentDetailPage({ params }: { params: Promise<{ id:
   const gradedCount = roster.filter((r) => r.submission?.status === "graded").length
   const pendingCount = submittedCount - gradedCount
   const gradedSubs = roster.filter((r) => r.submission?.status === "graded" && typeof r.submission?.score === "number")
-  const avgPct = gradedSubs.length > 0
-    ? Math.round(
-        gradedSubs.reduce((acc, r) => acc + ((r.submission?.score ?? 0) / assignment.maxScore) * 100, 0) /
-          gradedSubs.length,
-      )
-    : 0
+  // Average percentage only makes sense when maxScore > 0. Ungraded
+  // assignments (maxScore === 0) leave avgPct at 0 — the UI hides
+  // the average tile in that case rather than rendering "NaN%".
+  const avgPct =
+    gradedSubs.length > 0 && assignment.maxScore > 0
+      ? Math.round(
+          gradedSubs.reduce(
+            (acc, r) => acc + ((r.submission?.score ?? 0) / assignment.maxScore) * 100,
+            0,
+          ) / gradedSubs.length,
+        )
+      : 0
 
   const confirm = useConfirm()
   const handleDelete = async () => {
@@ -139,7 +145,12 @@ export default function AssignmentDetailPage({ params }: { params: Promise<{ id:
           </Button>
           <div className="min-w-0">
             <h1 className="text-2xl font-bold tracking-tight">{assignment.title}</h1>
-            <p className="text-sm text-muted-foreground">{course?.title ?? "—"} · {assignment.maxScore} pts</p>
+            <p className="text-sm text-muted-foreground">
+              {course?.title ?? "—"} ·{" "}
+              {assignment.maxScore > 0
+                ? `${assignment.maxScore} pts`
+                : "Ungraded"}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -292,9 +303,13 @@ export default function AssignmentDetailPage({ params }: { params: Promise<{ id:
                     {submission && (
                       <div className="shrink-0 text-right">
                         {submission.status === "graded" ? (
-                          <span className="text-sm font-semibold tabular-nums">
-                            {submission.score}/{assignment.maxScore}
-                          </span>
+                          assignment.maxScore > 0 ? (
+                            <span className="text-sm font-semibold tabular-nums">
+                              {submission.score}/{assignment.maxScore}
+                            </span>
+                          ) : (
+                            <Badge className="bg-success/15 text-success">Reviewed</Badge>
+                          )
                         ) : (
                           <Badge variant="secondary">Pending</Badge>
                         )}
@@ -601,7 +616,13 @@ function GradingPanel({
   const [saving, setSaving] = useState(false)
 
   const numericScore = parseFloat(score)
-  const valid = !Number.isNaN(numericScore) && numericScore >= 0 && numericScore <= assignment.maxScore
+  // Ungraded assignments (maxScore === 0) — the teacher just marks
+  // "received & reviewed" via feedback. We treat any submitted state
+  // as valid in that case so the Save button isn't disabled forever.
+  const ungraded = assignment.maxScore <= 0
+  const valid = ungraded
+    ? true
+    : !Number.isNaN(numericScore) && numericScore >= 0 && numericScore <= assignment.maxScore
 
   return (
     <Card>
@@ -649,20 +670,33 @@ function GradingPanel({
         )}
 
         <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium">Score</label>
-            <div className="flex items-center gap-2">
-              <Input
-                type="number"
-                min={0}
-                max={assignment.maxScore}
-                value={score}
-                onChange={(e) => setScore(e.target.value)}
-                className={cn(!valid && score && "border-destructive")}
-              />
-              <span className="text-sm text-muted-foreground tabular-nums">/ {assignment.maxScore}</span>
+          {/* Score input is hidden entirely on ungraded assignments —
+              the teacher only writes feedback to acknowledge the
+              submission. Keeping the column reserved would render an
+              awkward "/ 0" stub. */}
+          {!ungraded ? (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Score</label>
+              <div className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  max={assignment.maxScore}
+                  value={score}
+                  onChange={(e) => setScore(e.target.value)}
+                  className={cn(!valid && score && "border-destructive")}
+                />
+                <span className="text-sm text-muted-foreground tabular-nums">/ {assignment.maxScore}</span>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium">Score</label>
+              <p className="rounded-md border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                Ungraded — feedback only.
+              </p>
+            </div>
+          )}
           <div className="space-y-1.5">
             <label className="text-xs font-medium">Feedback</label>
             <Textarea
@@ -679,7 +713,14 @@ function GradingPanel({
             disabled={!valid || saving}
             onClick={async () => {
               setSaving(true)
-              onGrade({ score: numericScore, feedback: feedback || undefined })
+              // Ungraded assignments — pass 0 so the submission still
+              // flips to "graded" state but the score is a no-op.
+              // Readers branch on `assignment.maxScore > 0` before
+              // rendering a "/<n>" suffix, so 0 reads as "ungraded".
+              onGrade({
+                score: ungraded ? 0 : numericScore,
+                feedback: feedback || undefined,
+              })
               setTimeout(() => setSaving(false), 300)
             }}
           >

@@ -167,12 +167,21 @@ export function FileUploadField({
 
   const KindIcon = useMemo(() => iconFor(accept, value), [accept, value])
 
+  // In compact mode, once we have an uploaded value we hide the
+  // long URL input — showing a 200-char CDN URL inside a textbox in
+  // a 512px-wide dialog overflows the layout and pushes Replace +
+  // Trash off the right edge. The filename pill below the row
+  // (default behaviour for any value) carries the same info in a
+  // truncated, dialog-friendly form. The user can still replace
+  // via the button or clear via the trash icon.
+  const showUrlInput = !hideUrlInput && !(variant === "compact" && hasValue)
+
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("min-w-0 space-y-2", className)}>
       {/* Always-visible controlled URL + upload button row */}
-      <div className="flex items-center gap-2">
-        {!hideUrlInput && (
-          <div className="relative flex-1">
+      <div className="flex min-w-0 items-center gap-2">
+        {showUrlInput && (
+          <div className="relative min-w-0 flex-1">
             <LinkIcon className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={value}
@@ -182,11 +191,16 @@ export function FileUploadField({
             />
           </div>
         )}
+        {/* Compact + has-value: collapse the URL input into a flex
+            spacer so the Replace + Trash buttons stay right-aligned
+            and don't bunch up against the Avatar label. */}
+        {!showUrlInput && <div className="min-w-0 flex-1" />}
         <Button
           type="button"
           variant="outline"
           onClick={onPick}
           disabled={uploading}
+          className="shrink-0"
         >
           {uploading ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -206,7 +220,7 @@ export function FileUploadField({
               setLastUpload(null)
             }}
             title="Clear"
-            className="text-destructive hover:text-destructive"
+            className="shrink-0 text-destructive hover:text-destructive"
           >
             <Trash2 className="h-4 w-4" />
           </Button>
@@ -228,7 +242,7 @@ export function FileUploadField({
 
       {/* Preview chip (filename, thumbnail) */}
       {hasValue && !uploading && (
-        <div className="flex items-center gap-3 rounded-md border border-border bg-card p-2.5">
+        <div className="flex min-w-0 items-center gap-3 overflow-hidden rounded-md border border-border bg-card p-2.5">
           {looksLikeImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -242,10 +256,15 @@ export function FileUploadField({
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">
+            <p
+              className="truncate text-sm font-medium"
+              title={lastUpload?.url === value ? lastUpload.filename : prettyValue(value)}
+            >
               {lastUpload?.url === value ? lastUpload.filename : prettyValue(value)}
             </p>
-            <p className="truncate text-xs text-muted-foreground">{value}</p>
+            <p className="truncate text-xs text-muted-foreground" title={value}>
+              {value}
+            </p>
           </div>
           {isExternalUrl(value) && (
             <Button
@@ -253,7 +272,7 @@ export function FileUploadField({
               variant="ghost"
               size="icon"
               asChild
-              className="h-8 w-8"
+              className="h-8 w-8 shrink-0"
               title="Open"
             >
               <a href={value} target="_blank" rel="noreferrer">
@@ -339,12 +358,18 @@ function isExternalUrl(url: string): boolean {
 
 function prettyValue(url: string): string {
   if (url.startsWith("data:")) return "Inline file"
+  // Some CDN paths are extremely long ("mpilp8s0-de694fb731f2f5e3.jpg")
+  // — truncate to a sensible 36-char filename so the chip and any
+  // surrounding flex row never blow out their container. The full
+  // value is still on the element's `title` attribute for hover
+  // disclosure.
+  const trim = (s: string) => (s.length > 36 ? `${s.slice(0, 24)}…${s.slice(-9)}` : s)
   try {
     const u = new URL(url)
     const last = u.pathname.split("/").filter(Boolean).pop()
-    return last || u.hostname
+    return trim(last || u.hostname)
   } catch {
-    return url
+    return trim(url)
   }
 }
 

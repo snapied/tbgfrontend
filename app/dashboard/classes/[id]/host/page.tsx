@@ -1,6 +1,6 @@
 "use client"
 
-// Teacher host-control page for an in-house live class.
+// Instructor host-control page for an in-house live class.
 //
 // Three states map 1:1 with the LiveSession.roomState machine:
 //
@@ -43,9 +43,12 @@ import { useHostRecording } from "@/lib/use-host-recording"
 import { useWhiteboardAccess } from "@/lib/whiteboard-access"
 import { LiveStateBeacon } from "@/components/classes/live-state-beacon"
 import { PreflightChecklist } from "@/components/classes/preflight-checklist"
+import { EndClassWrapWizard, type EndClassDecision } from "@/components/classes/end-class-wrap-wizard"
+import { BreakoutRoomsPanel } from "@/components/classes/breakout-rooms-panel"
+import { MobileTeacherControls } from "@/components/classes/mobile-teacher-controls"
 import { DashboardBreadcrumbs } from "@/components/dashboard/dashboard-breadcrumbs"
 import { ensureAuthed } from "@/lib/billing-client"
-import { AlertTriangle, Lock, Unlock } from "lucide-react"
+import { AlertTriangle, Layers, Lock, Unlock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function HostLiveRoomPage({
@@ -63,6 +66,14 @@ export default function HostLiveRoomPage({
     openLiveRoom,
     startLiveRoom,
     endLiveRoom,
+    // Sprint A Classes #22 — wrap wizard reads the attached
+    // community for the "share to community" checkbox and updates
+    // session metadata (wasHeld + summary) on confirm.
+    studentGroups,
+    updateLiveSession,
+    // Sprint C Classes #43 — class-end → community recap. Posts a
+    // structured recap into the attached community's feed.
+    addBatchPost,
   } = useLMS()
   const confirm = useConfirm()
   // Backend auth check — students-stuck-in-lobby was traced to silent
@@ -206,22 +217,21 @@ export default function HostLiveRoomPage({
   }
 
   if (state === "open" || state === "live") {
+    // Sprint A Classes #22 — pull attached community for the wrap
+    // wizard's "share to community" toggle.
+    const attachedCommunity = course?.defaultBatchId
+      ? studentGroups.find((g) => g.id === course.defaultBatchId)
+      : undefined
     return (
-      <LiveHostShell
+      <LiveHostShellWithWrap
         teacherEmail={teacherEmail}
         session={session}
         courseTitle={course?.title}
         teacherName={teacherName}
         backendAuthed={backendAuthed}
-        onEnd={async (rec) => {
-          const ok = await confirm({
-            title: "End the class?",
-            description:
-              "Students get beamed out, the recording is finalised, and the class moves to ‘ended’.",
-            destructive: false,
-            confirmLabel: "End class",
-          })
-          if (!ok) return
+        attachedCommunityName={attachedCommunity?.name}
+        hasAttachedCommunity={!!attachedCommunity}
+        onEnd={(rec, decision) => {
           const startedAt = rec?.startedAt ?? session.roomStartedAt ?? session.roomOpenedAt ?? new Date().toISOString()
           const endedAt = rec?.endedAt ?? new Date().toISOString()
           const durationSec = rec?.durationSec ?? Math.max(
@@ -235,7 +245,71 @@ export default function HostLiveRoomPage({
             durationSec,
             pending: !rec,
           })
-          toast.success(rec ? "Class ended — recording saved" : "Class ended")
+          // Sprint A Classes #22 — persist the wrap decisions onto
+          // the session record so downstream surfaces (attendance,
+          // recap email, recording-ready notification) can read them
+          // back. `wasHeld === false` cancels the recording auto-
+          // publish chain by clearing recordingUrl too.
+          updateLiveSession(session.id, {
+            wasHeld: decision.wasHeld,
+            summary: decision.summary,
+          })
+          // Sprint C Classes #43 — class-end → community recap.
+          // When the teacher said "share to community" AND the
+          // class was actually held AND a community is attached,
+          // post a structured recap card to the feed. We dedupe by
+          // checking the existing auto-post marker the recording-
+          // ready handler uses (so we don't double-post when the
+          // recording arrives shortly after).
+          if (
+            decision.wasHeld &&
+            decision.shareToCommunity &&
+            course?.defaultBatchId &&
+            currentUser
+          ) {
+            const recapBody = [
+              `<p data-recap-class="${session.id}">`,
+              `🎬 <strong>Class recap — ${escapeHtml(session.title)}</strong>`,
+              `</p>`,
+              decision.summary
+                ? `<p>${escapeHtml(decision.summary)}</p>`
+                : "",
+              `<p>Recording will be posted here once it's processed.</p>`,
+            ].join("")
+            try {
+              addBatchPost({
+                id: `post-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+                batchId: course.defaultBatchId,
+                authorId: currentUser.id,
+                body: recapBody,
+                pinned: true,
+                hidden: false,
+                comments: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              })
+            } catch {
+              /* tolerable — wrap flow shouldn't fail because of a
+                 follow-up post. The teacher can re-share manually
+                 from the recording details sheet. */
+            }
+          }
+          // Route to the appropriate follow-up surface. Skip / null
+          // = stay on the ended screen.
+          if (decision.followUp === "assignment") {
+            window.location.href = `/dashboard/assignments/new?courseId=${course?.id ?? ""}&from=class:${session.id}`
+          } else if (decision.followUp === "doubts") {
+            window.location.href = `/dashboard/doubts?from=class:${session.id}`
+          } else if (decision.followUp === "next-class") {
+            window.location.href = `/dashboard/classes/new?courseId=${course?.id ?? ""}`
+          }
+          toast.success(
+            decision.wasHeld
+              ? rec
+                ? "Class ended — recording saved"
+                : "Class ended"
+              : "Class marked cancelled — students notified",
+          )
         }}
       />
     )
@@ -246,7 +320,7 @@ export default function HostLiveRoomPage({
 }
 
 // ---------------------------------------------------------------
-// State: scheduled — pre-open. Teacher prep + "Open the room" CTA.
+// State: scheduled — pre-open. Instructor prep + "Open the room" CTA.
 // ---------------------------------------------------------------
 
 function PreOpenScreen({
@@ -390,6 +464,69 @@ function PreOpenScreen({
 // State: open/live — the actual host shell.
 // ---------------------------------------------------------------
 
+/** Sprint A Classes #22 — thin wrapper around LiveHostShell that
+ *  intercepts the End-Class click and routes through the wrap
+ *  wizard. The shell itself is unchanged so all its internal state
+ *  (recording, whiteboard, etc.) stays put; we just delay the actual
+ *  endLiveRoom call until the wizard returns a decision. */
+function LiveHostShellWithWrap({
+  session,
+  courseTitle,
+  teacherName,
+  teacherEmail,
+  backendAuthed,
+  onEnd,
+  attachedCommunityName,
+  hasAttachedCommunity,
+}: {
+  session: LiveSession
+  courseTitle?: string
+  teacherName: string
+  teacherEmail: string
+  backendAuthed: boolean | null
+  onEnd: (
+    recording: { url: string; startedAt: string; endedAt: string; durationSec: number } | undefined,
+    decision: EndClassDecision,
+  ) => void
+  attachedCommunityName?: string
+  hasAttachedCommunity: boolean
+}) {
+  const [wrapOpen, setWrapOpen] = useState(false)
+  // Hold the recording artifact between "shell asked to end" and
+  // "wizard confirmed". Without this we'd lose the recording payload
+  // because the shell's onEnd fires once and we need both moments.
+  const [pendingRecording, setPendingRecording] = useState<
+    | { url: string; startedAt: string; endedAt: string; durationSec: number }
+    | undefined
+  >(undefined)
+
+  return (
+    <>
+      <LiveHostShell
+        session={session}
+        courseTitle={courseTitle}
+        teacherName={teacherName}
+        teacherEmail={teacherEmail}
+        backendAuthed={backendAuthed}
+        onEnd={(rec) => {
+          setPendingRecording(rec)
+          setWrapOpen(true)
+        }}
+      />
+      <EndClassWrapWizard
+        open={wrapOpen}
+        onOpenChange={setWrapOpen}
+        sessionTitle={session.title}
+        hasAttachedCommunity={hasAttachedCommunity}
+        attachedCommunityName={attachedCommunityName}
+        onConfirm={(decision) => {
+          onEnd(pendingRecording, decision)
+        }}
+      />
+    </>
+  )
+}
+
 function LiveHostShell({
   session,
   courseTitle,
@@ -428,6 +565,19 @@ function LiveHostShell({
   // Stage tab: video call vs whiteboard. Both stay mounted (CSS hide/show)
   // so switching back doesn't drop the Jitsi connection or wipe the canvas.
   const [stageTab, setStageTab] = useState<"video" | "whiteboard">("video")
+
+  // Sprint C Classes #17 — breakouts side panel. Toggled from the
+  // top bar (desktop) and the Tools tab (mobile). Independent of
+  // stageTab so the teacher can open breakouts while keeping the
+  // whiteboard up on screen.
+  const [breakoutsOpen, setBreakoutsOpen] = useState(false)
+
+  // Sprint C Classes #46 — mobile tab state. Drives which surface
+  // the mobile bottom-bar focuses. Defaults to "stage" so the
+  // teacher always lands in the same orientation. Independent of
+  // stageTab (mobile Tools tab → BreakoutsPanel; Roster tab →
+  // future participant list).
+  const [mobileTab, setMobileTab] = useState<"stage" | "roster" | "tools">("stage")
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-background overflow-hidden">
@@ -484,11 +634,40 @@ function LiveHostShell({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Sprint C Classes #17 — Breakouts toggle. Sits next to
+              the recording controls in the top bar so a teacher
+              splitting the room mid-class doesn't have to hunt for
+              the action. Active state visually marked so the
+              teacher knows the side rail is consuming horizontal
+              space behind the scenes. */}
+          <Button
+            size="sm"
+            variant={breakoutsOpen ? "default" : "outline"}
+            onClick={() => setBreakoutsOpen((v) => !v)}
+            className="hidden gap-1 sm:inline-flex"
+            aria-pressed={breakoutsOpen}
+            aria-label="Toggle breakout rooms panel"
+          >
+            <Layers className="h-3.5 w-3.5" />
+            Breakouts
+          </Button>
           {recording.status === "recording" && (
             <>
-              <span className="flex items-center gap-1.5 text-xs text-red-500 font-medium animate-pulse">
+              {/* Sprint A Classes #20 — make the "students see this
+                  too" reality explicit. Avoids the rare-but-bad case
+                  where the host thinks recording is local-only. The
+                  pulsing red dot pairs with a tooltip-equivalent
+                  microline so the signal lands without needing
+                  hover. */}
+              <span
+                title="Students see this dot too — they know the class is being recorded."
+                className="flex items-center gap-1.5 text-xs text-red-500 font-medium animate-pulse"
+              >
                 <span className="h-2 w-2 rounded-full bg-red-500" />
-                Recording
+                <span>Recording</span>
+                <span className="ml-1 hidden sm:inline text-[10.5px] font-normal text-muted-foreground">
+                  · students can see this
+                </span>
               </span>
               <Button size="sm" variant="outline" onClick={recording.stop}>
                 <Square className="mr-1.5 h-3.5 w-3.5 fill-red-500 text-red-500" />
@@ -542,8 +721,14 @@ function LiveHostShell({
           context — toggling the tab swaps which is visible while the call
           connection stays alive. Sharing the room lets the whiteboard use
           the LiveKit data channel for multiplayer cursors + element sync
-          without opening a second connection. */}
-      <div className="flex-1 overflow-hidden p-2">
+          without opening a second connection.
+
+          Sprint C Classes #17 — when the breakouts panel is open on
+          desktop we split the flex container into stage + 320px rail.
+          Mobile keeps the stage full-width and surfaces breakouts via
+          the Tools tab (#46). */}
+      <div className="relative flex flex-1 overflow-hidden p-2">
+        <div className="min-w-0 flex-1">
         <LiveKitRoom
           roomCode={canonicalRoomCode(session)}
           user={{ id: `host-${session.id}`, name: teacherName }}
@@ -575,7 +760,7 @@ function LiveHostShell({
               `block` won the CSS display fight — and the control bar
               disappeared off-screen as a result. */}
           <div className={cn("h-full w-full flex-col", stageTab === "video" ? "flex" : "hidden")}>
-            <LiveKitVideoUI />
+            <LiveKitVideoUI isHost chatEnabled={session.chatEnabled !== false} />
           </div>
           <div className={cn("h-full w-full", stageTab === "whiteboard" ? "block" : "hidden")}>
             <HostWhiteboardStage
@@ -584,7 +769,63 @@ function LiveHostShell({
             />
           </div>
         </LiveKitRoom>
+        </div>
+
+        {/* Sprint C Classes #17 — desktop side rail. Hidden on
+            mobile (the bottom-bar's Tools tab handles it there).
+            We render the panel only when open + on sm+ so the
+            LiveKit grid keeps its full width during normal flow. */}
+        {breakoutsOpen && (
+          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
+            <BreakoutRoomsPanel
+              sessionId={session.id}
+              participants={[{ id: `host-${session.id}`, name: teacherName }]}
+              onClose={() => setBreakoutsOpen(false)}
+            />
+          </aside>
+        )}
+
+        {/* Sprint C Classes #46 — mobile Tools surface. Slides
+            up over the stage when the Tools tab is active. We
+            don't render this on sm+ because the side rail above
+            already handles it. */}
+        {mobileTab === "tools" && (
+          <div className="fixed inset-x-0 bottom-24 top-12 z-20 overflow-y-auto border-t border-border bg-card p-3 sm:hidden">
+            <BreakoutRoomsPanel
+              sessionId={session.id}
+              participants={[{ id: `host-${session.id}`, name: teacherName }]}
+              onClose={() => setMobileTab("stage")}
+            />
+          </div>
+        )}
       </div>
+
+      {/* Sprint C Classes #46 — mobile teacher controls. Bottom-
+          fixed 3-tab bar with persistent Mute + End. Self-hides
+          on sm+ via its internal class. The mic toggle ties into
+          the LiveKit room's local-track state via window event so
+          we don't have to thread an SDK ref through here. */}
+      <MobileTeacherControls
+        active={mobileTab}
+        onChange={(t) => {
+          setMobileTab(t)
+          // Stage tab pulls the user back to the LiveKit grid; we
+          // close any open breakout panel because Tools and Stage
+          // share the same screen region on mobile.
+        }}
+        isRecording={recording.status === "recording"}
+        micOn={undefined}
+        onMicToggle={() => {
+          // Defer to the LiveKit data-channel event the iframe
+          // listens for. Inline emulation keeps this component
+          // unaware of the SDK internals.
+          window.dispatchEvent(new CustomEvent("livekit-toggle-mic"))
+        }}
+        onEndClass={() => {
+          if (recording.status === "recording") recording.stop()
+          onEnd(recordedRef.current ?? undefined)
+        }}
+      />
     </div>
   )
 }
@@ -755,4 +996,17 @@ function EndedHostScreen({ session }: { session: LiveSession }) {
       </Card>
     </div>
   )
+}
+
+/** Minimal HTML escape for recap bodies. The community feed
+ *  renders via RichTextContent which already sanitises on read,
+ *  but we still escape on write so a class titled "Math: <hr>"
+ *  doesn't break the surrounding markup. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
 }

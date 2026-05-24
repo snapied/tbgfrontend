@@ -15,8 +15,10 @@
 //
 // State is purely client-side over the LMS store. No server filtering.
 
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import Link from "next/link"
+import { useUrlState } from "@/lib/use-url-state"
+import { CourseThumbnail } from "@/components/courses/course-thumbnail"
 import {
   Search,
   Clock,
@@ -46,31 +48,54 @@ import { Header } from "@/components/landing/header"
 import { Footer } from "@/components/landing/footer"
 import { fuzzyScore } from "@/lib/fuzzy-search"
 
-export default function CourseCatalogPage() {
-  const { courses, getUserById } = useLMS()
-  const [search, setSearch] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState<string>("all")
-  const [levelFilter, setLevelFilter] = useState<string>("all")
-  const [sortBy, setSortBy] = useState<string>("popular")
+// Pretty-format a duration stored as total minutes — "45m", "2h 30m",
+// not the prior "0h" for sub-hour courses.
+function formatCourseDuration(totalMinutes: number): string {
+  if (!Number.isFinite(totalMinutes) || totalMinutes <= 0) return "0m"
+  const h = Math.floor(totalMinutes / 60)
+  const m = Math.round(totalMinutes % 60)
+  if (h === 0) return `${m}m`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
 
+export default function CourseCatalogPage() {
+  const { courses, getUserById, getEnrolledCount } = useLMS()
+  // URL-backed filter state — `?q=…&cat=…&level=…&sort=…`. Default
+  // values are stripped from the URL so a bare /courses link still
+  // means "everything, no filter". Picking a category from the
+  // trending chip row updates the URL, so a refresh / back-button
+  // restores the same view the visitor was browsing.
+  const [search, setSearch] = useUrlState<string>("q", { defaultValue: "" })
+  const [categoryFilter, setCategoryFilter] = useUrlState<string>("cat", { defaultValue: "all" })
+  const [levelFilter, setLevelFilter] = useUrlState<string>("level", { defaultValue: "all" })
+  const [sortBy, setSortBy] = useUrlState<string>("sort", { defaultValue: "popular" })
+
+  // Catalogue shows only "public" published courses. Unlisted /
+  // password / private courses are reachable only via direct link
+  // — listing them here defeats the whole point of those modes.
   const publishedCourses = useMemo(
-    () => courses.filter((c) => c.status === "published"),
+    () =>
+      courses.filter(
+        (c) => c.status === "published" && (c.visibility ?? "public") === "public",
+      ),
     [courses],
   )
 
   // Categories sorted by enrollment so the most active topics float to
-  // the front of the chip rail.
+  // the front of the chip rail. We sum the LIVE enrolled count instead
+  // of `enrolledCount` (which is a denormalized cache).
   const trendingCategories = useMemo(() => {
     const counts = new Map<string, number>()
     for (const c of publishedCourses) {
       if (!c.category?.trim()) continue
-      counts.set(c.category, (counts.get(c.category) ?? 0) + c.enrolledCount)
+      counts.set(c.category, (counts.get(c.category) ?? 0) + getEnrolledCount(c.id))
     }
     return [...counts.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 10)
       .map(([cat]) => cat)
-  }, [publishedCourses])
+  }, [publishedCourses, getEnrolledCount])
 
   const allCategories = useMemo(
     () => [...new Set(publishedCourses.map((c) => c.category).filter(Boolean))],
@@ -83,9 +108,9 @@ export default function CourseCatalogPage() {
   const featured = useMemo(() => {
     if (publishedCourses.length === 0) return null
     return [...publishedCourses].sort(
-      (a, b) => b.rating - a.rating || b.enrolledCount - a.enrolledCount,
+      (a, b) => b.rating - a.rating || getEnrolledCount(b.id) - getEnrolledCount(a.id),
     )[0]
-  }, [publishedCourses])
+  }, [publishedCourses, getEnrolledCount])
 
   const filteredCourses = useMemo(() => {
     const filtered = publishedCourses.filter((course) => {
@@ -117,7 +142,7 @@ export default function CourseCatalogPage() {
     const arr = [...filtered]
     switch (sortBy) {
       case "popular":
-        return arr.sort((a, b) => b.enrolledCount - a.enrolledCount)
+        return arr.sort((a, b) => getEnrolledCount(b.id) - getEnrolledCount(a.id))
       case "rating":
         return arr.sort((a, b) => b.rating - a.rating)
       case "newest":
@@ -131,7 +156,7 @@ export default function CourseCatalogPage() {
       default:
         return arr
     }
-  }, [publishedCourses, search, categoryFilter, levelFilter, sortBy, getUserById])
+  }, [publishedCourses, search, categoryFilter, levelFilter, sortBy, getUserById, getEnrolledCount])
 
   const hasActiveFilters =
     !!search.trim() || categoryFilter !== "all" || levelFilter !== "all"
@@ -146,7 +171,7 @@ export default function CourseCatalogPage() {
     <div className="flex min-h-screen flex-col">
       <Header />
 
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         {/* Editorial hero */}
         <section className="relative overflow-hidden border-b border-border bg-gradient-to-br from-primary/5 via-background to-accent/5">
           {/* Soft blurred blobs for depth — purely decorative. */}
@@ -325,6 +350,7 @@ export default function CourseCatalogPage() {
                       instructorAvatar={
                         "avatar" in instructor ? instructor.avatar : undefined
                       }
+                      enrolledCount={getEnrolledCount(course.id)}
                     />
                   )
                 })}
@@ -347,15 +373,20 @@ function CourseGridCard({
   course,
   instructorName,
   instructorAvatar,
+  enrolledCount,
 }: {
   course: ReturnType<typeof useLMS>["courses"][number]
   instructorName: string
   instructorAvatar?: string
+  enrolledCount: number
 }) {
   const discountPct =
     course.originalPrice && course.originalPrice > course.price
       ? Math.round((1 - course.price / course.originalPrice) * 100)
       : 0
+  // Use live curriculum counts so cards reflect recent edits instead
+  // of the denormalized snapshot on the course row.
+  const lessonCount = course.modules.reduce((acc, m) => acc + m.lessons.length, 0)
 
   return (
     <Link
@@ -364,10 +395,11 @@ function CourseGridCard({
     >
       <Card className="overflow-hidden h-full transition-all duration-200 group-hover:-translate-y-1 group-hover:shadow-lg py-0">
         <div className="relative aspect-video bg-muted overflow-hidden">
-          <img
-            src={course.thumbnail || "/placeholder.svg?height=400&width=600"}
-            alt={course.title}
-            className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+          <CourseThumbnail
+            title={course.title}
+            category={course.category}
+            thumbnail={course.thumbnail}
+            hoverZoom
           />
           {discountPct > 0 && (
             <div className="absolute left-3 top-3 rounded-full bg-destructive px-2.5 py-1 text-[11px] font-semibold text-destructive-foreground shadow-sm">
@@ -398,7 +430,7 @@ function CourseGridCard({
             {instructorAvatar ? (
               <img
                 src={instructorAvatar}
-                alt=""
+                alt={`${instructorName} avatar`}
                 className="h-6 w-6 rounded-full object-cover"
               />
             ) : (
@@ -413,18 +445,22 @@ function CourseGridCard({
             <span className="truncate text-xs text-muted-foreground">{instructorName}</span>
           </div>
           <div className="mt-3 flex items-center gap-4 text-xs text-muted-foreground">
+            {course.rating > 0 ? (
+              <div className="flex items-center gap-1" title={`${course.rating.toFixed(1)} stars across ${course.reviewCount} reviews`}>
+                <Star className="h-3.5 w-3.5 fill-accent text-accent" aria-hidden />
+                <span className="font-medium text-foreground">{course.rating.toFixed(1)}</span>
+                <span>({course.reviewCount})</span>
+              </div>
+            ) : (
+              <span className="text-[11px] text-muted-foreground/70">New</span>
+            )}
             <div className="flex items-center gap-1">
-              <Star className="h-3.5 w-3.5 fill-accent text-accent" />
-              <span className="font-medium text-foreground">{course.rating.toFixed(1)}</span>
-              <span>({course.reviewCount})</span>
+              <Users className="h-3.5 w-3.5" aria-hidden />
+              <span className="tabular-nums">{enrolledCount.toLocaleString()}</span>
             </div>
             <div className="flex items-center gap-1">
-              <Users className="h-3.5 w-3.5" />
-              <span>{course.enrolledCount.toLocaleString()}</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" />
-              <span>{Math.round(course.totalDuration / 60)}h</span>
+              <Clock className="h-3.5 w-3.5" aria-hidden />
+              <span className="tabular-nums">{formatCourseDuration(course.totalDuration ?? 0)}</span>
             </div>
           </div>
           <div className="mt-4 flex items-baseline justify-between border-t border-border pt-3">
@@ -438,8 +474,8 @@ function CourseGridCard({
                 </span>
               )}
             </div>
-            <span className="text-[11px] text-muted-foreground">
-              {course.totalLessons} lessons
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {lessonCount} lesson{lessonCount === 1 ? "" : "s"}
             </span>
           </div>
         </CardContent>
@@ -457,16 +493,16 @@ function FeaturedCourseCard({
 }) {
   return (
     <Link
-      href={`/courses/details/${course.slug}`}
+      href={`/courses/${course.slug}`}
       className="block focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-2xl"
     >
       <Card className="overflow-hidden py-0 transition-shadow hover:shadow-xl">
         <div className="grid md:grid-cols-2">
           <div className="relative aspect-video md:aspect-auto bg-muted">
-            <img
-              src={course.thumbnail || "/placeholder.svg?height=400&width=600"}
-              alt={course.title}
-              className="h-full w-full object-cover"
+            <CourseThumbnail
+              title={course.title}
+              category={course.category}
+              thumbnail={course.thumbnail}
             />
           </div>
           <div className="flex flex-col justify-center gap-3 p-6 sm:p-8">
@@ -488,16 +524,22 @@ function FeaturedCourseCard({
             </p>
             <p className="text-xs text-muted-foreground">By {instructorName}</p>
             <div className="flex flex-wrap items-center gap-4 text-sm">
-              <div className="flex items-center gap-1.5">
-                <Star className="h-4 w-4 fill-accent text-accent" />
-                <span className="font-semibold">{course.rating.toFixed(1)}</span>
-                <span className="text-muted-foreground">
-                  ({course.reviewCount} reviews)
+              {course.rating > 0 ? (
+                <div className="flex items-center gap-1.5">
+                  <Star className="h-4 w-4 fill-accent text-accent" aria-hidden />
+                  <span className="font-semibold">{course.rating.toFixed(1)}</span>
+                  <span className="text-muted-foreground">
+                    ({course.reviewCount} reviews)
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  New course
                 </span>
-              </div>
+              )}
               <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Users className="h-4 w-4" />
-                <span>{course.enrolledCount.toLocaleString()} enrolled</span>
+                <Users className="h-4 w-4" aria-hidden />
+                <span className="tabular-nums">{course.enrolledCount.toLocaleString()} enrolled</span>
               </div>
             </div>
             <div className="mt-2 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">

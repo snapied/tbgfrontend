@@ -186,7 +186,7 @@ export default function FacultyFeaturePage() {
             <p className="mt-3 max-w-3xl text-muted-foreground">
               The fields you collect on the faculty form render straight onto the public
               instructor card on every course they teach, plus the{" "}
-              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">/teachers</code>{" "}
+              <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">/instructors</code>{" "}
               showcase page. No separate &quot;public profile&quot; data model to maintain.
             </p>
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
@@ -242,7 +242,7 @@ export default function FacultyFeaturePage() {
                 until they hit &apos;good&apos; or better.
               </Step>
               <Step n={4}>
-                We provision the user in your workspace and sign them in. Teachers + admins land
+                We provision the user in your workspace and sign them in. Instructors + admins land
                 on <code className="rounded bg-muted px-1 font-mono text-[11px]">/dashboard</code>;
                 students land on <code className="rounded bg-muted px-1 font-mono text-[11px]">/p/&lt;tenant&gt;</code>.
               </Step>

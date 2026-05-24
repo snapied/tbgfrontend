@@ -2,7 +2,8 @@
 
 import { use, useEffect, useState } from "react"
 import Link from "next/link"
-import { CheckCircle2, XCircle, Calendar, Building, User, FileText, ArrowLeft, Download, Loader2 } from "lucide-react"
+import { CheckCircle2, XCircle, Calendar, Building, User, FileText, ArrowLeft, Download, Loader2, Share2 } from "lucide-react"
+import { ShareMenu } from "@/components/share/share-menu"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { CertificateFull } from "@/components/certificates/certificate-preview"
@@ -148,7 +149,7 @@ export default function VerifyCertificatePage({ params }: { params: Promise<{ id
       </header>
 
       {/* Main Content */}
-      <main className="flex flex-1 flex-col items-center justify-center px-6 py-12">
+      <main id="main-content" className="flex flex-1 flex-col items-center justify-center px-6 py-12">
         <div className="w-full max-w-2xl">
           <Button variant="ghost" asChild className="mb-6">
             <Link href="/verify">
@@ -293,7 +294,7 @@ export default function VerifyCertificatePage({ params }: { params: Promise<{ id
                   </div>
 
                   {/* Actions */}
-                  <div className="mt-6 flex justify-center gap-3">
+                  <div className="mt-6 flex flex-wrap justify-center gap-3">
                     <Button variant="outline" asChild>
                       <Link href="/verify">Verify Another</Link>
                     </Button>
@@ -305,6 +306,31 @@ export default function VerifyCertificatePage({ params }: { params: Promise<{ id
                       )}
                       {downloading ? "Generating..." : "Download PDF"}
                     </Button>
+                    {/* Share menu — drives the achievement back into
+                        community feeds. The QR + WhatsApp routes are
+                        especially useful for graduates posting
+                        externally; the "Share to community" item
+                        (inside ShareMenu) writes a post into the
+                        student's home cohort with the cert URL. */}
+                    <ShareMenu
+                      artifact={{
+                        kind: "certificate",
+                        title: `I just earned my ${certificate.courseName} certificate 🎓`,
+                        description: `Awarded ${new Date(certificate.completionDate).toLocaleDateString()}${storedCert?.grade ? ` · Grade: ${storedCert.grade}` : ""}`,
+                        url:
+                          typeof window !== "undefined"
+                            ? `${window.location.origin}/verify/${certificate.id}`
+                            : `/verify/${certificate.id}`,
+                        source: certificate.instructorName,
+                      }}
+                      hideEmbed
+                      trigger={
+                        <Button variant="outline" className="gap-2">
+                          <Share2 className="h-4 w-4" />
+                          Share
+                        </Button>
+                      }
+                    />
                   </div>
                 </CardContent>
               </Card>

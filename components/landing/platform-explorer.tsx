@@ -142,7 +142,7 @@ const TABS: TabDef[] = [
       { icon: Sparkles,      title: "White-label",         body: "No 'powered by' line — on every plan, not just the top tier.",              href: "/features/whitelabel",   badges: ["Custom Domain", "White Label"],      accent: "violet" },
       { icon: Languages,     title: "Multilingual portal", body: "Translate your portal end-to-end. Real-time language switcher.",            href: "/features/multilingual", badges: ["Translate End-to-End"],              accent: "cyan" },
       { icon: MessageCircle, title: "Doubts inbox",        body: "Student questions + pre-sale enquiries in one inbox. Sub-2h on P0.",        href: "/features/doubts",       badges: ["Inline Student Doubts", "Inbox Sync"],accent: "teal" },
-      { icon: UserPlus,      title: "Faculty showcase",    body: "Profile pages for every co-teacher. Public team page, free.",               href: "/features/faculty",      badges: ["Co-Teacher Pages", "Bio Showcase"],  accent: "emerald" },
+      { icon: UserPlus, title: "Faculty showcase", body: "Profile pages for every co-teacher. Public team page, free.", href: "/features/faculty", badges: ["Co-Instructor Pages", "Bio Showcase"], accent: "emerald" },
       { icon: Users,         title: "Community spaces",    body: "Per-batch Common Room — posts, threads, reactions, pinning.",               href: "/features/community",    badges: ["Common Room", "Posts & Threads"],    accent: "lime" },
     ],
   },

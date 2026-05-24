@@ -65,7 +65,7 @@ const TOPICS: Record<string, Article> = {
         "Clicking the link lands them on /p/<tenant>/accept-invite/<token> inside your portal.",
         "They pick a password (zxcvbn-validated, min strength 'good').",
         "We provision the user record in your workspace + sign them in.",
-        "Teachers + admins land on /dashboard; students land on /p/<tenant>.",
+        "Instructors + admins land on /dashboard; students land on /p/<tenant>.",
       ]},
       { kind: "h2", text: "Multi-tenant teachers" },
       { kind: "p", body: "If the same email is already a faculty member at another workspace on the platform, we surface a soft notice — no duplicate account is created, but the recipient still has to opt in to your workspace. Each workspace keeps its own copy of the profile so changes here don't propagate sideways." },
@@ -345,7 +345,7 @@ Retry-After: 12      # only on 429 responses` },
       { kind: "p", body: "Tokens carry a signed tenant binding. A link issued for tenant A is rejected if it lands inside tenant B's portal — even if the URL slug is swapped manually." },
       { kind: "h2", text: "Sign-in routing" },
       { kind: "ul", items: [
-        "Teachers + admins land on /dashboard.",
+        "Instructors + admins land on /dashboard.",
         "Students land on /p/<tenant>/courses.",
       ]},
     ],
@@ -1159,7 +1159,7 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
     updated: "2026-05-20",
     sections: [
       { kind: "h2", text: "How to tag" },
-      { kind: "p", body: "In the batch Common Room composer, click the Tag button. A picker opens with two groups: Teachers (course instructor + co-instructors) and Members. Click a name and a styled @Name chip drops into your post at the cursor." },
+      { kind: "p", body: "In the batch Common Room composer, click the Tag button. A picker opens with two groups: Instructors (course instructor + co-instructors) and Members. Click a name and a styled @Name chip drops into your post at the cursor." },
       { kind: "h2", text: "What happens on Post" },
       { kind: "ul", items: [
         "Tagged users get a separate \"X tagged you in {Batch name}\" notification — louder than the regular new-post broadcast.",
@@ -1431,6 +1431,234 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
     ],
   },
 
+  // ────────────────────────────────────────────────────────────────
+  // Engagement + retention (Phase 3/4 features)
+  // ────────────────────────────────────────────────────────────────
+  "leaderboard-gamification": {
+    title: "Levels, badges, and streaks — how the leaderboard actually works",
+    lede: "Every student in your workspace has a level, a streak, and a wall of unlockable badges. None of it is fluff — the points come from the work they do, the level shows them how far they've come, and the badges name the milestones they've already hit.",
+    audience: "creator",
+    keywords: ["leaderboard", "gamification", "levels", "badges", "streaks", "engagement", "xp", "rank"],
+    updated: "2026-05-22",
+    sections: [
+      { kind: "h2", text: "What earns points" },
+      { kind: "p", body: "Two halves: graded work + engagement. Both feed the same total." },
+      {
+        kind: "ul", items: [
+          "Attended a live class — 10 pts.",
+          "Took a quiz — 5 pts. Passed it — another 15.",
+          "Submitted an assignment — 15 pts. Scored 80%+ on it — another 10.",
+          "Finished a lesson — 2 pts. Finished a whole course — 50.",
+          "Welcome bonus — 50 pts, once, on the day they sign up.",
+          "Profile complete (avatar + phone) — 20 pts.",
+          "Joined a community — 15 pts each, up to however many they join.",
+          "Asked a doubt — 5 pts each.",
+          "Posted on the Wall of Love — 10 pts.",
+          "Daily activity — 1 pt per day, capped at 30. Encourages showing up without rewarding farming.",
+        ]
+      },
+      { kind: "h2", text: "Levels" },
+      { kind: "p", body: "Seven levels, point-based, named so they map onto a learning arc rather than a gaming ladder. The bar on the student's home page shows their XP-to-next-level so the climb feels concrete." },
+      {
+        kind: "ul", items: [
+          "🌱 Newcomer — 0 to 99",
+          "📘 Learner — 100 to 249",
+          "🎓 Scholar — 250 to 499",
+          "🏅 Achiever — 500 to 999",
+          "⚡ Expert — 1,000 to 1,999",
+          "🌟 Master — 2,000 to 4,999",
+          "👑 Legend — 5,000+",
+        ]
+      },
+      { kind: "h2", text: "Badges" },
+      { kind: "p", body: "Sixteen achievement badges live on every student's leaderboard page — earned ones light up in amber, locked ones stay greyed with their unlock condition in the hover tooltip. They're all derived from existing stats, so no extra setup on your side." },
+      {
+        kind: "ul", items: [
+          "Welcome aboard — joined the workspace.",
+          "Profile star — avatar + phone filled in.",
+          "First class · Regular — attended 1 / 5 live sessions.",
+          "Quiz rookie · Quiz hunter — passed 1 / 5 quizzes.",
+          "Sharpshooter — 3 assignments scored 80%+.",
+          "Course finisher — completed a whole course.",
+          "Social butterfly · Curious mind · Storyteller — 3 communities / 5 doubts / 1 wall post.",
+          "Veteran · Dedicated — active 7 / 30 days.",
+          "Top 10 · Podium · Champion — currently ranked top 10 / top 3 / #1.",
+        ]
+      },
+      { kind: "h2", text: "Streaks" },
+      { kind: "p", body: "A streak is the number of consecutive recent days a student has done anything — attended a class, taken a quiz, submitted an assignment, asked a doubt, or opened a lesson. The streak chip (🔥 N-day streak) shows up on their leaderboard card once it hits 2." },
+      { kind: "p", body: "We walk backwards from today through their activity timestamps; the moment a day is missing we stop counting. Caps at 90 days." },
+      { kind: "h2", text: "Why everyone starts non-zero" },
+      { kind: "p", body: "Old behaviour: a brand-new workspace with no quizzes / classes had an empty leaderboard for weeks. The welcome bonus + engagement points fix that — on day one, every student appears with at least 50 pts, and joining a community or asking a doubt bumps them up before they ever take a quiz. Movement on the board reflects engagement, not just graded artefacts." },
+      { kind: "callout", tone: "info", body: "Looking at points and want to know which lever to pull? The student's leaderboard page has a 'How you earned' card that splits their total into five named buckets (Engagement / Live classes / Quizzes / Assignments / Lessons & courses) with mini progress bars." },
+    ],
+    related: [
+      { slug: "engagement-table", label: "Engagement table — spotting at-risk students" },
+      { slug: "cohort-window", label: "Cohort start dates + countdown banner" },
+    ],
+  },
+
+  "engagement-table": {
+    title: "Engagement — who's about to churn, who's your champion",
+    lede: "Every enrolled student × course gets a lifecycle stage chip — Champion, Active, Onboarding, Cooling, At risk, Churned — derived from the signals you already track. The table at /dashboard/students/engagement leads with the rows that need attention.",
+    audience: "creator",
+    keywords: ["engagement", "churn", "at risk", "retention", "instructor crm", "lifecycle", "students"],
+    updated: "2026-05-22",
+    sections: [
+      { kind: "h2", text: "The six stages" },
+      { kind: "p", body: "Most-concerning first — the table sorts that way too, so the rows that need a nudge sit at the top instead of being buried under a wall of 'Active'." },
+      {
+        kind: "ul", items: [
+          "Churned — no activity for 30+ days. Often a write-off; you decide whether to attempt reactivation or move on.",
+          "At risk — last activity 15 to 29 days ago. This is where one outreach saves the enrollment.",
+          "Cooling — last activity 7 to 14 days ago. A nudge usually pulls them back.",
+          "Onboarding — enrolled less than 7 days ago, regardless of activity. Don't flag them as cooling before they've had a chance.",
+          "Active — any signal in the last 7 days. Keep them in flow.",
+          "Champion — top 10% by points AND active. Your evangelist material.",
+        ]
+      },
+      { kind: "h2", text: "What counts as 'activity'" },
+      { kind: "p", body: "Last-active is computed across every signal we already track per student: attendance records, quiz attempts (started or completed), assignment submissions, doubts posted, and lesson-completion timestamps from their enrollment. Whichever is most recent wins." },
+      { kind: "h2", text: "Bulk nudges" },
+      { kind: "p", body: "Filter to a stage (e.g. 'At risk'), select the students you want to reach, and use the bulk-action bar to send either a 'Quick check-in' or a 'We miss you in class' come-back. Each fires through the existing notification pipeline — in-app, email, and WhatsApp, channel-respecting (a student who's opted out of WhatsApp won't get a WhatsApp ping)." },
+      { kind: "h2", text: "Per-course view" },
+      { kind: "p", body: "Open any course → Students tab to see the same lifecycle chips scoped to just that course's enrolled population. Useful when a cohort is misbehaving but the rest of the workspace is fine." },
+      { kind: "callout", tone: "info", body: "This is a read-model — no new persistence. We compute the stage on every render from the data already in your store. Means a student's stage flips the instant they take an action, and unenrolling them removes their row entirely with no cleanup step on your side." },
+    ],
+    related: [
+      { slug: "leaderboard-gamification", label: "Levels, badges, and streaks" },
+      { slug: "doubts-and-enquiries", label: "Doubts + pre-sale enquiries" },
+    ],
+  },
+
+  "cohort-window": {
+    title: "Cohort start + end dates",
+    lede: "Time-box a community to a cohort window — opens on a date, wraps on a date, with the right countdown / archive banner on the batch page. Leave both dates empty for an always-on group.",
+    audience: "creator",
+    keywords: ["cohort", "batch", "start date", "end date", "countdown", "community", "live cohort"],
+    updated: "2026-05-22",
+    sections: [
+      { kind: "h2", text: "Setting the window" },
+      { kind: "p", body: "Open /dashboard/batches/<id> → Community settings → Edit community. Two date pickers — 'Cohort starts' and 'Cohort ends'. Both optional." },
+      {
+        kind: "ul", items: [
+          "Both set — a time-boxed cohort. Opens on the start date, wraps on the end date.",
+          "Only starts set — a rolling cohort with a launch date. No end.",
+          "Only ends set — an always-on community that wraps on a fixed date.",
+          "Both empty — the default. The community is always-on and never archives.",
+        ]
+      },
+      { kind: "h2", text: "What the banner says" },
+      { kind: "p", body: "A single chip strip on the batch hero, with three states. No reconfiguration needed — the chip just reads the dates and computes." },
+      {
+        kind: "ul", items: [
+          "Pre-launch (amber) — 'Cohort begins in N days · <date>'.",
+          "Live (primary) — 'Cohort live · wraps in N days (<date>)'.",
+          "Past (muted) — 'Cohort wrapped on <date>'.",
+        ]
+      },
+      { kind: "h2", text: "Pairing with a course" },
+      { kind: "p", body: "Cohorts make the most sense when paired with a course that has drip-unlocked modules. Set the cohort start date, then on the course set per-module unlock days (Module 2 = 7 days, Module 3 = 14, etc.). The cohort opens, modules unlock on schedule, the cohort wraps — that's a complete 'program' without renaming anything." },
+      { kind: "callout", tone: "info", body: "The dates are display + scheduling hints — they don't hide the common room from members. If you want the room hidden before the cohort opens, switch visibility to 'closed' until launch day, then flip it back to 'open' / 'tag-gated'." },
+    ],
+    related: [
+      { slug: "drip-modules", label: "Drip-unlock modules over time" },
+      { slug: "community-auto-join", label: "Auto-join buyers into a course's community" },
+    ],
+  },
+
+  "drip-modules": {
+    title: "Drip — release modules over time",
+    lede: "Lock Module 2 until Day 7, Module 3 until Day 14. Students see 'Unlocks on <date>' in the player instead of the lesson list. Set the offset days right in the curriculum editor.",
+    audience: "creator",
+    keywords: ["drip", "drip content", "module unlock", "scheduled release", "cohort", "pacing"],
+    updated: "2026-05-22",
+    sections: [
+      { kind: "h2", text: "Setting it up" },
+      { kind: "p", body: "Open the course → Curriculum tab → click a module to expand. Below the description, there's a 'Drip — unlock days after enrollment' field. Type a number from 0 to 365." },
+      {
+        kind: "ul", items: [
+          "0 or blank — module is available immediately. The current default.",
+          "7 — locked for the first 7 days after the student enrolls.",
+          "14 — locked for the first 14 days. And so on.",
+        ]
+      },
+      { kind: "p", body: "A live hint right beside the field reads 'Module locked for first N days' so you can see the effect without saving." },
+      { kind: "h2", text: "What students see" },
+      { kind: "p", body: "Locked modules in the player render a single amber card in place of the lesson list: '🔒 Unlocks on Mar 5, 2026. 4 lessons will be available — finish earlier modules in the meantime.' The module header shows a small lock chip." },
+      { kind: "p", body: "Once the offset has elapsed, the lesson list appears and they can play through normally. No reload needed — the gate is computed every render." },
+      { kind: "h2", text: "How the date is computed" },
+      { kind: "p", body: "enrollment.enrolledAt + unlockOffsetDays. Each student's clock starts when they personally enroll, not when the course was published. Different students therefore see different unlock dates — exactly what you want for rolling enrollment." },
+      { kind: "callout", tone: "info", body: "If you want every student in a cohort to see the same unlock date, pair drip with cohort start dates. Enroll everyone on the cohort start day; their offsets align automatically." },
+    ],
+    related: [
+      { slug: "cohort-window", label: "Cohort start + end dates" },
+      { slug: "course-curriculum", label: "Build a course curriculum" },
+    ],
+  },
+
+  "whiteboard-edit-requests": {
+    title: "Whiteboard edit access — students request, you approve",
+    lede: "Students see your boards read-only by default. A 'Request edit access' button on the board page pings you in the notification bell; you approve from a dropdown on the same board. Approved students can edit alongside you; the rest just watch.",
+    audience: "creator",
+    keywords: ["whiteboard", "edit access", "permissions", "collaboration", "students", "instructor"],
+    updated: "2026-05-22",
+    sections: [
+      { kind: "h2", text: "The student's side" },
+      { kind: "p", body: "When a student opens one of your public whiteboards from /p/<tenant>/my/whiteboards/<id>, they see the canvas in read-only mode with a 'Request edit access' button in the top-right. Clicking it does two things:" },
+      {
+        kind: "ul", items: [
+          "Drops a request row into the workspace's pending-requests list.",
+          "Fires an in-app notification to you — title is 'NameStudent wants to edit \"BoardTitle\"', body invites you to approve or deny.",
+        ]
+      },
+      { kind: "p", body: "From then on the request button on their side flips to 'Edit request pending' so they can't pile on duplicate notifications." },
+      { kind: "h2", text: "Your side" },
+      { kind: "p", body: "When a request is open, the board editor at /dashboard/whiteboards/<id> shows an 'Edit requests' button in the top bar with the pending count. Click it for a dropdown listing each pending student + Approve / Deny buttons." },
+      {
+        kind: "ul", items: [
+          "Approve → the student is added to the board's invitedUserIds. Their next render drops readOnly and they can draw alongside you. We also fire them an in-app notification ('You can now edit \"BoardTitle\"').",
+          "Deny → the request is marked declined. We notify the student ('Edit access denied — the instructor kept the board read-only.'). The board stays untouched.",
+        ]
+      },
+      { kind: "h2", text: "Why not just make boards public-editable" },
+      { kind: "p", body: "Two reasons. First, public-editable whiteboards become free-for-alls once a class gets large — someone always nukes the canvas by accident. Second, the request flow doubles as engagement signal: students who ask to edit are leaning in, and you'd usually rather know which students those are than blanket-grant everyone." },
+      { kind: "callout", tone: "info", body: "Private boards (visibility = private, no invitees) stay private — students can't see them at all, let alone request access. Make a board 'public' from the editor's visibility chip to expose it to students in read mode." },
+    ],
+    related: [
+      { slug: "private-whiteboards", label: "Private whiteboards + invitees" },
+    ],
+  },
+
+  "community-auto-join": {
+    title: "Auto-join buyers into a course's community",
+    lede: "Set Course.defaultBatchId once, and every student who enrolls or buys the course lands inside that batch automatically. No 'now join the community' second sale, no manual roster keeping.",
+    audience: "creator",
+    keywords: ["community", "auto-join", "batch", "default batch", "course", "enrollment", "retention"],
+    updated: "2026-05-22",
+    sections: [
+      { kind: "h2", text: "Set the default batch" },
+      { kind: "p", body: "Open a course → settings → Default community → pick one of your batches. (Or set it up the other way: open the batch and link it back to the course.) That single field wires up the auto-join — no separate flow." },
+      { kind: "h2", text: "What happens on each purchase" },
+      {
+        kind: "ul", items: [
+          "Buyer completes checkout — storefront grants the course entitlement.",
+          "An entitlement.course-granted event fires across the in-app store layer.",
+          "The community store listens, looks up the course's defaultBatchId, and adds the buyer's userId to memberIds if they're not already in.",
+          "The post-purchase 'What's next' page surfaces a 'Join the discussion' card pointing straight into the batch.",
+          "Belt-and-braces: the next-step page also runs the same idempotent join, so a guest who skipped post-purchase still ends up in the community when they next visit.",
+        ]
+      },
+      { kind: "h2", text: "Why this matters for retention" },
+      { kind: "p", body: "Course completion rates are dragged down by 'I'll join the community later' — which almost always means 'never'. Auto-join removes the second sale: every buyer is in the room with the other students from the moment they pay, which means the first lesson question, the first 'hi I'm new' post, the first instructor reply all happen in one place instead of being spread across email threads." },
+      { kind: "callout", tone: "info", body: "The auto-join is idempotent. Existing members aren't duplicated, and a student who later leaves the batch isn't forcibly re-added — they have to re-enrol or re-purchase to trigger it again." },
+    ],
+    related: [
+      { slug: "cohort-window", label: "Cohort start + end dates" },
+      { slug: "engagement-table", label: "Engagement — who's about to churn" },
+    ],
+  },
+
   "course-ai-draft": {
     title: "Draft a course from just the title (AI)",
     lede: "Type a course title, click 'Draft course from title', and the new-course form fills the description, subtitle, and curriculum for you. Edit anything before you hit Create.",
@@ -1461,6 +1689,241 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
       { slug: "course-create", label: "Create your first course" },
       { slug: "course-curriculum", label: "Build a course curriculum" },
     ],
+  },
+
+  // ---------- Productivity / shortcuts ----------
+  "fuzzy-search-and-slash": {
+    title: "Fuzzy search and the “/” shortcut",
+    lede: "Every list in the dashboard — courses, students, recordings, quizzes, assignments, products, instructors, team — has the same search field. Press “/” anywhere on the page to jump into it, and the matching is typo-tolerant.",
+    audience: "creator",
+    updated: "2026-05-22",
+    keywords: ["search", "fuzzy", "keyboard shortcut", "slash", "/"],
+    sections: [
+      { kind: "h2", text: "Press “/” to focus" },
+      { kind: "p", body: "From anywhere on a list page, tap the “/” key. The search input takes focus and pre-selects whatever is in it, so you can start typing immediately to replace the old query. We skip the shortcut when you’re already typing in another input — it never steals keystrokes from a form." },
+      { kind: "p", body: "The shortcut shows up in the ? overlay alongside the page-local actions, so you don’t have to memorise it: just press ? and the shortcut card lists what’s wired on the current screen." },
+      { kind: "h2", text: "Typos are fine" },
+      { kind: "p", body: "Search is fuzzy. You can mistype a word and still find what you’re looking for. “javscrpt” still surfaces “JavaScript fundamentals”; “onbording” still surfaces “Onboarding cohort.” The matcher ranks exact substring hits highest, then falls back to in-order character matches with a gap penalty so closer matches sort first." },
+      {
+        kind: "ul", items: [
+          "Courses — search by title, category, or description.",
+          "Students — search by name or email.",
+          "Recordings — search by class title.",
+          "Quizzes — search by title.",
+          "Assignments — search by title.",
+          "Storefront — search by product title or slug.",
+          "Instructors — search by name, email, or phone.",
+          "Team — search by name or email.",
+        ]
+      },
+      { kind: "h2", text: "Clearing the query" },
+      { kind: "p", body: "When the field has a query, the “/” hint on the right swaps for an X button. Click it (or hit Escape after focusing) to clear and re-show the full list." },
+      { kind: "callout", tone: "info", body: "On mobile the “/” hint hides itself — touch keyboards don’t map to it cleanly. The fuzzy match still works." },
+    ],
+    related: [
+      { slug: "engagement-table", label: "Engagement — at-risk students at a glance" },
+      { slug: "sidebar-groups", label: "Collapsible sidebar" },
+    ],
+  },
+
+  // ---------- Engagement ----------
+  "engagement-bottom-actions": {
+    title: "Send a check-in or come-back nudge",
+    lede: "The engagement table now ships with two always-visible buttons at the bottom of the page — Send check-in and Send come-back. They work whether or not you’ve selected rows.",
+    audience: "creator",
+    updated: "2026-05-22",
+    keywords: ["engagement", "nudge", "check-in", "come-back", "students", "retention"],
+    sections: [
+      { kind: "h2", text: "Two buttons, two intents" },
+      { kind: "p", body: "Send check-in is the warm one — for students who are progressing but might benefit from encouragement. Send come-back is the rescue version — for students who’ve gone quiet. Both open the same preview dialog with editable subject + body and a multi-channel send (in-app + email + WhatsApp where opted in)." },
+      { kind: "h2", text: "Recipients" },
+      {
+        kind: "ul", items: [
+          "If you’ve ticked any rows, the nudge fires to that selection — count shown above the button.",
+          "If nothing is ticked, the nudge fires to every student currently visible after your filters. The button label reflects this.",
+          "Tighten the audience with the search field and filter chips first, then hit Send.",
+        ]
+      },
+      { kind: "h2", text: "Before you send" },
+      { kind: "p", body: "The preview dialog shows the subject, the body, and a live email preview using your portal brand. Edit either freely — your changes ride along on every recipient in the batch. The system stamps {{name}} per recipient at send time, so you keep one template instead of N." },
+      { kind: "callout", tone: "warn", body: "WhatsApp delivery requires the student to have opted in. We won’t silently fall back — students without opt-in just receive the in-app + email versions." },
+    ],
+    related: [
+      { slug: "engagement-table", label: "Engagement — at-risk students at a glance" },
+      { slug: "notifications", label: "Notifications — in-app, email, WhatsApp" },
+    ],
+  },
+
+  // ---------- Tabs / persistence ----------
+  "tab-persistence": {
+    title: "Tabs stay where you left them",
+    lede: "Refresh the brand editor or a student detail page and the tab you were on is still active — no more landing back on the first tab every time the page reloads.",
+    audience: "creator",
+    updated: "2026-05-22",
+    keywords: ["tabs", "refresh", "url", "persistence", "brand", "student"],
+    sections: [
+      { kind: "h2", text: "How it works" },
+      { kind: "p", body: "Switching tabs writes the active tab into the URL as a ?tab= query parameter. Reload, share the link, bookmark it, navigate back from a sub-page — the tab survives all of it. The first tab on each page omits the param (so the URL stays clean for the common case)." },
+      { kind: "h2", text: "Where it’s live" },
+      {
+        kind: "ul", items: [
+          "Portal → Brand (Templates / Identity / Style / Layout / Advanced).",
+          "Students → student detail (Overview / Activity / Doubts / Invoices / Messages).",
+          "Other tabbed surfaces are migrating over the next few releases — same pattern.",
+        ]
+      },
+      { kind: "h2", text: "Sharing a tab" },
+      { kind: "p", body: "Copy the URL while on the Style tab and send it to a co-instructor — they land on Style, not on the default. Useful for design review sessions where you don’t want to spend the first 30 seconds saying “click the third tab.”" },
+      { kind: "callout", tone: "info", body: "If you pass an unknown ?tab= value (typo, stale link, removed tab), we silently fall back to the first tab — no error toast." },
+    ],
+    related: [
+      { slug: "portal-template", label: "Pick a portal template" },
+      { slug: "engagement-table", label: "Engagement — at-risk students at a glance" },
+    ],
+  },
+
+  // ---------- Customer-facing URLs ----------
+  "customer-urls-add-to-nav": {
+    title: "Add a customer-facing URL to your nav in one click",
+    lede: "The Customer-facing URLs card on the brand page now has an Add to nav button next to each URL. Click it and the link drops straight into your header — no context-switching to the nav editor.",
+    audience: "creator",
+    updated: "2026-05-22",
+    keywords: ["nav", "header", "customer urls", "portal", "branding"],
+    sections: [
+      { kind: "h2", text: "Where it lives" },
+      { kind: "p", body: "Portal → Brand → Identity tab → Customer-facing URLs card. You’ll see four production URLs (Sign in, Forgot password, My library, Shop). Each row has a small Add to nav button next to the label." },
+      { kind: "h2", text: "What clicking does" },
+      {
+        kind: "ul", items: [
+          "We push the link into config.nav.items, so it appears in the header nav alongside your other curated entries.",
+          "The href stored is the portal-relative path (e.g. /login, /store) so it auto-resolves to the right destination whether the portal is on a path, subdomain, or your own custom domain.",
+          "If the link is already in the nav, the button switches to “In nav” and disables — no duplicates.",
+        ]
+      },
+      { kind: "h2", text: "Reordering or removing afterwards" },
+      { kind: "p", body: "Once it’s in, the link is just a regular nav entry. Open Portal → Brand → Layout → Header nav to drag it into position, rename it, or remove it. The Add to nav button is a shortcut for the first 80% of cases — the nav editor is still the source of truth." },
+      { kind: "callout", tone: "info", body: "We hide the dev-host URL (localhost/path form). Only the production subdomain URL is shown — that’s the link you’d actually paste into a marketing page or email." },
+    ],
+    related: [
+      { slug: "customer-urls", label: "Customer-facing URLs (paths today, subdomains soon)" },
+      { slug: "portal-domain", label: "Custom domain + auto-SSL" },
+    ],
+  },
+
+  // ---------- Payouts / fees ----------
+  "payouts-gateway-fees": {
+    title: "What Razorpay’s gateway fee actually costs",
+    lede: "Gateway fees depend on the payment method (UPI, card, netbanking, international). The exact number is set by Razorpay, not us — we link straight to their pricing page so you’re never reading a stale number.",
+    audience: "creator",
+    updated: "2026-05-22",
+    keywords: ["razorpay", "payouts", "gateway fee", "settlement", "pricing"],
+    sections: [
+      { kind: "h2", text: "Why we don’t quote a fixed percentage" },
+      { kind: "p", body: "Razorpay’s rate card is a matrix: UPI is the cheapest, domestic cards are mid-band, international cards are the highest, and the fees flex with your processing volume. Anything we print on the dashboard is going to be out of date within a quarter. We’d rather under-promise than mislead." },
+      { kind: "h2", text: "Where to see the live rate" },
+      {
+        kind: "ul", items: [
+          "Open razorpay.com/pricing for the public rate card.",
+          "Inside your Razorpay dashboard you’ll see the negotiated rate for your account (sometimes lower than public, if you’ve hit volume tiers).",
+          "Per-transaction fee is shown in your Razorpay dashboard alongside each settlement — that’s the source of truth.",
+        ]
+      },
+      { kind: "h2", text: "Where the money actually flows" },
+      { kind: "p", body: "Money never sits in our accounts. Razorpay deducts their fee at checkout and settles the net amount directly to the bank you registered, on Razorpay’s own schedule (typically T+2 working days)." },
+      { kind: "h2", text: "Our cut" },
+      { kind: "p", body: "Zero. You’re paying us for the platform via your subscription plan, not via per-transaction skim. Verify it any time against your Razorpay dashboard — what they settle is what hits your bank, untouched by us." },
+      { kind: "callout", tone: "info", body: "If you bring your own Razorpay account (BYO mode), the fee structure is whatever you’ve negotiated directly with Razorpay. The same dashboard URL applies — you’re looking at your own rate card." },
+    ],
+    related: [
+      { slug: "products-checkout", label: "Checkout flow + India payment stack" },
+    ],
+  },
+
+  // ---------- Students onboarding ----------
+  students: {
+    title: "How student onboarding works",
+    lede: "Three ways students land in your roster — invite link, CSV import, or manual add. Each path's mechanics, what the student sees, and when to use which.",
+    audience: "creator",
+    sections: [
+      { kind: "h2", text: "The three paths" },
+      {
+        kind: "ul", items: [
+          "Invite link — paste once, anyone with the link self-onboards. Best for marketing, social, WhatsApp groups.",
+          "CSV import — bulk-add a cohort from a spreadsheet. Best for batches you already have a list of.",
+          "Add one manually — quick name + email form. Best for the occasional individual.",
+        ]
+      },
+      { kind: "h2", text: "Invite link" },
+      { kind: "p", body: "Open /dashboard/students → Share an invite link (or the Share link button on the empty-state). We surface your workspace URL plus pre-written WhatsApp + email copy you can fire off in one tap." },
+      { kind: "p", body: "Anyone who opens the link lands on your course catalog. They sign up (one screen) and the account is provisioned in your workspace immediately. No seat allocation step — students are free up to your plan's student cap." },
+      { kind: "callout", tone: "info", body: "Same link, infinite invitees. Rotate it only if it leaked somewhere you didn't want — there's no usage cap to worry about." },
+      { kind: "h2", text: "CSV import" },
+      { kind: "p", body: "Open /dashboard/students → Add → Import CSV. Drop a file with name + email columns (other columns are optional and map automatically). We dedupe by email so re-importing the same file twice is safe." },
+      {
+        kind: "ul", items: [
+          "Names are imported as-is — exact match including capitalisation.",
+          "Email is the unique key. Existing students aren't created twice.",
+          "Optional columns: phone, dateOfBirth, school, city. We read them if present.",
+        ]
+      },
+      { kind: "h2", text: "Manual add" },
+      { kind: "p", body: "/dashboard/students/new → fill name + email. The student gets a 'You've been added to <workspace>' email with a one-click sign-in. They don't pick their own password — they land signed-in via the email link and can set one from /p/<tenant>/settings if they want." },
+      { kind: "h2", text: "What the student sees once they're in" },
+      {
+        kind: "ul", items: [
+          "The course catalog at /p/<tenant>/courses — every published course in your workspace.",
+          "Their library at /p/<tenant>/library — anything they've enrolled in.",
+          "The class wall for any batch they've joined.",
+        ]
+      },
+    ],
+    related: [
+      { slug: "course-bulk-import", label: "Bulk-import students via CSV" },
+      { slug: "learner-sign-in", label: "How learners sign in" },
+    ],
+    keywords: ["student", "onboarding", "invite", "csv import", "roster"],
+  },
+
+  // ---------- Experiments ----------
+  experiments: {
+    title: "Experiments — A/B test your portal",
+    lede: "Run experiments on your hero CTA copy, course price display, and anywhere else you want to know what converts. Sticky per-visitor assignments, server-side fairness, conversion reporting.",
+    audience: "creator",
+    sections: [
+      { kind: "h2", text: "Why bother" },
+      { kind: "p", body: "Most pricing + landing-page decisions are gut calls. They don't have to be. The Experiments module lets you split traffic across two or three variants of a piece of UI, measures who clicks / enrols / converts, and tells you which variant won — without you writing any code." },
+      { kind: "h2", text: "Who it's for" },
+      {
+        kind: "ul", items: [
+          "Instructors who want to test 'urgent' vs 'aspirational' hero copy.",
+          "Course creators wanting to A/B price-display formats (strikethrough first vs 'Save $X' chip vs current).",
+          "Anyone who's ever wondered 'would more students enrol if I changed the button?' and not had a way to find out.",
+        ]
+      },
+      { kind: "h2", text: "Pre-built vs custom" },
+      { kind: "p", body: "The Experiments admin lists pre-built cards for the surfaces we've already wired up (hero CTA copy, course price display). One click spins those up — variants + goal events are pre-filled, you just pick traffic split + activate. Behind the scenes it's the same engine you'd use for a custom experiment, just with the rendering already done." },
+      { kind: "p", body: "Custom experiments are for surfaces your team has wired with useExperiment yourself. They're identical in mechanics — pre-built ones just skip the integration step." },
+      { kind: "h2", text: "How assignment works" },
+      {
+        kind: "ul", items: [
+          "Each visitor gets a sticky id stored in localStorage on first hit.",
+          "We hash (visitorId + experimentKey) to pick a variant. Same visitor + same experiment = same variant forever, even across sessions.",
+          "Weights determine traffic split — equal weights mean 50/50, 1/9 means 10% to one variant and 90% to the other.",
+          "An exposure event is logged the first time a visitor sees each variant. Conversion events are logged when they fire the goal action (e.g. 'enroll' or 'hero-cta-click').",
+        ]
+      },
+      { kind: "h2", text: "Reading the report" },
+      { kind: "p", body: "Open the experiment from /dashboard/experiments to see exposures + conversions per variant, plus the conversion rate. We don't compute statistical significance for you — the rule of thumb is wait until each variant has at least 200–300 exposures before reading anything into the difference." },
+      { kind: "callout", tone: "info", body: "Status matters: draft = no traffic, running = traffic split per weights, paused = stop new assignments but keep existing visitors on their sticky variant, completed = report-only. Draft → running when you're ready to ship the test." },
+      { kind: "h2", text: "Example: hero CTA copy" },
+      { kind: "p", body: "Three variants are pre-wired: editor copy (whatever you typed in the page builder), 'Start free today' (urgent), 'Begin your journey' (aspirational). Goal event: hero-cta-click. Spin it up, send your normal traffic at it for a week, and you'll have an empirical answer to 'does urgency outperform aspiration on my audience?'." },
+      { kind: "h2", text: "Example: course price display" },
+      { kind: "p", body: "Three variants for the price chip: current (price + strikethrough + % off), anchor-first (strikethrough first, price below), savings ('Save $X' chip + price). Goal event: enroll. Pick which framing actually drives the cheque-out, not which one looks nicest in Figma." },
+    ],
+    related: [
+      { slug: "analytics-dashboard", label: "What the analytics dashboard tracks" },
+    ],
+    keywords: ["experiments", "ab test", "a/b testing", "conversion", "split test"],
   },
 }
 

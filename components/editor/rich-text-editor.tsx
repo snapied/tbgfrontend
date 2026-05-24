@@ -283,7 +283,7 @@ function Toolbar({ editor, disabled, folder }: { editor: Editor; disabled: boole
     editor.chain().focus().extendMarkRange("link").setLink({ href: trimmed }).run()
   }, [editor])
 
-  // Image picker — opens the OS file picker directly. Teachers can also
+  // Image picker — opens the OS file picker directly. Instructors can also
   // paste / drag-drop images straight into the editor (handled by the
   // ImagePasteDrop extension above), and a remote URL still works via
   // the shift-click branch.

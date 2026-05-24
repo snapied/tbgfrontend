@@ -9,7 +9,14 @@ import {
   Minus,
   Sparkles,
   Zap,
+  X as XIcon,
 } from "lucide-react"
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Header } from "@/components/landing/header"
 import { Footer } from "@/components/landing/footer"
 import { Button } from "@/components/ui/button"
@@ -21,6 +28,22 @@ import { ContactSupportDialog } from "@/components/support/contact-support-dialo
 // truth lives in the PLANS / MATRIX / ADDONS / FAQS arrays below.
 // Anything you change here flows into the cards, the comparison
 // matrix, and the FAQ in one go. Don't fork the data into JSX.
+//
+// USD approximation: visitors landing from outside India see ₹ amounts
+// with no reference point. We display an "≈ $X USD" tag beside every
+// INR price using a conservative static rate (kept slightly more
+// pessimistic than market so the actual charge feels like a discount).
+// The exact charged amount remains in INR at the gateway; the USD
+// figure is a courtesy estimate only.
+const INR_TO_USD = 85 // rounded conservative rate
+function approxUsd(inr: number): string {
+  if (!Number.isFinite(inr) || inr <= 0) return ""
+  const usd = inr / INR_TO_USD
+  // For very small amounts (< $10) keep one decimal so the estimate
+  // doesn't snap to $0 on add-ons.
+  if (usd < 10) return `$${usd.toFixed(1)}`
+  return `$${Math.round(usd)}`
+}
 //
 // Tier shape:
 //   starter  → free, acquisition. Strict caps. Watermarked.
@@ -61,6 +84,7 @@ const PLANS: Plan[] = [
       "Storefront + UPI/card/netbanking checkout",
       "Up to 5 products (courses, downloads, memberships)",
       "Up to 50 students · 1 community batch · 1 class/week",
+      "Solo workspace — 1 teacher seat (add co-teachers on Pro+)",
       "3 courses with the no-code builder",
       "Public site editor — pages, header, footer, sections you can edit",
       "thebigclass subdomain (English only — multilingual portal is Pro+)",
@@ -84,11 +108,12 @@ const PLANS: Plan[] = [
     monthly: 1499,
     yearly: 14990,
     highlight: true,
-    cta: "Start 14-day trial — card required",
+    cta: "Subscribe — 30-day money-back",
     ctaHref: "/signup?plan=pro",
-    feeNote: "0% from us. Razorpay's ~2% gateway fee — not marked up. Cancel before day 14 and you're never charged.",
+    feeNote: "0% from us. Razorpay's ~2% gateway fee — not marked up. Not happy in the first 30 days? Full refund, no questions asked.",
     bullets: [
       "Up to 50 storefront products · 1,000 students · 5 batches",
+      "2 teacher / TA seats (you + one co-teacher) — Starter is solo",
       "25 courses with the no-code builder",
       "Bring your own domain + full white-label",
       "Public site editor — header, footer, page sections, hero copy",
@@ -111,13 +136,13 @@ const PLANS: Plan[] = [
     tagline: "Full creator business with a team alongside you.",
     monthly: 3499,
     yearly: 33990,
-    cta: "Start 14-day trial — card required",
+    cta: "Subscribe — 30-day money-back",
     ctaHref: "/signup?plan=studio",
-    feeNote: "0% from us. Razorpay's ~2% gateway fee — not marked up. Cancel before day 14 and you're never charged.",
+    feeNote: "0% from us. Razorpay's ~2% gateway fee — not marked up. Not happy in the first 30 days? Full refund, no questions asked.",
     bullets: [
       "Everything in Pro",
       "Unlimited products, courses, batches, students",
-      "3 teacher / TA seats",
+      "5 teacher / TA seats (Pro is 2 — co-teach with your team)",
       "1 TB recording storage · 1-year retention",
       "Advanced analytics (cohorts, funnels, exports)",
       "Live captions + auto-transcription",
@@ -185,7 +210,7 @@ export default function PricingPage() {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <main className="flex-1">
+      <main id="main-content" className="flex-1">
         {/* Hero */}
         <section className="relative overflow-hidden">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-secondary via-background to-background" />
@@ -337,18 +362,31 @@ function PlanCard({ plan, billing }: { plan: Plan; billing: Period }) {
         <div className="mt-5">
           {isFree && <p className="text-4xl font-bold">Free</p>}
           {isCustom && (
-            <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold">From ₹9,999</span>
-              <span className="text-sm text-muted-foreground">/ month</span>
-            </div>
+            <>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-bold">From ₹9,999</span>
+                <span className="text-sm text-muted-foreground">/ month</span>
+              </div>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                ≈ {approxUsd(9999)} USD · billed in INR
+              </p>
+            </>
           )}
           {!isFree && !isCustom && (
-            <div className="flex items-baseline gap-1">
-              <span className="text-4xl font-bold tabular-nums">
-                ₹{monthlyDisplay.toLocaleString("en-IN")}
-              </span>
-              <span className="text-sm text-muted-foreground">/ month</span>
-            </div>
+            <>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-bold tabular-nums">
+                  ₹{monthlyDisplay.toLocaleString("en-IN")}
+                </span>
+                <span className="text-sm text-muted-foreground">/ month</span>
+              </div>
+              {/* Approx USD reference for international visitors. Charged
+                  amount is the INR figure above; this is a courtesy
+                  estimate, not a conversion guarantee. */}
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                ≈ {approxUsd(monthlyDisplay)} USD / month
+              </p>
+            </>
           )}
 
           {!isFree && !isCustom && billing !== "monthly" && (
@@ -588,7 +626,7 @@ const MATRIX: { group: string; rows: MatrixRow[] }[] = [
     group: "Capacity",
     rows: [
       { feature: "Active students", starter: "50", pro: "1,000", studio: "Unlimited", institute: "Unlimited" },
-      { feature: "Teacher / TA seats", starter: "1", pro: "1", studio: "3", institute: "Unlimited" },
+      { feature: "Instructor / TA seats", starter: "1", pro: "2", studio: "5", institute: "Unlimited" },
     ],
   },
   {
@@ -648,6 +686,13 @@ const MATRIX: { group: string; rows: MatrixRow[] }[] = [
   },
 ]
 
+// Compare matrix has two rendering modes:
+//   • Desktop (>=lg) — original 4-column side-by-side table for easy
+//     visual scanning across plans.
+//   • Mobile (<lg) — one accordion per plan, each containing the same
+//     features grouped + the plan's value. Avoids the prior
+//     `min-w-[860px]` horizontal-scroll trap that made the table
+//     basically unusable on a phone.
 function CompareMatrix() {
   return (
     <section className="py-20">
@@ -659,7 +704,8 @@ function CompareMatrix() {
           </p>
         </div>
 
-        <div className="mx-auto mt-10 overflow-x-auto rounded-xl border border-border bg-card">
+        {/* Desktop table */}
+        <div className="mx-auto mt-10 hidden overflow-x-auto rounded-xl border border-border bg-card lg:block">
           <table className="w-full min-w-[860px] text-sm">
             <thead>
               <tr className="bg-muted/40 text-left">
@@ -691,6 +737,66 @@ function CompareMatrix() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Mobile: per-plan accordion. Pro is open by default since it's
+            the most-picked tier; the others stay collapsed so the page
+            doesn't balloon into one long scroll. */}
+        <div className="mx-auto mt-8 max-w-2xl lg:hidden">
+          <Accordion type="single" collapsible defaultValue="pro">
+            {(["starter", "pro", "studio", "institute"] as const).map((planKey) => {
+              const plan = PLANS.find((p) => p.id === planKey)
+              if (!plan) return null
+              return (
+                <AccordionItem key={planKey} value={planKey} className="rounded-xl border border-border bg-card mb-2 px-1">
+                  <AccordionTrigger className="px-3">
+                    <span className="flex items-baseline gap-2">
+                      <span className={cn("text-base font-semibold", planKey === "pro" && "text-primary")}>
+                        {plan.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {plan.monthly === 0
+                          ? "Free"
+                          : plan.monthly === -1
+                          ? "From ₹9,999/mo"
+                          : `₹${plan.monthly.toLocaleString("en-IN")}/mo`}
+                      </span>
+                    </span>
+                  </AccordionTrigger>
+                  <AccordionContent className="px-3 pb-3">
+                    {MATRIX.map((g) => (
+                      <div key={g.group} className="mt-3 first:mt-0">
+                        <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                          {g.group}
+                        </p>
+                        <ul className="mt-1.5 divide-y divide-border/50">
+                          {g.rows.map((row) => {
+                            const val = row[planKey] as string | boolean
+                            return (
+                              <li key={row.feature} className="flex items-center justify-between gap-3 py-2">
+                                <span className="text-[13px]">{row.feature}</span>
+                                <span className="shrink-0 text-[12px]">
+                                  {typeof val === "boolean" ? (
+                                    val ? (
+                                      <CheckCircle2 className="h-4 w-4 text-success" aria-label="Included" />
+                                    ) : (
+                                      <XIcon className="h-4 w-4 text-muted-foreground/50" aria-label="Not included" />
+                                    )
+                                  ) : (
+                                    <span className="font-medium text-foreground">{val}</span>
+                                  )}
+                                </span>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      </div>
+                    ))}
+                  </AccordionContent>
+                </AccordionItem>
+              )
+            })}
+          </Accordion>
         </div>
       </div>
     </section>
@@ -754,7 +860,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "Is there a free trial of Pro / Studio?",
-    a: "Yes — every paid plan starts with a 14-day trial. You add a card up-front so we can verify and queue the first charge, but nothing is billed during the trial. Cancel any time before day 14 and you're never charged. After day 14, the card is billed for the period you picked (monthly/quarterly/half-yearly/yearly). The 30-day refund window in our policy starts on that first paid charge.",
+    a: "There's no separate trial — you get something better. The Starter plan is free forever, no card, no countdown. Use it as long as you like; upgrade to Pro or Studio when you outgrow the caps (more students, white-label, AI, etc.). Paid plans charge immediately at signup and come with a 30-day full money-back window — not happy in the first month, you get every rupee back. We'd rather you try the paid surface for real than tiptoe through a trial.",
   },
   {
     q: "Does the public site translate? Which languages?",

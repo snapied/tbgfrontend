@@ -96,7 +96,7 @@ export default function BatchHistoryPage() {
       {/* Batches Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Batches</CardTitle>
+          <CardTitle>All Communities</CardTitle>
           <CardDescription>{filteredBatches.length} batches found</CardDescription>
         </CardHeader>
         <CardContent>

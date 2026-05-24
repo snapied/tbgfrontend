@@ -111,6 +111,14 @@ export interface PlanLimits {
    *  honest with the marketing copy. Pro/Studio see the Developer +
    *  Webhooks pages as a preview behind the upgrade card. */
   apiAccess: boolean
+  /**
+   * Course version history — every Publish snapshots the course
+   * and the teacher can preview / restore old versions. Free tier
+   * gets the current state only; paid tiers see the full history.
+   * Snapshots are always written (so an upgrade reveals history
+   * captured during the trial), but the UI is gated.
+   */
+  courseVersioning: boolean
   // NOTE: There is no `transactionFeePercent`. The Founder Bill of
   // Rights (Article 1) and the homepage hero both commit to ZERO
   // commission on creator revenue, on every plan. The flat
@@ -186,6 +194,7 @@ export const PLANS: Record<PlanId, Plan> = {
       whatsappNotifications: false,
       multilingual: false,
       apiAccess: false,
+      courseVersioning: false,
     },
     price: { monthlyPaise: 0, yearlyPaise: 0 },
   },
@@ -196,7 +205,7 @@ export const PLANS: Record<PlanId, Plan> = {
     highlight: true,
     limits: {
       students: 1000,
-      teachers: 1,
+      teachers: 2,
       storageGB: 100,
       retentionDays: 90,
       liveClassesPerWeek: Infinity,
@@ -215,6 +224,7 @@ export const PLANS: Record<PlanId, Plan> = {
       whatsappNotifications: false,
       multilingual: true,
       apiAccess: false,
+      courseVersioning: true,
     },
     price: {
       monthlyPaise: 149_900,
@@ -231,7 +241,7 @@ export const PLANS: Record<PlanId, Plan> = {
     tagline: "Full creator business with a team alongside you.",
     limits: {
       students: Infinity,
-      teachers: 3,
+      teachers: 5,
       storageGB: 1024,
       retentionDays: 365,
       liveClassesPerWeek: Infinity,
@@ -250,6 +260,7 @@ export const PLANS: Record<PlanId, Plan> = {
       whatsappNotifications: true,
       multilingual: true,
       apiAccess: false,
+      courseVersioning: true,
     },
     price: {
       monthlyPaise: 349_900,
@@ -286,6 +297,7 @@ export const PLANS: Record<PlanId, Plan> = {
       whatsappNotifications: true,
       multilingual: true,
       apiAccess: true,
+      courseVersioning: true,
     },
     // Institute is sales-led — no Razorpay self-checkout. Backend
     // operators provision manually after the contract is signed.

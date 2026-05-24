@@ -148,6 +148,28 @@ export default function OrderReceiptPage({ params }: { params: Promise<{ id: str
                 </div>
               </div>
             </div>
+            {/* Bump line items — surfaces each add-on the buyer ticked
+                on the checkout page. Hidden when the order is purely
+                the headline product. Itemising here keeps the receipt
+                accurate (otherwise the Subtotal looks higher than the
+                product price for no obvious reason). */}
+            {order.bumpLineItems && order.bumpLineItems.length > 0 && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                  Added at checkout
+                </p>
+                <ul className="mt-1.5 space-y-1 text-sm">
+                  {order.bumpLineItems.map((b) => (
+                    <li key={b.productId} className="flex items-center justify-between gap-3">
+                      <span className="line-clamp-1">{b.title}</span>
+                      <span className="shrink-0 tabular-nums">
+                        {money(b.amount, order.currency)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="space-y-1 border-t border-border pt-3">
               <ReceiptRow label="Customer">{order.customerName} · {order.customerEmail}</ReceiptRow>
               <ReceiptRow label="When">{new Date(order.createdAt).toLocaleString()}</ReceiptRow>

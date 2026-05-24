@@ -12,6 +12,7 @@ import { usePortal } from "@/lib/portal-store"
 import { useLMS } from "@/lib/lms-store"
 import { fuzzySearch } from "@/lib/fuzzy-search"
 import { cn } from "@/lib/utils"
+import { gradientFor } from "@/lib/handle-gradient"
 
 export default function TeachersPage({
   params,
@@ -20,17 +21,63 @@ export default function TeachersPage({
 }) {
   const { tenant } = use(params)
   const { faculty } = usePortal()
-  const { users } = useLMS()
+  const { users, courses } = useLMS()
   const [search, setSearch] = useState("")
+
+  // Sum the enrolment of every published course this instructor
+  // teaches. Used to surface the active teachers first — the
+  // alphabetical default rewarded teachers whose surname started
+  // with A; this surfaces the *real* face of the school instead.
+  // Memoised keyed on courses so re-renders don't redo the sum.
+  const enrolledByInstructorId = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const c of courses) {
+      if (c.status !== "published") continue
+      const id = c.instructor?.id
+      if (!id) continue
+      map.set(id, (map.get(id) ?? 0) + (c.enrolledCount ?? 0))
+    }
+    return map
+  }, [courses])
+  const enrolledByName = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const c of courses) {
+      if (c.status !== "published") continue
+      const name = c.instructor?.name
+      if (!name) continue
+      map.set(name, (map.get(name) ?? 0) + (c.enrolledCount ?? 0))
+    }
+    return map
+  }, [courses])
 
   // Members curated by the admin win. If the admin hasn't curated anyone
   // yet, surface every instructor/admin in the workspace so the page
   // isn't empty on day one.
+  //
+  // Sort order:
+  //   1. Curated `order` field (admin-pinned). Stable: same order
+  //      across reloads.
+  //   2. Within ties (and the un-curated fallback list), sort by
+  //      total enrolment across the teacher's published courses.
+  //      Active teachers surface first — alphabetical sort
+  //      rewarded teachers whose surname started with A, this
+  //      rewards teachers whose courses students actually take.
+  //   3. Final tiebreak by name (deterministic).
   const members = useMemo(() => {
+    const enrolForMember = (linkedUserId: string | undefined, name: string) =>
+      (linkedUserId ? enrolledByInstructorId.get(linkedUserId) : 0) ??
+      enrolledByName.get(name) ?? 0
     if (faculty.length > 0) {
       return faculty
         .slice()
-        .sort((a, b) => (a.order ?? 99) - (b.order ?? 99))
+        .sort((a, b) => {
+          const oa = a.order ?? 99, ob = b.order ?? 99
+          if (oa !== ob) return oa - ob
+          const ea = enrolForMember(a.userId, a.name)
+          const eb = enrolForMember(b.userId, b.name)
+          if (ea !== eb) return eb - ea
+          return a.name.localeCompare(b.name)
+        })
         .map((m) => ({
           handle: m.handle,
           name: m.name,
@@ -43,6 +90,12 @@ export default function TeachersPage({
     }
     return users
       .filter((u) => u.role === "instructor" || u.role === "admin")
+      .sort((a, b) => {
+        const ea = enrolForMember(a.id, a.name)
+        const eb = enrolForMember(b.id, b.name)
+        if (ea !== eb) return eb - ea
+        return a.name.localeCompare(b.name)
+      })
       .map((u) => ({
         handle: u.email.split("@")[0],
         name: u.name,
@@ -52,7 +105,7 @@ export default function TeachersPage({
         cover: u.coverImageUrl,
         expertise: [] as string[],
       }))
-  }, [faculty, users])
+  }, [faculty, users, enrolledByInstructorId, enrolledByName])
 
   const filtered = useMemo(
     () => fuzzySearch(members, search, (m) => [m.name, m.role ?? "", (m.expertise ?? []).join(" ")]),
@@ -97,19 +150,29 @@ export default function TeachersPage({
           {filtered.map((m) => (
             <Link
               key={m.handle}
-              href={`${basePath}/teachers/${m.handle}`}
+              href={`${basePath}/instructors/${m.handle}`}
               className="group block"
             >
               <Card className="overflow-hidden py-0 transition-shadow group-hover:shadow-lg">
+                {/* Cover band. When no cover image is set, fall back
+                    to a deterministic per-handle gradient (not the
+                    workspace primary→accent which made every
+                    coverless card look identical). Real images
+                    fade in via opacity transition + onLoad so the
+                    swap from gradient → photo doesn't pop. */}
                 <div
-                  className="relative h-24 w-full bg-muted"
-                  style={
-                    m.cover
-                      ? undefined
-                      : { background: "linear-gradient(135deg, var(--primary), var(--accent))" }
-                  }
+                  className="relative h-24 w-full"
+                  style={m.cover ? undefined : { background: gradientFor(m.handle) }}
                 >
-                  {m.cover && <img src={m.cover} alt="" className="h-full w-full object-cover" />}
+                  {m.cover && (
+                    <img
+                      src={m.cover}
+                      alt=""
+                      loading="lazy"
+                      onLoad={(e) => e.currentTarget.classList.remove("opacity-0")}
+                      className="h-full w-full object-cover opacity-0 transition-opacity duration-300"
+                    />
+                  )}
                 </div>
                 <CardContent className="-mt-8 p-5">
                   <div className="flex items-end gap-3">

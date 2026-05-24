@@ -65,9 +65,21 @@ export default function AnalyticsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Analytics Dashboard</h1>
-        <p className="text-muted-foreground">Track your course performance and student engagement</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Analytics Dashboard</h1>
+          <p className="text-muted-foreground">Track your course performance and student engagement</p>
+        </div>
+        {/* Quick link to the dedicated attribution view — added
+            alongside this page so the existing dashboard isn't
+            disrupted by the new breakdown surface. */}
+        <a
+          href="/dashboard/analytics/attribution"
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-[12px] font-semibold text-foreground transition-colors hover:border-primary/40 hover:text-primary"
+        >
+          <Target className="h-3.5 w-3.5" />
+          Attribution &amp; channels
+        </a>
       </div>
 
       {/* Key Metrics */}

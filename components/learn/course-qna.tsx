@@ -131,12 +131,18 @@ export function CourseQnA({
           <div>
             <CardTitle className="flex items-center gap-2">
               <MessageCircleQuestion className="h-5 w-5" />
-              Questions &amp; answers
+              Ask before enrolling
             </CardTitle>
+            {/* Sprint B Brand #29 — pre-sale framing. "Ask before
+                enrolling" lands harder for visitors than the generic
+                "Questions & answers". Sub-line carries the response-
+                time promise so a visitor's mental cost-of-asking is
+                set correctly. We pull instructorName so the line
+                reads as a personal commitment, not a system claim. */}
             <p className="mt-1 text-sm text-muted-foreground">
               {answeredDoubts.length > 0
-                ? `${answeredDoubts.length} answered question${answeredDoubts.length === 1 ? "" : "s"} from students.`
-                : "Be the first to ask a question about this course."}
+                ? `${answeredDoubts.length} answered question${answeredDoubts.length === 1 ? "" : "s"} from previous learners. ${instructorName} usually replies within a day.`
+                : `Not sure if this course is for you? ${instructorName} usually replies within a day.`}
             </p>
           </div>
           <Button
@@ -242,7 +248,7 @@ export function CourseQnA({
                       </div>
                       <div className="min-w-0 flex-1">
                         {editingId === d.id ? (
-                          // Teacher edit mode — inline input
+                          // Instructor edit mode — inline input
                           <div
                             className="flex items-center gap-2"
                             onClick={(e) => e.stopPropagation()}
@@ -353,7 +359,7 @@ export function CourseQnA({
                             {d.replies.slice(1).map((r) => (
                               <div key={r.id} className="rounded-md bg-muted/30 p-2.5">
                                 <p className="text-[11px] font-semibold text-muted-foreground">
-                                  {getUserById(r.authorId)?.name ?? "Teacher"} ·{" "}
+                                  {getUserById(r.authorId)?.name ?? "Instructor"} ·{" "}
                                   {new Date(r.createdAt).toLocaleDateString()}
                                 </p>
                                 <RichTextContent html={r.body} className="mt-1 text-sm" />
@@ -370,14 +376,15 @@ export function CourseQnA({
           </ul>
         )}
 
-        {/* Empty state when no answered Qs and form is hidden */}
+        {/* Empty state when no answered Qs and form is hidden. Kept
+            compact — the previous full-bleed icon + big-message
+            empty state visually dominated the card on courses with
+            no public Q history yet, making the section look broken.
+            Inline one-liner sits below the header instead. */}
         {answeredDoubts.length === 0 && !showForm && (
-          <div className="flex flex-col items-center py-8 text-center">
-            <MessageCircleQuestion className="h-10 w-10 text-muted-foreground/40" />
-            <p className="mt-3 text-sm text-muted-foreground">
-              No answered questions yet. Be the first to ask!
-            </p>
-          </div>
+          <p className="rounded-md border border-dashed border-border bg-muted/30 px-3 py-2 text-center text-xs text-muted-foreground">
+            No questions answered publicly yet — yours could be the first.
+          </p>
         )}
       </CardContent>
     </Card>

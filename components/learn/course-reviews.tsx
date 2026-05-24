@@ -11,8 +11,8 @@
 // Renders nothing when there are zero reviews AND the visitor can't
 // write one — keeps the public page from looking sparse on day one.
 
-import { useMemo, useState } from "react"
-import { Reply, Star } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { Reply, Star, Quote } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
@@ -41,6 +41,36 @@ export function CourseReviews({ courseId, studentId, canReview }: Props) {
 
   const stats = useMemo(() => aggregate(reviews), [reviews])
 
+  // Sprint B Brand #26 — "recommend rate" = reviews ≥ 4 stars /
+  // total. Surfaced under the headline as a single-glance trust
+  // signal. Hidden when there are <3 reviews (small-sample noise
+  // makes the percentage misleading).
+  const recommendPct = useMemo(() => {
+    if (reviews.length < 3) return null
+    const r4 = (stats.byStar[4] ?? 0) + (stats.byStar[5] ?? 0)
+    return Math.round((r4 / reviews.length) * 100)
+  }, [stats, reviews.length])
+
+  // Top-3 review carousel — picks the three highest-rated reviews
+  // with a comment, ties broken by recency. Auto-advances every 6s,
+  // pauses on hover. Quote-format card so it reads as social proof,
+  // not a duplicate of the list below.
+  const topReviews = useMemo(() => {
+    return [...reviews]
+      .filter((r) => r.comment && r.comment.trim())
+      .sort((a, b) => b.rating - a.rating || b.createdAt.localeCompare(a.createdAt))
+      .slice(0, 3)
+  }, [reviews])
+  const [carouselIdx, setCarouselIdx] = useState(0)
+  const [carouselPaused, setCarouselPaused] = useState(false)
+  useEffect(() => {
+    if (topReviews.length < 2 || carouselPaused) return
+    const id = window.setInterval(() => {
+      setCarouselIdx((i) => (i + 1) % topReviews.length)
+    }, 6000)
+    return () => window.clearInterval(id)
+  }, [topReviews.length, carouselPaused])
+
   if (reviews.length === 0 && !(canReview && studentId)) return null
 
   return (
@@ -61,27 +91,101 @@ export function CourseReviews({ courseId, studentId, canReview }: Props) {
             </div>
             {/* 5-bar histogram on the right — each row is clickable copy
                 for skim-readability, not a filter (keep the surface
-                simple for v1). */}
+                simple for v1). Sprint B Brand #26 adds the "% recommend"
+                line under the histogram so a skim-reader gets a
+                two-data-point summary (avg + recommend-rate) without
+                parsing the bars. */}
             <div className="space-y-1.5">
+              {/* 5/4/3/2/1 distribution. Star labels render as icons
+                  + a digit so the row is scannable; bar height bumped
+                  to h-2 + smooth width transition so the histogram
+                  feels like data, not decoration. Each row carries
+                  an aria-label that reads the percent + count for
+                  screen reader users. */}
               {[5, 4, 3, 2, 1].map((star) => {
                 const count = stats.byStar[star] ?? 0
                 const pct = reviews.length > 0 ? Math.round((count / reviews.length) * 100) : 0
                 return (
-                  <div key={star} className="flex items-center gap-3 text-xs">
-                    <span className="w-12 text-muted-foreground">
-                      {star} star{star === 1 ? "" : "s"}
+                  <div
+                    key={star}
+                    className="flex items-center gap-3 text-xs"
+                    aria-label={`${star} star${star === 1 ? "" : "s"}: ${pct}% (${count} review${count === 1 ? "" : "s"})`}
+                  >
+                    <span className="inline-flex w-10 items-center gap-1 text-muted-foreground">
+                      <span className="font-semibold tabular-nums text-foreground">{star}</span>
+                      <Star className="h-3 w-3 fill-current text-accent" />
                     </span>
-                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-full rounded-full bg-accent"
+                        className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <span className="w-10 text-right text-muted-foreground">{count}</span>
+                    <span className="w-10 text-right tabular-nums text-muted-foreground">
+                      {pct}%
+                    </span>
                   </div>
                 )
               })}
+              {recommendPct !== null && (
+                <p className="pt-1.5 text-[11.5px] text-muted-foreground">
+                  <span className="font-bold text-foreground tabular-nums">{recommendPct}%</span>{" "}
+                  recommend this course (4+ stars)
+                </p>
+              )}
             </div>
+          </div>
+        )}
+
+        {/* Sprint B Brand #26 — top-review carousel. Renders only when
+            we have at least one substantive review (≥3 carousels look
+            silly with a single quote on rotation). Quote-format card
+            with author + star line, mouse-pause for considerate
+            reading, dots-indicator below for manual nav. */}
+        {topReviews.length > 0 && (
+          <div
+            className="rounded-lg border border-primary/20 bg-primary/[0.04] p-4"
+            onMouseEnter={() => setCarouselPaused(true)}
+            onMouseLeave={() => setCarouselPaused(false)}
+          >
+            {(() => {
+              const r = topReviews[carouselIdx]
+              const author = getUserById(r.studentId)
+              return (
+                <>
+                  <Quote className="h-4 w-4 text-primary/40" />
+                  <p className="mt-2 line-clamp-3 text-[14px] italic leading-relaxed">
+                    &ldquo;{r.comment}&rdquo;
+                  </p>
+                  <div className="mt-3 flex items-center gap-2 text-[11.5px]">
+                    <span className="font-semibold">{author?.name ?? "Anonymous"}</span>
+                    <StarRow value={r.rating} className="text-accent" small />
+                  </div>
+                </>
+              )
+            })()}
+            {topReviews.length > 1 && (
+              <div
+                className="mt-3 flex items-center justify-center gap-1.5"
+                role="tablist"
+                aria-label="Review carousel"
+              >
+                {topReviews.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    role="tab"
+                    aria-selected={i === carouselIdx}
+                    aria-label={`Show review ${i + 1} of ${topReviews.length}`}
+                    onClick={() => setCarouselIdx(i)}
+                    className={cn(
+                      "h-1.5 w-6 rounded-full transition-colors",
+                      i === carouselIdx ? "bg-primary" : "bg-primary/20 hover:bg-primary/40",
+                    )}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 

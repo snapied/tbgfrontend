@@ -546,7 +546,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                         : "border-border hover:bg-muted/40"
                     }`}
                   >
-                    <p className="text-sm font-medium">Teacher reviews</p>
+                    <p className="text-sm font-medium">Instructor reviews</p>
                     <p className="mt-0.5 text-muted-foreground">
                       Wait for manual grading.
                     </p>

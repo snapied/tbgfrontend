@@ -5,7 +5,7 @@
 // targeted messaging + filtering on the students list. Each group
 // shows member count + purpose; click into a group to manage members.
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import {
   ArrowLeft,
@@ -38,6 +38,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useLMS, generateId, type StudentGroup, type User } from "@/lib/lms-store"
+import { cn } from "@/lib/utils"
 import { useConfirm } from "@/lib/use-confirm"
 import { toastUndoableDelete } from "@/lib/toast-undo"
 import { MessageComposer } from "@/components/messages/message-composer"
@@ -136,8 +137,12 @@ export default function StudentGroupsPage() {
                         onClick={async () => {
                           const ok = await confirm({
                             title: `Delete the "${g.name}" group?`,
-                            description: "Members stay in your student roster — they're just removed from this group.",
+                            description:
+                              g.memberIds.length === 0
+                                ? "Removes the empty group. You can restore it from Trash within 7 days."
+                                : `Removes the group only — the ${g.memberIds.length.toLocaleString()} member${g.memberIds.length === 1 ? "" : "s"} stay in your student roster.`,
                             destructive: true,
+                            confirmLabel: "Delete group",
                           })
                           if (!ok) return
                           deleteStudentGroup(g.id)
@@ -248,8 +253,12 @@ function GroupDialog({
   const [color, setColor] = useState<string>(GROUP_COLORS[0])
   const [memberIds, setMemberIds] = useState<Set<string>>(new Set())
 
-  // Re-seed on open so previous edit state doesn't leak.
-  useMemo(() => {
+  // Re-seed on open so previous edit state doesn't leak. The prior
+  // code called setState inside `useMemo`, which runs during render
+  // and causes React's "Cannot update a component while rendering"
+  // warning + potential cascading renders. useEffect is the correct
+  // hook for side effects driven by prop changes.
+  useEffect(() => {
     if (!open) return
     setName(editing?.name ?? "")
     setPurpose(editing?.purpose ?? "")
@@ -279,11 +288,23 @@ function GroupDialog({
 
         <div className="flex-1 space-y-4 overflow-y-auto pr-1 pt-2 pl-3">
           <div className="space-y-2">
-            <Label>Group name *</Label>
+            <Label htmlFor="group-name">Group name *</Label>
             <Input
+              id="group-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setName(e.target.value.slice(0, 60))}
               placeholder="e.g. Cohort 5 — JEE Mains 2026"
+              maxLength={60}
+              autoFocus
+              onKeyDown={(e) => {
+                // Pressing Enter inside the name field submits the
+                // dialog. Previously the user had to mouse over to
+                // the footer button — the form has no <form> element.
+                if (e.key === "Enter" && name.trim() && !e.shiftKey) {
+                  e.preventDefault()
+                  save()
+                }
+              }}
             />
           </div>
           <div className="space-y-2">
@@ -299,21 +320,26 @@ function GroupDialog({
             </p>
           </div>
           <div className="space-y-2">
-            <Label>Color tag</Label>
-            <div className="flex gap-2">
-              {GROUP_COLORS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setColor(c)}
-                  className="h-7 w-7 rounded-full ring-2 ring-offset-2 ring-offset-background transition"
-                  style={{
-                    background: c,
-                    boxShadow: color === c ? `0 0 0 2px ${c}` : "none",
-                    outline: color === c ? "2px solid var(--ring)" : "none",
-                  }}
-                />
-              ))}
+            <Label id="group-color-label">Color tag</Label>
+            <div className="flex gap-2" role="radiogroup" aria-labelledby="group-color-label">
+              {GROUP_COLORS.map((c, i) => {
+                const selected = color === c
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    aria-label={`Color option ${i + 1}${selected ? " (selected)" : ""}`}
+                    onClick={() => setColor(c)}
+                    className={cn(
+                      "h-7 w-7 rounded-full transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                      selected && "ring-2 ring-foreground ring-offset-2 ring-offset-background",
+                    )}
+                    style={{ background: c }}
+                  />
+                )
+              })}
             </div>
           </div>
 

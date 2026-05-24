@@ -999,7 +999,7 @@ function ResultsView({
                         <AnswerSummary question={q} answer={ans} correct={correct} />
                         {note && (
                           <p className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
-                            <span className="font-medium">Teacher: </span>
+                            <span className="font-medium">Instructor: </span>
                             {note}
                           </p>
                         )}

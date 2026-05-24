@@ -38,7 +38,14 @@ interface RazorpayInstance {
 
 export interface RazorpayPaymentResponse {
   razorpay_payment_id: string
-  razorpay_order_id: string
+  /** Set on one-time payments. Mutually exclusive with
+   *  razorpay_subscription_id at the modal level — Razorpay sends
+   *  whichever id matches how the modal was opened. */
+  razorpay_order_id?: string
+  /** Set on subscription payments — Razorpay's modal handler
+   *  returns this in place of razorpay_order_id when the modal was
+   *  opened with `subscription_id`. */
+  razorpay_subscription_id?: string
   razorpay_signature: string
 }
 

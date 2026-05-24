@@ -12,6 +12,7 @@ import {
   Radio,
   Sparkles,
   Type as TypeIcon,
+  Video,
   Webhook,
 } from "lucide-react"
 import type { LessonType } from "@/lib/lms-store"
@@ -26,6 +27,11 @@ const ICON_MAP: Record<LessonType, LucideIcon> = {
   audio:    Music,
   quiz:     Sparkles,
   live:     Radio,
+  // Sprint C Recordings #34 — distinct icon so curriculum readers
+  // can tell at a glance "this lesson is a past class recording"
+  // versus a fresh authored video. Video reel icon reads as
+  // archived footage.
+  recording: Video,
 }
 
 const LABEL_MAP: Record<LessonType, string> = {
@@ -37,6 +43,7 @@ const LABEL_MAP: Record<LessonType, string> = {
   audio:    "Audio",
   quiz:     "Quiz",
   live:     "Live class",
+  recording: "Recording",
 }
 
 export function lessonTypeLabel(type: LessonType): string {

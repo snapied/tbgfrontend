@@ -29,7 +29,7 @@ import { computeSessionStatus, providerLabel } from "@/lib/live-session-utils"
 import { ClassRecapView } from "@/components/classes/class-recap-editor"
 
 /**
- * Teacher-facing archive of past classes across every course in the tenant.
+ * Instructor-facing archive of past classes across every course in the tenant.
  * Each session card shows its recap (recording, summary, materials) inline,
  * with an expand/collapse for compactness on long histories. Empty states
  * help guide the teacher toward filling in recordings/materials for any

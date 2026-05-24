@@ -36,7 +36,7 @@ export default function CommunityFeaturePage() {
 
         <FeatureSplit
           title="Per-batch Common Rooms — Slack-grade, built in."
-          body={<>Every batch in your workspace gets its own feed. Post rich text, tag specific people, attach any file (images / videos / audio / PDF — type-aware preview), edit your own posts, react with emojis. Members get cross-channel notifications when something lands. Teachers pin the best stuff.</>}
+          body={<>Every batch in your workspace gets its own feed. Post rich text, tag specific people, attach any file (images / videos / audio / PDF — type-aware preview), edit your own posts, react with emojis. Members get cross-channel notifications when something lands. Instructors pin the best stuff.</>}
           bullets={[
             "@-mention picker — teachers first, members below, profile deep-link",
             "File uploads with type-aware previews (images / video / audio / PDF / other)",
@@ -108,7 +108,7 @@ function CohortRoomMockup() {
       <div className="space-y-2">
         <div className="rounded-md border border-primary/30 bg-primary/[0.04] p-2">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[9px] font-medium uppercase tracking-wide text-primary">🛡 Teachers</span>
+            <span className="text-[9px] font-medium uppercase tracking-wide text-primary">🛡 Instructors</span>
             <span className="rounded-full border border-primary/40 bg-background px-2 py-0.5 text-[9px]">Renu</span>
             <span className="rounded-full border border-primary/40 bg-background px-2 py-0.5 text-[9px]">Dinesh</span>
             <span className="ml-auto text-[8px] text-muted-foreground">22 members</span>

@@ -1,18 +1,21 @@
 // Public certificate lookup. No auth — anyone with a cert id (or a
 // LinkedIn scraping the page) can verify it.
 //
-// We scan every tenant's server-side blob for a matching certificate
-// id. The blob layout is `{ [keySuffix]: value }` per tenant — see
-// /api/portal-state/[slug] — so we look for `certificates.v1` inside
-// each file and walk its batches.
+// We scan every tenant's portal-state in Postgres for a matching
+// certificate id. The blob layout is `{ [keySuffix]: value }` per
+// tenant — see /api/portal-state/[slug] — so we look for
+// `certificates.v1` inside each tenant's blob and walk its batches.
 //
 // Returns:
 //   { ok: true, certificate, tenantSlug, tenantName, brand }
 //   { ok: false, error: "not-found" | "revoked" }
 
 import { NextResponse, type NextRequest } from "next/server"
-import { promises as fs } from "fs"
-import path from "path"
+import {
+  SYSTEM_SLUG,
+  listSlugs,
+  loadPortalState,
+} from "@/lib/portal-state-client"
 
 export const runtime = "nodejs"
 
@@ -47,10 +50,6 @@ interface PortalConfigRow {
   brand?: PortalBrandRow
 }
 
-function dataDir(): string {
-  return path.join(process.cwd(), ".portal-state")
-}
-
 export async function GET(
   _req: NextRequest,
   ctx: { params: Promise<{ id: string }> },
@@ -61,26 +60,13 @@ export async function GET(
     return NextResponse.json({ ok: false, error: "missing-id" }, { status: 400 })
   }
 
-  let entries: string[] = []
-  try {
-    entries = await fs.readdir(dataDir())
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return NextResponse.json({ ok: false, error: "not-found" }, { status: 404 })
-    }
-    throw err
-  }
+  // Enumerate tenants from the DB instead of a filesystem dir. Skip
+  // the reserved system slug — it holds caches (razorpay events,
+  // plan IDs), never certificate data.
+  const slugs = (await listSlugs()).filter((s) => s !== SYSTEM_SLUG)
 
-  for (const file of entries) {
-    if (!file.endsWith(".json")) continue
-    const slug = file.slice(0, -".json".length)
-    let blob: Record<string, unknown>
-    try {
-      const raw = await fs.readFile(path.join(dataDir(), file), "utf8")
-      blob = JSON.parse(raw) as Record<string, unknown>
-    } catch {
-      continue
-    }
+  for (const slug of slugs) {
+    const blob = await loadPortalState(slug)
     const batches = blob["certificates.v1"] as BatchRow[] | undefined
     if (!Array.isArray(batches)) continue
     for (const batch of batches) {

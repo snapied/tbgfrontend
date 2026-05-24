@@ -41,7 +41,7 @@ export default function PortalAcceptInvitePage({
 
   const workspaceName = search.get("w") ?? brand.name
   const inviterName = search.get("i") ?? "Your admin"
-  // Role from the invite URL. Teacher invites use ?r=admin or omit
+  // Role from the invite URL. Instructor invites use ?r=admin or omit
   // (defaults to instructor); student invites use ?r=student. The
   // landing page handles all three, so a single invite generator can
   // pick whichever role applies.
@@ -169,7 +169,7 @@ export default function PortalAcceptInvitePage({
       setCurrentUser(signedIn)
 
       setPhase({ kind: "done" })
-      // Teachers / admins land on the platform dashboard so they
+      // Instructors / admins land on the platform dashboard so they
       // can start building immediately; students land on their
       // tenant-scoped student dashboard with the full sidebar.
       setTimeout(() => {

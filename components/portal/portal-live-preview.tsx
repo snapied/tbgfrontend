@@ -15,7 +15,7 @@
 // iframe), so the preview re-renders automatically — no manual
 // refresh needed in the common case.
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { ExternalLink, Monitor, RefreshCw, Smartphone, Tablet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -39,7 +39,7 @@ const DEVICE_VIEWPORT_W: Record<Device, number> = {
 
 interface Props {
   tenant: string
-  /** Defaults to "/" — pass "/about" / "/teachers" / etc. to deep-link. */
+  /** Defaults to "/" — pass "/about" / "/instructors" / etc. to deep-link. */
   path?: string
   /** When true, the preview is full-bleed inside its container. */
   className?: string
@@ -97,12 +97,27 @@ export function PortalLivePreview({
 
   const fullUrl = `/p/${tenant}${path === "/" ? "" : path}`
 
-  // Measure the visible width of the iframe container so we can scale
-  // the iframe DOWN when the desktop viewport (1280) is wider than
-  // the available column. ResizeObserver fires on dashboard resize +
-  // sidebar collapse so the preview stays sharp.
+  // Measure the visible width of the iframe container BEFORE first
+  // paint. Using useLayoutEffect (not useEffect) ensures the
+  // synchronous measurement lands before the browser paints — so
+  // the iframe never flashes at the wrong scale.
+  //
+  // Without this synchronous step, the first paint runs with
+  // containerWidth=0 → scale=1 → the iframe renders at the full
+  // 1280 desktop viewport. The container has overflow-hidden +
+  // justify-center, so the user sees only the CENTER 600px of a
+  // 1280px iframe — making the "Desktop" preview look cropped and
+  // not at all like the actual public site.
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    setContainerWidth(el.clientWidth)
+  }, [])
+  // Continued size tracking (window resize, sidebar collapse, etc.)
+  // can stay in a regular useEffect — those updates after first
+  // paint are fine.
   useEffect(() => {
     const el = containerRef.current
     if (!el) return
@@ -111,21 +126,27 @@ export function PortalLivePreview({
       setContainerWidth(w)
     })
     observer.observe(el)
-    setContainerWidth(el.clientWidth)
     return () => observer.disconnect()
   }, [])
 
   const viewportW = DEVICE_VIEWPORT_W[device]
   // Only scale when the available column is narrower than the desired
   // viewport. Scaling > 1 would blur the iframe; we never enlarge.
-  const scale = containerWidth > 0 && containerWidth < viewportW
+  // Gate on containerWidth > 0 so the pre-measurement render doesn't
+  // mistakenly pick scale=1 with a too-wide iframe.
+  const measured = containerWidth > 0
+  const scale = measured && containerWidth < viewportW
     ? containerWidth / viewportW
     : 1
-  // The outer wrapper is the SCALED size (so flex layout sees the
-  // real visible dimensions); the inner wrapper is the unscaled size
-  // that the iframe renders at; transform: scale() shrinks the inner
-  // to fit the outer.
-  const visibleW = Math.min(viewportW * scale, viewportW)
+  // The outer wrapper is the SCALED visible size (so flex layout
+  // sees the real visible dimensions); the inner wrapper is the
+  // unscaled size the iframe renders at; transform: scale() shrinks
+  // the inner to fit the outer. When the container is wider than
+  // 1280, we render the iframe at exactly 1280 (matches the actual
+  // desktop viewport of the public site).
+  const visibleW = measured
+    ? Math.min(viewportW * scale, containerWidth)
+    : viewportW
   const naturalH = scale < 1 ? height / scale : height
   const visibleH = height
 
@@ -175,40 +196,56 @@ export function PortalLivePreview({
         </div>
       )}
 
-      {/* Frame. The container is full-width; the inner wrapper is the
-          scaled visible size, centered. The iframe itself renders at
-          the chosen viewport width (e.g. 1280 for desktop) and gets
-          scaled down to fit. */}
+      {/* Frame. Container is full-width; the inner wrapper is the
+          scaled visible size, centered. The iframe itself renders
+          at the chosen viewport width (e.g. 1280 for desktop) and
+          gets scaled down to fit. We hold off mounting the iframe
+          until the container has been measured — without this,
+          the first frame renders a 1280-wide iframe inside a
+          narrower container, the overflow-hidden + justify-center
+          flex centers it, and the user sees the middle-cropped
+          chunk of a desktop layout that doesn't match the real
+          public site. */}
       <div
         ref={containerRef}
         className="flex items-start justify-center overflow-hidden rounded-xl border border-border bg-muted/30"
         style={{ height: `${height}px` }}
       >
-        <div
-          style={{
-            width: visibleW,
-            height: visibleH,
-            overflow: "hidden",
-          }}
-        >
-          <iframe
-            ref={iframeRef}
-            // Bump on reloadKey so the SPA re-mounts and re-reads from
-            // localStorage. The PortalProvider also listens for `storage`
-            // events from other windows, so most edits reflect without
-            // needing this manual refresh.
-            key={reloadKey}
-            src={fullUrl}
-            title="Portal preview"
-            className="block border-0 bg-background transition-all"
+        {measured ? (
+          <div
             style={{
-              width: viewportW,
-              height: naturalH,
-              transform: scale < 1 ? `scale(${scale})` : undefined,
-              transformOrigin: "top left",
+              width: visibleW,
+              height: visibleH,
+              overflow: "hidden",
             }}
+          >
+            <iframe
+              ref={iframeRef}
+              // Bump on reloadKey so the SPA re-mounts and re-reads
+              // from localStorage. PortalProvider also listens for
+              // `storage` events from other windows, so most edits
+              // reflect without needing this manual refresh.
+              key={reloadKey}
+              src={fullUrl}
+              title="Portal preview"
+              className="block border-0 bg-background"
+              style={{
+                width: viewportW,
+                height: naturalH,
+                transform: scale < 1 ? `scale(${scale})` : undefined,
+                transformOrigin: "top left",
+              }}
+            />
+          </div>
+        ) : (
+          // Minimal placeholder for the one frame before measurement
+          // lands. Matches the iframe's eventual background so the
+          // hand-off is invisible.
+          <div
+            className="h-full w-full animate-pulse bg-background/60"
+            aria-hidden
           />
-        </div>
+        )}
       </div>
     </div>
   )

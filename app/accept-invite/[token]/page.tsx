@@ -55,7 +55,7 @@ export default function AcceptInvitePage({
   // upgrade to admin only when explicitly requested.
   const workspaceName = search.get("w") ?? "the workspace"
   const inviterName = search.get("i") ?? "Your admin"
-  // Role from the invite URL. Teacher invites use ?r=admin or omit
+  // Role from the invite URL. Instructor invites use ?r=admin or omit
   // (defaults to instructor); student invites use ?r=student.
   const roleParam = search.get("r")
   const role = (
@@ -183,7 +183,7 @@ export default function AcceptInvitePage({
       setCurrentUser(signedIn)
 
       setPhase({ kind: "done" })
-      // Students land on the tenant-scoped student dashboard. Teachers
+      // Students land on the tenant-scoped student dashboard. Instructors
       // / admins go to /onboarding to walk through the workspace
       // setup wizard. Falls back to /onboarding if the tenant slug
       // isn't resolved (shouldn't happen — invite is always scoped).

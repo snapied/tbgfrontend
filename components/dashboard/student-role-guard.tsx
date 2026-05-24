@@ -10,7 +10,7 @@
 // client child is the standard pattern for "redirect on hydrate
 // when state matches X".
 //
-// Teachers + admins fall through to the dashboard as before.
+// Instructors + admins fall through to the dashboard as before.
 // Anonymous visitors are *not* redirected — individual pages
 // already handle the unauthenticated case (some pages render a
 // public preview), and a blanket redirect here would break that.

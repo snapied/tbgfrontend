@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { useLMS } from "@/lib/lms-store"
+import { getMutedThreadIds } from "@/lib/community-post-prefs"
 
 function timeAgo(iso: string): string {
   const ms = Date.now() - new Date(iso).getTime()
@@ -27,7 +28,28 @@ export function NotificationBell() {
 
   const items = useMemo(() => {
     if (!currentUser) return []
-    return getUserNotifications(currentUser.id).slice(0, 20)
+    const all = getUserNotifications(currentUser.id)
+    // Apply per-user mute filter — community comment notifications
+    // (`batch-comment` type) for posts the user has muted are
+    // hidden here, completing the mute loop started in the post
+    // dropdown. We deliberately DON'T filter `batch-mention` —
+    // explicit @-tags survive a mute because they're direct,
+    // matching every chat product's convention. Other notification
+    // types pass through untouched.
+    const muted = getMutedThreadIds(currentUser.id)
+    const filtered = muted.size === 0
+      ? all
+      : all.filter((n) => {
+          if (n.type !== "batch-comment") return true
+          const postId =
+            typeof n.meta?.postId === "string" ? (n.meta.postId as string) : null
+          if (!postId) return true
+          return !muted.has(postId)
+        })
+    return filtered.slice(0, 20)
+    // notifications array kept in deps so updates to the underlying
+    // store flush through the memo; muted set is stored locally per
+    // browser so we re-read on every render via the helper.
   }, [currentUser, getUserNotifications, notifications])
 
   const unread = items.filter((n) => n.status !== "read").length

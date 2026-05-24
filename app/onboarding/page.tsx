@@ -24,13 +24,15 @@ import { Logo } from "@/components/brand/logo"
 import { useTenant } from "@/lib/tenant-store"
 import { useOrgSettings } from "@/lib/org-settings"
 import { FileUploadField } from "@/components/upload/file-upload-field"
-import { tenantPublicUrl } from "@/lib/tenant-resolver"
 import { cn } from "@/lib/utils"
 
+// Domain selection lives in Settings → Workspace, not in onboarding —
+// it added a step most users skipped anyway, since custom domains are
+// a "set up later" concern that doesn't block getting the storefront
+// live. Removing it tightens the funnel from five steps to four.
 const STEPS = [
   { key: "import",  label: "Import",  icon: Globe },
   { key: "brand",   label: "Brand",   icon: Palette },
-  { key: "domain",  label: "Domain",  icon: Globe },
   { key: "team",    label: "Team",    icon: Users },
   { key: "launch",  label: "Launch",  icon: ArrowRight },
 ] as const
@@ -48,7 +50,7 @@ interface SiteMeta {
 
 export default function OnboardingPage() {
   const router = useRouter()
-  const { currentTenant, updateTenant, requestCustomDomain } = useTenant()
+  const { currentTenant, updateTenant } = useTenant()
   const { settings, update: updateOrg } = useOrgSettings()
   const [step, setStep] = useState<StepKey>("import")
 
@@ -66,7 +68,6 @@ export default function OnboardingPage() {
   const [importError, setImportError] = useState<string | null>(null)
   const [importedFrom, setImportedFrom] = useState<SiteMeta | null>(null)
 
-  const [customDomain, setCustomDomain] = useState("")
   const [inviteEmails, setInviteEmails] = useState("")
 
   useEffect(() => {
@@ -285,54 +286,6 @@ export default function OnboardingPage() {
                 <div className="space-y-1.5">
                   <Label>Tagline (optional)</Label>
                   <Input value={tagline} onChange={(e) => setTagline(e.target.value)} placeholder="Founded in pursuit of knowledge" />
-                </div>
-              </div>
-            )}
-
-            {step === "domain" && currentTenant && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-lg font-semibold">Your URL</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Your subdomain is live. Hook up a custom domain whenever you&apos;re ready.
-                  </p>
-                </div>
-                <div className="rounded-md border border-success/30 bg-success/5 p-3 text-sm">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-success">
-                    Active workspace URL
-                  </p>
-                  <p className="mt-1 font-mono text-base font-medium">
-                    {tenantPublicUrl(currentTenant.slug)}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Anyone you share this with will see your branded storefront immediately.
-                  </p>
-                </div>
-                <div className="space-y-2 rounded-md border border-border/60 p-3">
-                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-                    Custom domain (optional)
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={customDomain}
-                      onChange={(e) => setCustomDomain(e.target.value)}
-                      placeholder="learn.youracademy.com"
-                      className="font-mono"
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => requestCustomDomain(currentTenant.id, customDomain)}
-                      disabled={!customDomain.trim()}
-                    >
-                      Request
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    After submitting, point a CNAME from{" "}
-                    <span className="font-mono text-foreground">{customDomain || "learn.yourdomain.com"}</span> to{" "}
-                    <span className="font-mono text-foreground">{currentTenant.slug}.thebigclass.com</span>. We&apos;ll verify
-                    DNS and provision SSL automatically.
-                  </p>
                 </div>
               </div>
             )}

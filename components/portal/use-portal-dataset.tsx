@@ -25,10 +25,18 @@ import type {
   PortalCourseLite,
   PortalDataset,
   PortalStoreProductLite,
+  PortalTrustStats,
+  PortalNextLiveSession,
 } from "@/components/portal/section-renderer"
 
+// Hero live-state lookahead window. We only surface a live class on
+// the public hero if it starts within this window — further out is
+// noise; in-progress + past-by-30m is fine because the join page
+// already handles "started a few minutes ago".
+const HERO_LIVE_LOOKAHEAD_MS = 12 * 60 * 60 * 1000
+
 export function usePortalDataset(tenant: string): PortalDataset {
-  const { courses, users, addNotifications } = useLMS()
+  const { courses, users, enrollments, reviews, liveSessions, addNotifications } = useLMS()
   const { faculty, testimonials, posts, addLead, config } = usePortal()
   const { products } = useStore()
   const { currentTenant } = useTenant()
@@ -71,22 +79,57 @@ export function usePortalDataset(tenant: string): PortalDataset {
     () =>
       courses
         .filter((c) => c.status === "published")
-        .map((c) => ({
-          id: c.id,
-          slug: c.slug,
-          title: c.title,
-          description: stripRichTextTags(c.description ?? "").slice(0, 240),
-          thumbnail: c.thumbnail,
-          category: c.category,
-          level: c.level,
-          rating: c.rating,
-          reviewCount: c.reviewCount,
-          enrolledCount: c.enrolledCount,
-          price: c.price,
-          originalPrice: c.originalPrice,
-          currency: c.currency,
-        })),
-    [courses],
+        .map((c) => {
+          // Sprint A Brand #18 — derive preview state from lesson
+          // `isPreview` flags. Flat-traverses modules → lessons; an
+          // empty curriculum yields no preview ids, which renders no
+          // badge (correct).
+          const previewLessonIds: string[] = []
+          for (const m of c.modules ?? []) {
+            for (const l of m.lessons ?? []) {
+              if (l.isPreview) previewLessonIds.push(l.id)
+            }
+          }
+          // Sprint B Brand #19 — top 3 most-recent enrollee avatars
+          // for the social-density chip on the card. We do a single
+          // pass over enrollments filtered to this course, sort
+          // newest-first, then resolve user objects for the first 3.
+          // Cheap because enrollments are already in memory.
+          const recentEnrolleeAvatars = enrollments
+            .filter((e) => e.courseId === c.id)
+            .sort((a, b) => (b.enrolledAt ?? "").localeCompare(a.enrolledAt ?? ""))
+            .slice(0, 3)
+            .map((e) => {
+              const u = users.find((x) => x.id === e.studentId)
+              return { name: u?.name ?? "Student", avatar: u?.avatar }
+            })
+          return {
+            id: c.id,
+            slug: c.slug,
+            title: c.title,
+            description: stripRichTextTags(c.description ?? "").slice(0, 240),
+            thumbnail: c.thumbnail,
+            category: c.category,
+            level: c.level,
+            rating: c.rating,
+            reviewCount: c.reviewCount,
+            enrolledCount: c.enrolledCount,
+            price: c.price,
+            originalPrice: c.originalPrice,
+            currency: c.currency,
+            hasFreePreview: previewLessonIds.length > 0,
+            previewLessonIds,
+            recentEnrolleeAvatars,
+            // Sprint D Brand #20 — early-bird passthrough so cards
+            // can render the urgency anchor. We thread the raw ISO
+            // and let the card UI compute days-remaining; centralising
+            // the format here would force every card to re-render
+            // every minute as the countdown ticks (cheaper to do at
+            // render time).
+            earlyBirdUntil: c.earlyBirdUntil,
+          }
+        }),
+    [courses, enrollments, users],
   )
 
   const submitLead = useCallback(
@@ -191,6 +234,63 @@ export function usePortalDataset(tenant: string): PortalDataset {
     ],
   )
 
+  // Pre-compute the social-proof aggregates the Hero trust strip
+  // renders. Computing here (once per dataset) avoids every visitor
+  // recomputing on first paint of the home page. The Hero hides the
+  // strip when stats are too thin to be persuasive — see Sprint A
+  // Brand #2 — so we always emit values; the consumer decides whether
+  // to render.
+  const trustStats: PortalTrustStats = useMemo(() => {
+    const studentIds = new Set(enrollments.map((e) => e.studentId))
+    const ratedReviews = reviews.filter((r) => typeof r.rating === "number")
+    const avg = ratedReviews.length === 0
+      ? 0
+      : ratedReviews.reduce((sum, r) => sum + r.rating, 0) / ratedReviews.length
+    const countries = new Set(
+      users
+        .filter((u) => studentIds.has(u.id) && typeof u.country === "string")
+        .map((u) => (u.country as string).toLowerCase()),
+    )
+    return {
+      studentCount: studentIds.size,
+      reviewCount: ratedReviews.length,
+      avgRating: Math.round(avg * 10) / 10,
+      countryCount: countries.size,
+      courseCount: courseLites.length,
+    }
+  }, [enrollments, reviews, users, courseLites])
+
+  // Pick the soonest upcoming live session within the lookahead
+  // window. In-progress sessions stay in scope (now - duration ≤ 30m
+  // grace) so a visitor landing mid-class still gets a "join now"
+  // strip. Cancelled sessions skipped.
+  const nextLiveSession: PortalNextLiveSession | null = useMemo(() => {
+    const now = Date.now()
+    const upper = now + HERO_LIVE_LOOKAHEAD_MS
+    const candidates = liveSessions
+      .filter((s) => s.status !== "cancelled")
+      .filter((s) => {
+        const start = Date.parse(s.scheduledAt)
+        if (!Number.isFinite(start)) return false
+        const end = start + (s.durationMinutes ?? 60) * 60_000
+        // Upcoming OR just-started (within duration + 30m grace).
+        return start <= upper && end + 30 * 60_000 > now
+      })
+      .sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))
+    const pick = candidates[0]
+    if (!pick) return null
+    const course = courses.find((c) => c.id === pick.courseId)
+    return {
+      id: pick.id,
+      title: pick.title,
+      scheduledAt: pick.scheduledAt,
+      courseTitle: course?.title,
+      enrolledCount: course?.enrolledCount,
+      // Public live room route inside the tenant portal.
+      href: `/p/${tenant}/live/${pick.roomCode ?? pick.id}`,
+    }
+  }, [liveSessions, courses, tenant])
+
   return useMemo(
     () => ({
       courses: courseLites,
@@ -198,12 +298,21 @@ export function usePortalDataset(tenant: string): PortalDataset {
       testimonials,
       posts,
       storeProducts: storeProductLites,
+      // Tenant slug is passed through so renderers can scope per-tenant
+      // primitives (experiments, attribution) without re-deriving from
+      // the URL.
+      tenantSlug: tenant,
       basePath: `/p/${tenant}`,
       formatMoney: (amount: number, currency?: string) =>
         fmtMoney(amount, currency || "USD"),
+      trustStats,
+      nextLiveSession,
       submitLead,
     }),
-    [courseLites, faculty, testimonials, posts, storeProductLites, tenant, submitLead],
+    [
+      courseLites, faculty, testimonials, posts, storeProductLites,
+      tenant, submitLead, trustStats, nextLiveSession,
+    ],
   )
 }
 

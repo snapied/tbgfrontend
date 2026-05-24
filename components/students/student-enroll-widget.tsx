@@ -38,7 +38,14 @@ interface Props {
 }
 
 export function StudentEnrollWidget({ studentId }: Props) {
-  const { enrollments, courses, enrollStudent, unenrollStudent, getCourseById } = useLMS()
+  const {
+    enrollments,
+    courses,
+    enrollStudent,
+    unenrollStudent,
+    getCourseById,
+    getEnrollmentProgress,
+  } = useLMS()
   const confirm = useConfirm()
   const [pendingCourseId, setPendingCourseId] = useState("")
 
@@ -46,16 +53,33 @@ export function StudentEnrollWidget({ studentId }: Props) {
     () => enrollments.filter((e) => e.studentId === studentId),
     [enrollments, studentId],
   )
-  const enrolledCourseIds = new Set(myEnrollments.map((e) => e.courseId))
+  // Memoize so it isn't reconstructed every render — was a fresh
+  // Set per render, which busted the `availableCourses` memo below.
+  const enrolledCourseIds = useMemo(
+    () => new Set(myEnrollments.map((e) => e.courseId)),
+    [myEnrollments],
+  )
+  // Only published courses are enrollable. Drafts / archived show in
+  // the editor catalogue but can't have learners attached — enrolling
+  // someone in a draft just means they hit a half-baked course.
   const availableCourses = useMemo(
-    () => courses.filter((c) => !enrolledCourseIds.has(c.id)),
+    () =>
+      courses.filter(
+        (c) => !enrolledCourseIds.has(c.id) && c.status === "published",
+      ),
     [courses, enrolledCourseIds],
   )
 
   const handleEnroll = () => {
     if (!pendingCourseId) return
+    const course = courses.find((c) => c.id === pendingCourseId)
+    if (!course || course.status !== "published") {
+      toast.error("This course isn't published yet — pick a published one.")
+      return
+    }
     enrollStudent(pendingCourseId, studentId)
     setPendingCourseId("")
+    toast.success(`Enrolled in "${course.title}".`)
   }
 
   return (
@@ -102,7 +126,53 @@ export function StudentEnrollWidget({ studentId }: Props) {
         ) : (
           myEnrollments.map((e) => {
             const course = getCourseById(e.courseId)
-            if (!course) return null
+            // Live progress recomputed from the course's CURRENT
+            // lesson set, so stale denormalized totals or deleted
+            // lessons don't show fictional 100%s.
+            const liveProgress = getEnrollmentProgress(e.id)
+            const currentLessonTotal = course
+              ? course.modules.reduce((acc, m) => acc + m.lessons.length, 0)
+              : 0
+            const currentLessonIds = new Set(
+              (course?.modules ?? []).flatMap((m) => m.lessons.map((l) => l.id)),
+            )
+            const liveCompleted = e.completedLessons.filter((id) =>
+              currentLessonIds.has(id),
+            ).length
+            if (!course) {
+              // Orphan enrollment — the course was deleted from
+              // under this student. Surface it instead of silently
+              // hiding so the teacher can unenroll cleanly.
+              return (
+                <div
+                  key={e.id}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-dashed border-border bg-muted/30 p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium italic text-muted-foreground">
+                      Course removed
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      Enrolled {new Date(e.enrolledAt).toLocaleDateString()} · last seen{" "}
+                      {new Date(e.lastAccessedAt).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => {
+                      unenrollStudent(e.id)
+                      toast.success("Removed orphan enrollment.")
+                    }}
+                    aria-label="Remove orphan enrollment"
+                    title="Remove orphan enrollment"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )
+            }
             return (
               <div
                 key={e.id}
@@ -123,20 +193,24 @@ export function StudentEnrollWidget({ studentId }: Props) {
                     {course.title}
                   </Link>
                   <div className="mt-1 flex items-center gap-2">
-                    <Progress value={e.progress} className="max-w-32 flex-1" />
-                    <span className="text-xs text-muted-foreground">{e.progress}%</span>
+                    <Progress
+                      value={liveProgress}
+                      className="max-w-32 flex-1"
+                      aria-label={`${liveProgress}% progress`}
+                    />
+                    <span className="text-xs text-muted-foreground tabular-nums">{liveProgress}%</span>
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {e.completedLessons.length}/{course.totalLessons} lessons · Last seen{" "}
+                    {liveCompleted}/{currentLessonTotal} lessons · Last seen{" "}
                     {new Date(e.lastAccessedAt).toLocaleDateString()}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
-                  {e.progress === 100 ? (
+                  {liveProgress === 100 ? (
                     <span className="inline-flex items-center rounded-full bg-success/15 px-2.5 py-0.5 text-[10px] font-semibold text-success">
                       <Award className="mr-1 h-3 w-3" /> Completed
                     </span>
-                  ) : e.progress > 0 ? (
+                  ) : liveProgress > 0 ? (
                     <span className="inline-flex items-center rounded-full bg-accent/15 px-2.5 py-0.5 text-[10px] font-semibold text-accent">
                       <TrendingUp className="mr-1 h-3 w-3" /> In progress
                     </span>
@@ -161,6 +235,7 @@ export function StudentEnrollWidget({ studentId }: Props) {
                       toast.success(`Unenrolled from "${course.title}".`)
                     }}
                     title="Unenroll"
+                    aria-label={`Unenroll from ${course.title}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>

@@ -100,7 +100,12 @@ export default function NewAssignmentPage() {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [dueAt, setDueAt] = useState("")
-  const [maxScore, setMaxScore] = useState("100")
+  // Max score is OPTIONAL — leave blank for ungraded assignments
+  // (reflection prompts, group projects, anything the creator just
+  // wants submissions for without a numeric grade attached). Stored
+  // as 0 on the Assignment row; reader UIs check for > 0 before
+  // rendering the "/<n>" suffix or asking the grader for a number.
+  const [maxScore, setMaxScore] = useState("")
   const [saving, setSaving] = useState(false)
 
   // Audience + channel panel (mirrors the quiz creator). Defaults to
@@ -193,7 +198,10 @@ export default function NewAssignmentPage() {
     return ranked
   }, [studentGroups, courseId])
 
-  const canSubmit = courseId && title && parseInt(maxScore) > 0
+  // maxScore is OPTIONAL. Submit needs only a course + title. Empty
+  // / blank maxScore means "ungraded" — saved as 0 below, downstream
+  // readers branch on `maxScore > 0` for any "/N pts" rendering.
+  const canSubmit = !!courseId && !!title.trim()
 
   const handleSubmit = async () => {
     if (!canSubmit) return
@@ -220,7 +228,10 @@ export default function NewAssignmentPage() {
       courseId,
       kind,
       dueAt: dueAt ? new Date(dueAt).toISOString() : undefined,
-      maxScore: parseInt(maxScore),
+      // Blank / non-numeric input → 0 ("ungraded"). Negative values
+      // get floored to 0 too — the grading UI uses 0 as the
+      // "no marks" sentinel.
+      maxScore: Math.max(0, parseInt(maxScore) || 0),
       resources: [...resources, ...quizResources],
       createdAt: new Date().toISOString(),
     }
@@ -407,14 +418,18 @@ export default function NewAssignmentPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="max">Max score *</Label>
+                  <Label htmlFor="max">Max score (optional)</Label>
                   <Input
                     id="max"
                     type="number"
-                    min={1}
+                    min={0}
                     value={maxScore}
                     onChange={(e) => setMaxScore(e.target.value)}
+                    placeholder="Leave blank for ungraded"
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    Skip if you just want submissions, not a numeric grade. You can add a score later.
+                  </p>
                 </div>
               </div>
             </CardContent>

@@ -63,6 +63,11 @@ interface Props {
 
 const SEEN_KEY = "thebigclass.tour.seen.v1"
 
+// sessionStorage key for the "minimized" state of a tour prompt.
+// Per-session so a refresh restores the panel — the user might have
+// minimized it on one route and forgotten about it.
+const MINIMIZED_KEY = (tourId: string) => `thebigclass.tour.minimized.${tourId}`
+
 export function ProductTour({
   tourId,
   promptLabel = "Show me around",
@@ -72,6 +77,26 @@ export function ProductTour({
   const [showPrompt, setShowPrompt] = useState(false)
   const [active, setActive] = useState(autoStart)
   const [index, setIndex] = useState(0)
+  // Minimized state — when the user clicks the X on the bottom-right
+  // prompt we collapse it into a tiny floating sparkles icon instead
+  // of dismissing the whole panel. Click the icon to expand again.
+  const [minimized, setMinimized] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false
+    try {
+      return window.sessionStorage.getItem(MINIMIZED_KEY(tourId)) === "1"
+    } catch {
+      return false
+    }
+  })
+  const setMinimizedPersist = (v: boolean) => {
+    setMinimized(v)
+    try {
+      if (v) window.sessionStorage.setItem(MINIMIZED_KEY(tourId), "1")
+      else window.sessionStorage.removeItem(MINIMIZED_KEY(tourId))
+    } catch {
+      /* private mode — falls back to in-memory state */
+    }
+  }
 
   // Decide on mount whether to show the prompt — only if the user
   // hasn't already completed this tour. The localStorage record
@@ -132,6 +157,22 @@ export function ProductTour({
 
   if (!active && !showPrompt) return null
   if (!active && showPrompt) {
+    // Minimized: collapse the prompt into a tiny floating icon. The
+    // user can still summon the full panel with one click, but the
+    // page chrome isn't covered while they work.
+    if (minimized) {
+      return (
+        <button
+          type="button"
+          onClick={() => setMinimizedPersist(false)}
+          className="fixed bottom-6 right-6 z-40 inline-flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-card text-primary shadow-lg transition-shadow hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+          title={promptLabel}
+          aria-label={`Open tour prompt: ${promptLabel}`}
+        >
+          <Sparkles className="h-4 w-4" />
+        </button>
+      )
+    }
     return (
       <div className="fixed bottom-6 right-6 z-40">
         <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-card px-3 py-2 shadow-lg">
@@ -140,12 +181,10 @@ export function ProductTour({
           <Button size="sm" onClick={start}>Start</Button>
           <button
             type="button"
-            onClick={() => {
-              setShowPrompt(false)
-              markSeen()
-            }}
+            onClick={() => setMinimizedPersist(true)}
             className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="Dismiss tour prompt"
+            aria-label="Minimize tour prompt"
+            title="Minimize — click the sparkle to reopen"
           >
             <X className="h-3.5 w-3.5" />
           </button>

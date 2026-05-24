@@ -20,6 +20,10 @@ import { usePlan } from "@/lib/use-plan"
 import { DynamicMeta } from "@/components/seo/dynamic-meta"
 import { I18nProvider, type Locale } from "@/lib/i18n"
 import type { Dictionary } from "@/lib/i18n"
+import { useAttributionCapture } from "@/lib/attribution"
+import { WishlistTray } from "@/components/portal/wishlist-tray"
+import { BackToTop } from "@/components/portal/back-to-top"
+import { SkipToContent } from "@/components/accessibility/skip-to-content"
 
 export default function PortalLayoutClient({
   children,
@@ -33,6 +37,12 @@ export default function PortalLayoutClient({
   const { currentTenant } = useTenant()
   const { limits: planLimits } = usePlan()
   const pathname = usePathname() ?? "/"
+
+  // Capture attribution once per session. Hook is idempotent — multiple
+  // remounts inside the same session do not overwrite the touch chain.
+  // First-touch is preserved forever; subsequent visits with fresh
+  // UTMs or a foreign referrer append to the chain.
+  useAttributionCapture({ tenantSlug: tenant })
   const basePath = `/p/${tenant}`
   // Strip the /p/[tenant] prefix to get the "logical" page slug ("/",
   // "/about", "/blog/foo") so the popup config can scope by slug.
@@ -117,7 +127,18 @@ export default function PortalLayoutClient({
   const brandName = effectiveConfig.brand.siteName || currentTenant?.name || "Customer portal"
   const brandTagline = effectiveConfig.brand.tagline
   const brandLogo = effectiveConfig.brand.logoUrl
-  const brandFavicon = effectiveConfig.brand.faviconUrl || brandLogo
+  // Share image preference order: explicit ogImage (auto-generated
+  // from Brand → Share card OR hand-uploaded) > logo > nothing.
+  // We avoid sending an empty `image` because some scrapers cache
+  // the empty value and skip subsequent fetches.
+  const brandShareImage = effectiveConfig.brand.ogImage || brandLogo
+  // Favicon preference order: explicit favicon > logo > auto-derived
+  // initials data-URI. The fallback keeps tenant tabs from showing
+  // the platform default when the teacher hasn't uploaded anything.
+  const brandFavicon =
+    effectiveConfig.brand.faviconUrl ||
+    brandLogo ||
+    buildInitialsFavicon(brandName, effectiveConfig.brand.primaryColor)
   const defaultTitle = brandTagline ? `${brandName} — ${brandTagline}` : brandName
   const defaultDescription =
     brandTagline ||
@@ -164,7 +185,7 @@ export default function PortalLayoutClient({
           // their own "<page> · <brand>" composition with their own
           // titleTemplate prop.
           description={defaultDescription}
-          image={brandLogo}
+          image={brandShareImage}
           siteName={brandName}
           faviconUrl={brandFavicon}
           type="website"
@@ -177,14 +198,52 @@ export default function PortalLayoutClient({
           <>{children}</>
         ) : (
           <>
+            {/* Sprint C Brand #48 — skip-to-content link. First
+                focusable element on every public page; tab from
+                the address bar lands here and pressing Enter
+                jumps focus past the header into <main>. */}
+            <SkipToContent />
             <AnnouncementBar bar={effectiveConfig.announcementBar} tenant={tenant} />
             <PortalSiteHeader tenant={tenant} config={effectiveConfig} pages={pages} basePath={basePath} />
-            <main className="min-h-[60vh]">{children}</main>
+            <main id="main-content" tabIndex={-1} className="min-h-[60vh] focus:outline-none">{children}</main>
             <PortalSiteFooter tenant={tenant} config={effectiveConfig} basePath={basePath} />
             <Popup popups={effectiveConfig.popups} tenant={tenant} pageSlug={pageSlug} />
+            {/* Sprint B Brand #21 — wishlist tray. Self-hiding when
+                count = 0 and on the /courses route so it doesn't
+                clutter pages where it'd be redundant. */}
+            <WishlistTray tenantSlug={tenant} basePath={basePath} />
+            {/* Floating back-to-top — auto-hidden on short pages
+                via internal scroll threshold (1.5 viewports). */}
+            <BackToTop />
           </>
         )}
       </I18nProvider>
     </PortalThemeProvider>
   )
+}
+
+// Auto-generated favicon for tenants who haven't uploaded one. We
+// build a 32×32 SVG with the brand initials over a primary-coloured
+// square and return it as a data URI. The browser treats data: URIs
+// just like any other favicon source. Falls back to platform default
+// if the input is unusable.
+function buildInitialsFavicon(name: string, primaryColor?: string): string {
+  const trimmed = (name ?? "").trim()
+  if (!trimmed) return "/icon.svg"
+  const initials = trimmed
+    .split(/\s+/)
+    .map((w) => w[0])
+    .filter(Boolean)
+    .join("")
+    .slice(0, 2)
+    .toUpperCase()
+  const bg = primaryColor && /^#?[0-9a-fA-F]{6}$/.test(primaryColor.replace(/^#/, ""))
+    ? (primaryColor.startsWith("#") ? primaryColor : `#${primaryColor}`)
+    : "#0a3024"
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">` +
+    `<rect width="32" height="32" rx="6" fill="${bg}"/>` +
+    `<text x="50%" y="50%" dy="0.35em" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700" fill="white">${initials}</text>` +
+    `</svg>`
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }

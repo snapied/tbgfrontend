@@ -12,7 +12,6 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
-  Search,
   Share2,
   Trash2,
 } from "lucide-react"
@@ -33,7 +32,6 @@ import { KanbanBoard, KanbanCard, type KanbanColumn } from "@/components/kanban/
 import { useStickyView } from "@/lib/use-sticky-view"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
   Select,
@@ -53,6 +51,7 @@ import {
 import { cn } from "@/lib/utils"
 import { useLMS, type AssignmentKind } from "@/lib/lms-store"
 import { fuzzySearch } from "@/lib/fuzzy-search"
+import { SearchInput } from "@/components/ui/search-input"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
 
 // Tour for the assignments index. Walks through the three kinds
@@ -172,7 +171,7 @@ function AssignmentsPageInner() {
   ]
   const searchParams = useSearchParams()
   // Pre-select the course filter when navigated here from a course page
-  // (e.g. /dashboard/assignments?course=<id>). Teacher lands already
+  // (e.g. /dashboard/assignments?course=<id>). Instructor lands already
   // scoped to the course they were just looking at.
   const initialCourse = searchParams?.get("course") ?? "all"
   const [search, setSearch] = useState("")
@@ -212,13 +211,14 @@ function AssignmentsPageInner() {
       <Card>
         <CardContent className="p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="relative flex-1" data-tour="assignments-search">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Search…"
+            <div data-tour="assignments-search" className="flex-1">
+              <SearchInput
+                pageId="assignments"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+                onChange={setSearch}
+                placeholder="Search assignments…"
+                ariaLabel="Search assignments"
+                shortcutDescription="Focus assignment search"
               />
             </div>
             <Select value={kindFilter} onValueChange={(v) => setKindFilter(v as "all" | AssignmentKind)}>

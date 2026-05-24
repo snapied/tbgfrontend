@@ -199,6 +199,15 @@ interface TenantStore {
   updateTenant: (id: string, patch: Partial<Tenant>) => void
   deleteTenant: (id: string) => void
 
+  // Renaming the slug is a multi-step migration — not a field patch.
+  // It rewrites the tenant record, moves every tenant-namespaced
+  // localStorage bucket (portal, LMS, etc.) from the old slug to the
+  // new, flips the dev override + currentSlug pointer, and (in dev /
+  // path-based portals) returns the new path so the caller can
+  // navigate without losing context. Returns {ok:false,error} on any
+  // validation miss so the UI can show a single inline message.
+  renameTenantSlug: (id: string, nextSlug: string) => { ok: true; slug: string } | { ok: false; error: string }
+
   // Returns true if the slug is free (treating it as case-insensitive).
   isSlugAvailable: (slug: string, excludeId?: string) => boolean
   // Same idea for the two other login identifiers — owner email and WhatsApp
@@ -298,18 +307,52 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   // ---- Derived ----
   const currentTenant = useMemo<Tenant | null>(() => {
+    // 1. No slug pinned (bare host / dev with no override) — pick the
+    //    first active tenant so the dashboard works out of the box.
     if (!currentSlug) {
-      // Default: first active tenant. Lets the dashboard work out-of-the-box
-      // when no subdomain is set (dev or the platform owner's bare host).
       return tenants.find((t) => t.status === "active") ?? tenants[0] ?? null
     }
-    return tenants.find((t) => t.slug === currentSlug) ?? null
+    // 2. Exact match on the pinned slug — happy path.
+    const exact = tenants.find((t) => t.slug === currentSlug)
+    if (exact) return exact
+    // 3. No match. We DELIBERATELY return null here instead of
+    //    falling back to "first active tenant". This is the lesson
+    //    from a hard-fought regression:
+    //
+    //      Login writes OVERRIDE_KEY = "<userSlug>" then hard-navs
+    //      to /dashboard. On a fresh browser the local `tenants`
+    //      array only has the seed "platform" tenant — the user's
+    //      real workspace lives on the backend and hasn't been
+    //      mirrored locally yet. A "first active" fallback here
+    //      would silently re-target the entire dashboard to the
+    //      platform tenant, drag the LMS provider's storage keys
+    //      with it, and dump the pending-login breadcrumb against
+    //      an empty namespace — sending the user back to /login.
+    //
+    //    Returning null forces the calling code to be explicit
+    //    about the no-tenant state (the workspace-URL editor, for
+    //    instance, shows a recovery message and refuses to save).
+    //    A new `tenants` entry (from a backend pull or signup)
+    //    will surface the correct match on the next render.
+    return null
   }, [tenants, currentSlug])
 
   // ---- Actions ----
   const isSlugAvailable = useCallback(
-    (slug: string, excludeId?: string) =>
-      !tenants.some((t) => t.slug.toLowerCase() === slug.toLowerCase() && t.id !== excludeId),
+    (slug: string, excludeId?: string) => {
+      const needle = slug.trim().toLowerCase()
+      if (!needle) return false
+      // Defensive: ignore tenants whose slug is empty (a corrupt record
+      // from an older bug). Otherwise a stray empty-slug tenant would
+      // make "" claim to be "available" + would never compare equal to
+      // a real candidate anyway — but treating it as a non-slot keeps
+      // the rename UI honest.
+      return !tenants.some(
+        (t) =>
+          t.id !== excludeId &&
+          (t.slug ?? "").trim().toLowerCase() === needle,
+      )
+    },
     [tenants],
   )
 
@@ -333,15 +376,41 @@ export function TenantProvider({ children }: { children: ReactNode }) {
 
   const findTenantByLogin = useCallback(
     (identifier: string): Tenant | null => {
-      const raw = identifier.trim()
-      if (!raw) return null
-      if (raw.includes("@")) {
-        const needle = raw.toLowerCase()
-        return tenants.find((t) => t.ownerEmail.toLowerCase() === needle) ?? null
+      // Email-only login. Phone-based sign-in was removed — the
+      // workspace's WhatsApp number is still on the Tenant row for
+      // class-reminder fan-out, but no longer used as a login key.
+      const needle = identifier.trim().toLowerCase()
+      if (!needle || !needle.includes("@")) return null
+      // Fast path — the workspace owner's email is right on the
+      // Tenant row.
+      const owned = tenants.find((t) => t.ownerEmail.toLowerCase() === needle)
+      if (owned) return owned
+      // Slow path — the email might belong to an admin or instructor
+      // on someone else's workspace (e.g. a co-teacher invited
+      // later). Walk each tenant's LMS user roster (cached in
+      // localStorage under thebigclass.t.<slug>.lms.users.v1) and
+      // return the first whose roster includes this email. Without
+      // this, non-owner staff can't sign in — login succeeds at the
+      // backend but the frontend never picks a tenant so the LMS
+      // provider has no users to resolve them against.
+      if (typeof window !== "undefined") {
+        for (const t of tenants) {
+          try {
+            const raw = window.localStorage.getItem(
+              `thebigclass.t.${t.slug}.lms.users.v1`,
+            )
+            if (!raw) continue
+            const arr = JSON.parse(raw) as Array<{ email?: string }>
+            if (!Array.isArray(arr)) continue
+            if (arr.some((u) => (u.email ?? "").toLowerCase() === needle)) {
+              return t
+            }
+          } catch {
+            /* malformed slice — skip this tenant */
+          }
+        }
       }
-      const needle = normalizePhone(raw)
-      if (!needle) return null
-      return tenants.find((t) => normalizePhone(t.ownerPhone) === needle) ?? null
+      return null
     },
     [tenants],
   )
@@ -375,9 +444,12 @@ export function TenantProvider({ children }: { children: ReactNode }) {
         name: input.workspaceName.trim() || slug,
         customDomainStatus: "none",
         plan: "free",
-        status: "trial",
-        // 14-day trial.
-        trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+        // Free Starter plan is the default landing state. No trial
+        // countdown — we discontinued the 14-day trial in favour of a
+        // free-forever Starter + 30-day money-back on paid plans. New
+        // workspaces are "active" from day one, billing kicks in only
+        // when the user explicitly upgrades.
+        status: "active",
         ownerEmail: input.ownerEmail.trim().toLowerCase(),
         ownerName: input.ownerName.trim() || input.ownerEmail.split("@")[0],
         ownerPhone: phone,
@@ -399,8 +471,139 @@ export function TenantProvider({ children }: { children: ReactNode }) {
   )
 
   const updateTenant = useCallback((id: string, patch: Partial<Tenant>) => {
+    // Guardrail: the slug rename has a real cost — localStorage keys,
+    // override pointer, currentSlug state, and (long-term) every link
+    // anyone has shared. updateTenant is the wrong tool for that job.
+    // Force callers through renameTenantSlug, which migrates state +
+    // storage atomically. We strip slug from the patch silently rather
+    // than throwing so a partial patch (e.g. updateTenant(id,{name,
+    // slug})) still applies the safe fields.
+    if ("slug" in patch) {
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(
+          "[tenant-store] updateTenant cannot change `slug` — use renameTenantSlug instead.",
+        )
+      }
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { slug: _ignored, ...safe } = patch
+      patch = safe
+    }
     setTenants((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)))
   }, [])
+
+  const renameTenantSlug = useCallback(
+    (id: string, nextSlugRaw: string): { ok: true; slug: string } | { ok: false; error: string } => {
+      // 1. Normalise + validate. We replicate the dashboard's normalize
+      //    here so a programmatic caller (tests, future API) gets the
+      //    same cleanup as the UI without depending on the form.
+      const nextSlug = (nextSlugRaw ?? "")
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "")
+        .replace(/-+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 32)
+      const formatErr = validateSlug(nextSlug)
+      if (formatErr) return { ok: false, error: formatErr }
+      // 2. Resolve the target tenant + bail on no-op renames.
+      const target = tenants.find((t) => t.id === id)
+      if (!target) return { ok: false, error: "Workspace not found — refresh and try again." }
+      const prevSlug = (target.slug ?? "").trim().toLowerCase()
+      if (prevSlug === nextSlug) return { ok: true, slug: nextSlug }
+      // 3. Uniqueness — exclude self so the user can re-canonicalise
+      //    their own slug (e.g. uppercase → lowercase).
+      const collision = tenants.some(
+        (t) => t.id !== id && (t.slug ?? "").trim().toLowerCase() === nextSlug,
+      )
+      if (collision) return { ok: false, error: "That workspace URL is taken — try another." }
+      // 4. Migrate every `thebigclass.t.<prevSlug>.*` localStorage key
+      //    to the new slug. Without this, the tenant's portal config,
+      //    LMS data, brand, pages — everything — stays under the old
+      //    namespace and the renamed workspace looks empty after
+      //    refresh. We OVERWRITE the target's existing keys if any
+      //    exist, because the new slug should be a brand-new namespace
+      //    (we already verified above that no other tenant claims it).
+      if (typeof window !== "undefined" && prevSlug) {
+        try {
+          const sourcePrefix = `thebigclass.t.${prevSlug}.`
+          const targetPrefix = `thebigclass.t.${nextSlug}.`
+          const keys = Object.keys(window.localStorage).filter((k) =>
+            k.startsWith(sourcePrefix),
+          )
+          for (const k of keys) {
+            const value = window.localStorage.getItem(k)
+            if (value == null) continue
+            const targetKey = targetPrefix + k.slice(sourcePrefix.length)
+            window.localStorage.setItem(targetKey, value)
+            window.localStorage.removeItem(k)
+          }
+        } catch {
+          // Storage quota / private browsing — the tenants array
+          // update below still goes through, but the data won't follow.
+          // Better than blocking the rename entirely.
+        }
+      }
+      // 5. Patch the tenant record.
+      setTenants((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, slug: nextSlug } : t)),
+      )
+      // 6. If the renamed tenant is the one the browser is currently
+      //    viewing, flip the override + the in-memory currentSlug.
+      //    Without this, currentTenant becomes null on the very next
+      //    render (because the lookup is keyed by the OLD slug) and
+      //    every downstream component that reads currentTenant breaks.
+      //
+      //    Two ways to detect "this is the active workspace":
+      //      a) the OVERRIDE_KEY / currentSlug points at the previous
+      //         slug — happy path
+      //      b) currentTenant resolves to this id (even if currentSlug
+      //         is stale or empty) — recovery path for the bug where
+      //         the slug got cleared and the override drifted out of
+      //         sync. Without this branch, a tenant with a corrupted
+      //         empty slug would never reconnect after rename.
+      const currentResolved = (currentSlug ?? "").trim().toLowerCase()
+      // Recompute "is this the active workspace?" from raw state so
+      // the closure doesn't depend on the memoised currentTenant
+      // (which is unsuitable as a dep — including it would churn this
+      // callback on every render).
+      const activeTenant = currentResolved
+        ? tenants.find((t) => (t.slug ?? "").trim().toLowerCase() === currentResolved)
+        : tenants.find((t) => t.status === "active") ?? tenants[0]
+      const isActive =
+        currentResolved === prevSlug ||
+        activeTenant?.id === id ||
+        // No override at all + this is the only tenant → renaming
+        // their solo workspace, so make the new slug the override
+        // so refresh keeps the browser on it.
+        (!currentResolved && tenants.length === 1)
+      if (isActive) {
+        setDevTenantOverride(nextSlug)
+        setCurrentSlug(nextSlug)
+      }
+      // 7. Backend rename — fire-and-forget. Without this, the
+      //    workspace's canonical Postgres rows stay at the old slug
+      //    forever and a visitor hitting the old URL would still see
+      //    valid (now-orphaned) data. We don't await it because the
+      //    UI has already moved on; the backend swap is purely a
+      //    cleanup. If the call fails, the rename still succeeds
+      //    locally — a follow-up edit will repopulate the new slug
+      //    from localStorage on next autosave, and the orphan rows
+      //    can be cleaned manually.
+      if (typeof window !== "undefined" && prevSlug) {
+        void fetch("/api/portal-state/rename", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from: prevSlug, to: nextSlug }),
+          keepalive: true,
+        }).catch(() => {
+          /* see comment above — we tolerate the failure */
+        })
+      }
+      return { ok: true, slug: nextSlug }
+    },
+    [tenants, currentSlug],
+  )
 
   const deleteTenant = useCallback((id: string) => {
     setTenants((prev) => prev.filter((t) => t.id !== id))
@@ -470,6 +673,7 @@ export function TenantProvider({ children }: { children: ReactNode }) {
     isHydrated: tenantsHydrated,
     registerTenant,
     updateTenant,
+    renameTenantSlug,
     deleteTenant,
     isSlugAvailable,
     isEmailAvailable,

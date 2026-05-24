@@ -148,6 +148,44 @@
   body {
     @apply bg-background text-foreground;
   }
+        /* Sprint C Brand #48 — accessible focus ring baseline. Every
+           interactive element that doesn't already define a custom
+           focus-visible style gets a 2px ring of the primary colour
+           with a 2px offset so the indicator is visible against any
+           background — including the dark navy hero. We scope to
+           focus-visible (not focus) so mouse users don't see rings on
+           click, only keyboard users get the affordance. */
+        a:focus-visible,
+        button:focus-visible,
+        [role="button"]:focus-visible,
+        [role="tab"]:focus-visible,
+        [role="link"]:focus-visible,
+        input:focus-visible,
+        select:focus-visible,
+        textarea:focus-visible,
+        summary:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--primary);
+          border-radius: 4px;
+        }
+    
+        /* Reduced-motion safety net. Anything we animate by default in
+           this app (entrance transitions, sliding sheets, the wishlist
+           tray pop, the live-state pulse on the hero) should respect
+           the OS-level preference. Browsers don't automatically do this
+           for CSS transitions — only for prefers-reduced-motion-aware
+           media queries. */
+        @media (prefers-reduced-motion: reduce) {
+    
+          *,
+          *::before,
+          *::after {
+            animation-duration: 0.001ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.001ms !important;
+            scroll-behavior: auto !important;
+          }
+        }
 }
 
 /* Custom modern scrollbars */
@@ -432,3 +470,14 @@
   padding-top: 0 !important;
   padding-bottom: 0 !important;
 } */
+.tenant-name {
+  text-transform: uppercase;
+}
+
+div[role="dialog"] {
+  background-color: #fff !important;
+}
+
+.p-relative {
+  position: relative !important;
+}

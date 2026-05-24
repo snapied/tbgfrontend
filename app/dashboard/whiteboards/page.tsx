@@ -7,7 +7,7 @@
 // /dashboard/whiteboards/[id]. Metadata is in lms-store; canvas state lives in
 // IndexedDB via tldraw's persistenceKey.
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
@@ -19,6 +19,9 @@ import {
   Presentation,
   Lightbulb,
   CalendarRange,
+  Link2,
+  BookOpen,
+  Users2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,30 +38,90 @@ import { toastUndoableDelete } from "@/lib/toast-undo"
 import { toast } from "sonner"
 import { EmptyStateWithTemplates } from "@/components/dashboard/empty-state-templates"
 import { usePageShortcut } from "@/components/dashboard/shortcuts-provider"
+import { TemplatePickerDialog } from "@/components/whiteboard/template-picker-dialog"
+import {
+  seedTemplateForBoard,
+  WHITEBOARD_TEMPLATES,
+  type TemplateKey,
+} from "@/lib/whiteboard-templates"
+import { SearchInput } from "@/components/ui/search-input"
+import { fuzzySearch } from "@/lib/fuzzy-search"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { WhiteboardConnectDialog } from "@/components/whiteboard/whiteboard-connect-dialog"
+import { CrossPosterDialog } from "@/components/ui/cross-poster-dialog"
+import { Send } from "lucide-react"
 
 export default function WhiteboardsPage() {
   const router = useRouter()
-  const { whiteboards, addWhiteboard, updateWhiteboard, deleteWhiteboard, currentUser } = useLMS()
+  const { whiteboards, addWhiteboard, updateWhiteboard, deleteWhiteboard, currentUser, getUserById } = useLMS()
   const confirm = useConfirm()
   const [renamingId, setRenamingId] = useState<string | null>(null)
   const [renameDraft, setRenameDraft] = useState("")
+  // Search query for the board list. Fuzzy-matched against board
+  // title + the owner's display name, so a teacher can find a
+  // colleague's board by either signal.
+  const [search, setSearch] = useState("")
+  // Connect-dialog target — when set, opens the "Use this board in…"
+  // dialog with the corresponding board pre-filled.
+  const [connectBoardId, setConnectBoardId] = useState<string | null>(null)
+  const connectBoard = useMemo(
+    () => (connectBoardId ? whiteboards.find((b) => b.id === connectBoardId) ?? null : null),
+    [connectBoardId, whiteboards],
+  )
+  // CrossPoster — separate slot from the lesson-attach connect dialog
+  // because the share-to-channels flow is a distinct intent (broadcast)
+  // vs. attach (workflow plumbing).
+  const [shareBoardId, setShareBoardId] = useState<string | null>(null)
+  const shareBoard = useMemo(
+    () => (shareBoardId ? whiteboards.find((b) => b.id === shareBoardId) ?? null : null),
+    [shareBoardId, whiteboards],
+  )
+  // Template picker — opened by clicking "+ New board" anywhere on the
+  // page. We deliberately route every new-board click through this
+  // dialog (instead of jumping straight to a blank canvas) because the
+  // teacher's most-used flows have a structured starting point, and
+  // forcing a picker tap is cheaper than the alternative of redrawing
+  // the same lesson-plan grid by hand on every new board.
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const sorted = whiteboards
     .slice()
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 
-  // `createBoardWithTitle` is the underlying creator — accepts an
-  // optional title so template buttons can name the board upfront.
-  // `handleCreate` is the no-arg click-handler wrapper used by the
-  // existing UI (the +New tile, etc.), so MouseEvent isn't silently
-  // coerced into a title string.
-  const createBoardWithTitle = (title?: string) => {
+  const filtered = useMemo(
+    () =>
+      fuzzySearch(sorted, search, (b) => [
+        b.title,
+        getUserById(b.createdBy)?.name ?? "",
+      ]),
+    [sorted, search, getUserById],
+  )
+
+  // Initials fallback for the owner avatar when the user has no
+  // uploaded photo.
+  const initialsOf = (name: string): string => {
+    const tokens = name.trim().split(/\s+/).filter(Boolean)
+    if (tokens.length === 0) return "??"
+    if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase()
+    return (tokens[0][0] + tokens[tokens.length - 1][0]).toUpperCase()
+  }
+
+  // Materialise a new board with optional template-seeded scene. The
+  // scene is seeded into localStorage at the persistence key BEFORE
+  // we navigate, so the canvas reads the template on first mount
+  // (server has no record for a brand-new id, so the local cache
+  // wins). After the user makes their first edit, the canvas's own
+  // debounced save flushes the scene to the backend like any other
+  // board.
+  const createBoardWithTemplate = (template: TemplateKey) => {
     const id = generateId("wb")
+    const meta = WHITEBOARD_TEMPLATES.find((t) => t.key === template)
+    const title =
+      meta?.defaultBoardTitle?.trim() ||
+      `Whiteboard · ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`
     const board: Whiteboard = {
       id,
-      title:
-        title?.trim() ||
-        `Whiteboard · ${new Date().toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}`,
+      title,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       createdBy: currentUser?.id ?? "unknown",
@@ -66,17 +129,32 @@ export default function WhiteboardsPage() {
       // instead of double-prefixing.
       persistenceKey: id,
       // Whiteboards default to workspace-wide visibility — most boards
-      // are shared brainstorms, not personal scratchpads. Teachers can
+      // are shared brainstorms, not personal scratchpads. Instructors can
       // flip to private from the board's settings dropdown when they
       // genuinely want a solo canvas.
       visibility: "public",
     }
+    // Seed BEFORE addWhiteboard / navigation so the canvas sees the
+    // local cache on its very first read. seedTemplateForBoard is a
+    // no-op for "blank".
+    seedTemplateForBoard(id, template)
     addWhiteboard(board)
+    setPickerOpen(false)
     router.push(`/dashboard/whiteboards/${id}`)
   }
-  const handleCreate = () => createBoardWithTitle()
+  // Legacy wrapper kept for the empty-state EmptyStateWithTemplates
+  // tiles below — they pre-select a template and don't need the
+  // picker. Maps a title back to a known template key.
+  const createBoardWithTitle = (title?: string) => {
+    if (!title) return createBoardWithTemplate("blank")
+    const match = WHITEBOARD_TEMPLATES.find(
+      (t) => t.defaultBoardTitle.toLowerCase() === title.toLowerCase(),
+    )
+    createBoardWithTemplate(match ? match.key : "blank")
+  }
+  const handleCreate = () => setPickerOpen(true)
 
-  // "n" creates a fresh blank board (same as the +New tile).
+  // "n" opens the template picker (same as the +New tile).
   usePageShortcut({
     id: "whiteboards:new",
     keys: "n",
@@ -152,6 +230,19 @@ export default function WhiteboardsPage() {
         </Button>
       </div>
 
+      {/* Search — "/" focuses, fuzzy matches against title + owner name */}
+      {sorted.length > 0 && (
+        <SearchInput
+          pageId="whiteboards-list"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search boards by title or owner — typos OK"
+          ariaLabel="Search whiteboards"
+          shortcutDescription="Focus whiteboard search"
+          className="max-w-md"
+        />
+      )}
+
       {sorted.length === 0 ? (
         // Empty state — three pre-named starting points + a blank
         // escape hatch. Each tile creates a board with the chosen
@@ -213,7 +304,10 @@ export default function WhiteboardsPage() {
           </button>
 
           {/* ── Existing board tiles ── */}
-          {sorted.map((b, i) => (
+            {filtered.map((b, i) => {
+              const owner = getUserById(b.createdBy)
+              const ownerName = owner?.name ?? "Unknown"
+              return (
             <div
               key={b.id}
               className="group relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-primary/30"
@@ -256,17 +350,47 @@ export default function WhiteboardsPage() {
               </Link>
 
               {/* Footer */}
-              <div className="flex items-center justify-between gap-2 px-3 py-2.5">
-                <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2 px-3 py-2.5">
+                  <div className="min-w-0 flex-1 space-y-1.5">
                   <p className="truncate text-[13px] font-semibold leading-tight">{b.title}</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Edited {relativeTime(b.updatedAt)}
-                  </p>
+                    {/* Owner pill — avatar + name. Same pattern we'll
+                      reuse on the quizzes list for cross-page parity. */}
+                    <div className="flex items-center gap-1.5">
+                      <Avatar className="h-5 w-5">
+                        {owner?.avatar ? (
+                          <AvatarImage src={owner.avatar} alt={ownerName} />
+                        ) : null}
+                        <AvatarFallback className="text-[9px] font-semibold">
+                          {initialsOf(ownerName)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="truncate text-[11px] font-medium text-foreground/80" title={ownerName}>
+                        {ownerName}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">·</span>
+                      <span className="shrink-0 text-[11px] text-muted-foreground">
+                        {relativeTime(b.updatedAt)}
+                      </span>
+                    </div>
                 </div>
 
                 {/* Action buttons — visible on hover (always accessible via focus) */}
                 <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
                   <button
+                      onClick={() => setConnectBoardId(b.id)}
+                      title="Attach to a lesson or community"
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                    >
+                      <Link2 className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setShareBoardId(b.id)}
+                      title="Share to LinkedIn / X / WhatsApp / email / communities"
+                      className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </button>
+                    <button
                     onClick={() => handleRenameOpen(b)}
                     title="Rename"
                     className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
@@ -289,9 +413,84 @@ export default function WhiteboardsPage() {
                   </button>
                 </div>
               </div>
+
+                {/* Where-used row — only shown when the board is wired
+                  into a lesson or community. Pills are subtle so a
+                  freshly-created board (with no connections) stays
+                  visually clean. */}
+                {((b.attachedToLessons?.length ?? 0) > 0 ||
+                  (b.postedToBatches?.length ?? 0) > 0) && (
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-border/60 px-3 py-1.5">
+                      {(b.attachedToLessons?.length ?? 0) > 0 && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700"
+                          title="Attached to lessons"
+                        >
+                          <BookOpen className="h-2.5 w-2.5" />
+                          {b.attachedToLessons!.length} {b.attachedToLessons!.length === 1 ? "lesson" : "lessons"}
+                        </span>
+                      )}
+                      {(b.postedToBatches?.length ?? 0) > 0 && (
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+                          title="Shared into communities"
+                        >
+                          <Users2 className="h-2.5 w-2.5" />
+                          {b.postedToBatches!.length} {b.postedToBatches!.length === 1 ? "community" : "communities"}
+                        </span>
+                      )}
+                    </div>
+                  )}
+              </div>
+            )
+          })}
+
+            {/* "No matches" state — shows when search comes up empty but
+              the user does have boards (so the empty-state branch
+              above doesn't fire). Keeps the +New tile rendered so the
+              teacher can act from here. */}
+            {filtered.length === 0 && search.trim().length > 0 && (
+              <div className="col-span-full rounded-2xl border border-dashed border-border bg-muted/20 p-8 text-center text-sm text-muted-foreground">
+                No boards match &ldquo;{search}&rdquo;. Try a different search.
             </div>
-          ))}
+            )}
         </div>
+      )}
+
+      {/* Template picker — shown on every new-board click. */}
+      <TemplatePickerDialog
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onPick={createBoardWithTemplate}
+      />
+
+      {/* "Use this board in…" — opens with the chosen board pre-filled. */}
+      {connectBoard && (
+        <WhiteboardConnectDialog
+          open={!!connectBoardId}
+          onOpenChange={(o) => !o && setConnectBoardId(null)}
+          board={connectBoard}
+        />
+      )}
+
+      {/* Cross-poster — multi-channel broadcast. Distinct from the
+          connect dialog (which is workflow plumbing — "embed this
+          board in a lesson"). This is broadcast: "tell my audience". */}
+      {shareBoard && (
+        <CrossPosterDialog
+          open={!!shareBoardId}
+          onOpenChange={(o) => !o && setShareBoardId(null)}
+          artifact={{
+            kind: "whiteboard",
+            title: shareBoard.title,
+            description: "Interactive board — open to view, comment, or fork.",
+            url:
+              typeof window !== "undefined"
+                ? `${window.location.origin}/dashboard/whiteboards/${shareBoard.id}`
+                : `/dashboard/whiteboards/${shareBoard.id}`,
+            thumbnailUrl: shareBoard.thumbnail,
+          }}
+        />
       )}
 
       {/* Rename dialog */}

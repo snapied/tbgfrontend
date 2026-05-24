@@ -324,7 +324,7 @@ export default function DoubtsInboxPage() {
                             return (
                               <div key={r.id} className="rounded-lg bg-primary/5 p-3">
                                 <p className="text-[11px] font-semibold text-muted-foreground">
-                                  {replier?.name ?? "Teacher"} · {new Date(r.createdAt).toLocaleString()}
+                                  {replier?.name ?? "Instructor"} · {new Date(r.createdAt).toLocaleString()}
                                 </p>
                                 <RichTextContent html={r.body} className="mt-1 text-sm" />
                               </div>

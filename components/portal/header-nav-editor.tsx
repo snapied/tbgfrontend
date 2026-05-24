@@ -4,7 +4,7 @@
 // in the public site's header. Two modes:
 //
 //   1. Auto (default): nav is auto-built from pages with showInNav=true,
-//      plus optional Courses / Teachers / Blog tiles.
+//      plus optional Courses / Instructors / Blog tiles.
 //   2. Curated: explicit list of nav items the teacher set themselves.
 //
 // CTAs (primary + secondary) work in both modes — they live to the
@@ -15,6 +15,7 @@ import { ArrowDown, ArrowUp, Plus, Trash2, Sparkles, FileText, Heart, BookOpen, 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { StableInput } from "@/components/ui/stable-input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
@@ -37,7 +38,7 @@ const BUILT_IN_META: Record<
   { label: string; href: string; icon: typeof BookOpen; flag: keyof PortalNavConfig }
 > = {
   courses:  { label: "Courses",       href: "/courses",  icon: BookOpen,    flag: "showCourses" },
-  teachers: { label: "Teachers",      href: "/teachers", icon: Users,       flag: "showTeachers" },
+  teachers: { label: "Instructors", href: "/instructors", icon: Users, flag: "showTeachers" },
   store:    { label: "Shop",          href: "/store",    icon: ShoppingBag, flag: "showStore" },
   blog:     { label: "Blog",          href: "/blog",     icon: Newspaper,   flag: "showBlog" },
   wall:     { label: "Wall of Love",  href: "/wall",     icon: Heart,       flag: "showWall" },
@@ -155,9 +156,9 @@ export function HeaderNavEditor({ nav, onChange }: Props) {
         ) : (
           items.map((it, i) => (
             <div key={i} className="flex items-center gap-2">
-              <Input
+              <StableInput
                 value={it.label}
-                onChange={(e) => updateItem(i, { label: e.target.value })}
+                onChange={(v) => updateItem(i, { label: v })}
                 placeholder="Label"
                 className="w-40 shrink-0"
               />
@@ -392,9 +393,9 @@ function CtaCard({
           )}
         </div>
         <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
-          <Input
+          <StableInput
             value={cta?.label ?? ""}
-            onChange={(e) => onChange({ label: e.target.value })}
+            onChange={(v) => onChange({ label: v })}
             placeholder={accent === "primary" ? "Enroll" : "Sign in"}
           />
           <PathInput

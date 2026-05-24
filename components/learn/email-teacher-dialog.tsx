@@ -280,11 +280,16 @@ export function EmailTeacherDialog({
     }, 2000)
   }
 
+  // Prominent variant lives on the dark hero of the course detail
+  // page. Was amber (text-accent) which read as a warning/error
+  // pill against the navy hero — a hesitant buyer should not feel
+  // like emailing the teacher is a "risky" action. Switched to a
+  // calm frosted-white pill that reads as a friendly secondary CTA.
   const trigger =
     variant === "prominent" ? (
       <button
         type="button"
-        className="inline-flex items-center gap-2 rounded-full border border-accent/40 bg-accent/15 px-5 py-2.5 text-sm font-semibold text-accent shadow-sm backdrop-blur transition hover:bg-accent/25 hover:shadow-md"
+        className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-5 py-2.5 text-sm font-semibold text-white shadow-sm backdrop-blur transition hover:bg-white/20 hover:shadow-md"
       >
         <Mail className="h-4 w-4" />
         Have a question? Email the teacher
