@@ -136,14 +136,16 @@ export function PasswordStrengthInput({
     meetsScore &&
     (!confirmShown || (!!confirmValue && confirmValue === value))
 
-  // Propagate validity outward whenever it could have changed. We
-  // re-fire onChange with the same value so the parent always knows
-  // the current valid state — without forcing the parent to mirror
-  // every internal field into its own state.
+  // Propagate (value, valid) upward whenever either changes. The deps
+  // must include `value`, not just `valid` — when the password stays
+  // strong across keystrokes, `valid` doesn't transition, but the
+  // keystroke handler optimistically passes the OLD `valid` reference.
+  // This effect is what guarantees the parent sees the post-rescore
+  // validity once zxcvbn settles.
   useEffect(() => {
     onChange(value, valid)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valid])
+  }, [value, valid])
 
   const bars = useMemo(() => {
     const filled = score?.score ?? -1
@@ -165,7 +167,7 @@ export function PasswordStrengthInput({
             id={id}
             type={show ? "text" : "password"}
             value={value}
-            onChange={(e) => onChange(e.target.value, false)}
+            onChange={(e) => onChange(e.target.value, valid)}
             autoFocus={autoFocus}
             autoComplete="new-password"
             disabled={disabled}
