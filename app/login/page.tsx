@@ -376,7 +376,7 @@ function LoginPageInner() {
             &quot;The Big Class has transformed how we issue certificates. What used to take days now takes minutes.&quot;
           </blockquote>
           <div className="mt-6">
-            <p className="font-semibold text-white">Dr. Sarah Chen</p>
+            <p className="font-semibold text-white">Dr. Emily</p>
             <p className="text-sm text-white/80">Director of Training, TechEd Institute</p>
           </div>
 
