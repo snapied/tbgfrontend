@@ -20,6 +20,14 @@ import { Toaster } from '@/components/ui/sonner'
 // repaint when a teacher picks a new brand color.
 import './globals.css'
 
+// Skip static prerendering for every route. This app's data lives in
+// browser localStorage (LMS, tenants, docs, etc.) and every page is
+// effectively client-rendered, so prerendering produces empty shells
+// and trips up Next's CSR-bailout checks (useSearchParams without a
+// Suspense boundary, etc.). Forcing dynamic at the root layer cascades
+// to all child segments.
+export const dynamic = "force-dynamic"
+
 const inter = Inter({ 
   subsets: ["latin"],
   variable: '--font-inter'
