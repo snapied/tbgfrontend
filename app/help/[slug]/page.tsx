@@ -738,18 +738,6 @@ Retry-After: 12      # only on 429 responses` },
     ],
   },
 
-  "blog-publish": {
-    title: "Compose + publish blog posts (with SEO)",
-    lede: "Tiptap-powered rich editor, scheduling, tags, cover image. Per-post SEO controls override the auto-derived meta. Comments + likes optional per post.",
-    audience: "creator",
-    keywords: ["blog publishing platform", "course platform blog", "SEO blog post"],
-    updated: "2026-05-19",
-    sections: [
-      { kind: "p", body: "/dashboard/portal/blog. Write in the rich editor; we save drafts on every keystroke. Schedule a publish date or hit publish now. Per-post SEO panel covers title, description, og image, and noindex toggle." },
-      { kind: "callout", tone: "info", body: "Authored content stays in whatever language you wrote it — the i18n layer only translates platform chrome." },
-    ],
-  },
-
   // ============================================================
   // Portal surfaces
   // ============================================================
@@ -1924,6 +1912,569 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
       { slug: "analytics-dashboard", label: "What the analytics dashboard tracks" },
     ],
     keywords: ["experiments", "ab test", "a/b testing", "conversion", "split test"],
+  },
+
+  // ---------- In-class wedges (May 2026 sprint) ----------
+  "live-polls": {
+    title: "Run a live poll during class",
+    lede: "Drop a 2–4 option poll into the live room. Students vote inside the call, results render in real time, and a notification fans out to every enrolled student + invited co-instructor.",
+    audience: "creator",
+    updated: "2026-05-22",
+    keywords: ["live poll", "in-class poll", "engagement", "student voting", "notification"],
+    sections: [
+      { kind: "h2", text: "Launch a poll" },
+      { kind: "p", body: "Open the host view at /dashboard/classes/<id>/host. The right-rail Poll panel has a composer pinned at the top — type a question, add 2–4 options, hit Launch. The poll appears for every joined participant within ~500ms via the in-call data channel." },
+      { kind: "h2", text: "What students see" },
+      { kind: "ul", items: [
+        "An overlay card with the question and tap-to-vote chips.",
+        "After voting, the card flips to live results — bar per option with vote count + percentage.",
+        "Their vote is sticky across reconnects (we key it to participant id, not socket).",
+      ]},
+      { kind: "h2", text: "Notification fan-out" },
+      { kind: "p", body: "The moment you launch the poll, every enrolled student and every invited co-instructor on the course gets a notification — in-app bell + (per their channel preferences) email or WhatsApp. The notification deep-links straight to the live URL so they can vote even if they're on another tab." },
+      { kind: "p", body: "When you close the poll, a second notification ships with the result: winner label, vote count, and percentage. Re-watchers see the question + the result baked into the recording so it stays referenceable after the class." },
+      { kind: "callout", tone: "info", body: "Hosts don't receive their own poll notifications — recipients = enrolled ∪ co-instructors, minus the launching host." },
+    ],
+    related: [
+      { slug: "raised-hands", label: "How the raised-hand queue works" },
+      { slug: "in-class-agenda", label: "Mark agenda items done in class" },
+      { slug: "class-chat-transcript", label: "Class chat persists to the recording" },
+    ],
+  },
+
+  "raised-hands": {
+    title: "How the raised-hand queue works",
+    lede: "Students signal a question without unmuting. Host sees a queue ordered by raise time with a one-click Answer button and a 'Live #N' badge.",
+    audience: "creator",
+    updated: "2026-05-21",
+    keywords: ["raised hand", "queue", "q&a", "questions", "live class"],
+    sections: [
+      { kind: "h2", text: "Student side" },
+      { kind: "p", body: "In the live call, students tap the raised-hand icon in the bottom bar. Their hand goes up immediately — others in the room see a small ✋ over their tile. They can lower it any time, or the host can clear it after answering." },
+      { kind: "h2", text: "Host queue" },
+      { kind: "p", body: "The host's right-rail Hands panel shows everyone who's raised, ordered by raise time (oldest first). Each row has the student name, how long their hand has been up, and an Answer button. Click Answer to clear them from the queue and signal you're addressing them now." },
+      { kind: "ul", items: [
+        "Order by raise time — fair-first-in-first-out.",
+        "Live #N badge on the panel so you see backlog depth at a glance.",
+        "Persists across host reconnects — the queue lives on the data channel, not the host browser.",
+        "Auto-clears when the room ends.",
+      ]},
+      { kind: "callout", tone: "info", body: "Hands are scoped to the current session. Closing the room wipes the queue — there's no notion of a hand persisted into a future class." },
+    ],
+    related: [
+      { slug: "live-polls", label: "Run a live poll during class" },
+      { slug: "in-class-agenda", label: "Mark agenda items done in class" },
+    ],
+  },
+
+  "in-class-agenda": {
+    title: "Mark agenda items done in class",
+    lede: "Add an agenda when you schedule the class. During the call, mark items done, skipped, or timestamped. Late joiners get a one-line recap of what they missed.",
+    audience: "creator",
+    updated: "2026-05-20",
+    keywords: ["agenda", "class checklist", "pacing", "lesson plan"],
+    sections: [
+      { kind: "h2", text: "Set the agenda" },
+      { kind: "p", body: "Open the class edit form → Agenda section. Add items in order; each is a short string ('Recap last week', 'New material', 'Q&A'). The agenda renders in the host's right rail during the call and in the student waiting room before it." },
+      { kind: "h2", text: "During the class" },
+      { kind: "ul", items: [
+        "Click an item to mark it Done — a timestamp is captured.",
+        "Right-click (or long-press on mobile) to mark Skipped instead.",
+        "Done count chip ('3 / 7') sits at the top of the panel — a live pacing signal.",
+        "Late joiners see a 'You missed: <list of done items>' banner when they enter, so they're not lost.",
+      ]},
+      { kind: "h2", text: "After the class" },
+      { kind: "p", body: "Done items + timestamps roll into the wrap wizard's summary draft. If you used the AI summary button, the agenda items seed the prompt so the recap reflects what actually happened, not what you planned." },
+    ],
+    related: [
+      { slug: "raised-hands", label: "How the raised-hand queue works" },
+      { slug: "live-classes-schedule", label: "Schedule a live class" },
+    ],
+  },
+
+  "recording-chapters": {
+    title: "Auto-chapters from your transcript",
+    lede: "Every recording auto-generates chapter markers from the transcript. Transition phrases like 'now let's talk about…' become seekable chapter points in the player.",
+    audience: "creator",
+    updated: "2026-05-21",
+    keywords: ["chapters", "recording", "transcript", "video chapters", "navigation"],
+    sections: [
+      { kind: "h2", text: "How chapters are generated" },
+      { kind: "p", body: "When a recording's WebVTT transcript is available, we scan cues for transition markers — phrases like 'now let's talk about', 'moving on to', 'next up', 'finally'. Each match becomes a candidate chapter at the cue's start time. We dedupe candidates within 90 seconds of each other so you never get a chapter cluster." },
+      { kind: "h2", text: "Output" },
+      { kind: "ul", items: [
+        "5–12 chapters per recording (capped to keep the player chip rail readable).",
+        "Minimum 90s spacing between chapters.",
+        "Chip rail rendered below the video — click any chip to seek.",
+        "Stored in the same recording metadata as the WebVTT URL; no extra processing step.",
+      ]},
+      { kind: "h2", text: "When chapters don't show up" },
+      { kind: "p", body: "If there's no transcript, or the transcript has no recognised transition phrases, the chapter chip rail is hidden — we don't show empty UI. Add a transcript (or let the auto-transcription service finish) and reload the player to pick them up." },
+      { kind: "callout", tone: "info", body: "The chapter parser is heuristic, not semantic. If your lecturing style doesn't include explicit transitions, expect fewer chapters — that's the system being honest rather than inventing fake structure." },
+    ],
+    related: [
+      { slug: "recordings-index", label: "How the recordings index works" },
+      { slug: "recording-player-dialog", label: "The recording player dialog" },
+      { slug: "class-chat-transcript", label: "Class chat persists to the recording" },
+    ],
+  },
+
+  "community-classes-tab": {
+    title: "Surface your class series in the community",
+    lede: "Every community attached to a course now has a Classes tab — upcoming live sessions, past recordings with watched badges, and a cohort window banner.",
+    audience: "creator",
+    updated: "2026-05-22",
+    keywords: ["community", "classes tab", "cohort", "common room", "recordings"],
+    sections: [
+      { kind: "h2", text: "Where it lives" },
+      { kind: "p", body: "Open any community whose attached course has live classes — there's now a Classes tab alongside Feed, Members, and Resources. The tab is hidden when the course has no live classes, so you don't get an empty surface." },
+      { kind: "h2", text: "What it shows" },
+      { kind: "ul", items: [
+        "Upcoming live sessions for the course, in chronological order.",
+        "A live banner with a Join button when the host opens the room.",
+        "Recordings grid with per-viewer watched / in-progress / unwatched badges.",
+        "Cohort window banner ('wraps in N days') when the course has an end date.",
+      ]},
+      { kind: "h2", text: "Auto-recap" },
+      { kind: "p", body: "When the host finishes a class via the wrap wizard, a recap post auto-publishes into the community feed — title, summary, attendance, and the recording link. Re-watchers and absentees see what they missed without you having to copy-paste anything." },
+    ],
+    related: [
+      { slug: "cohort-window", label: "Cohort window dates" },
+      { slug: "community-auto-join", label: "Community auto-join on enrolment" },
+      { slug: "recording-chapters", label: "Auto-chapters from your transcript" },
+    ],
+  },
+
+  "instructor-bio-sync": {
+    title: "Two-field bio model + AI help",
+    lede: "Instructor profiles have a short bio (≤55 chars for cards) and a long About (rich text). Both auto-sync between the faculty form and the workspace profile page. AI 'Help me write' drafts three opinionated variants.",
+    audience: "creator",
+    updated: "2026-05-22",
+    keywords: ["instructor", "bio", "faculty profile", "ai bio", "wysiwyg"],
+    sections: [
+      { kind: "h2", text: "The two fields" },
+      { kind: "p", body: "Short bio — capped at ~55 characters, used on instructor cards and the storefront teacher rail. Treat it as a tagline, not a summary. About — long-form Tiptap editor for the workspace profile page (bold, italic, lists, links). Treat it as the 'tell me more' surface." },
+      { kind: "h2", text: "Two-way sync" },
+      { kind: "p", body: "Edit either field on the faculty edit form (/dashboard/faculty/<id>) and the change pushes to the public profile page within the same render. Edit on the public profile page and the faculty form picks it up on next load. There's a manual 'Sync from public profile' button if you've edited in another tab and want to pull the latest now." },
+      { kind: "h2", text: "AI 'Help me write'" },
+      { kind: "ul", items: [
+        "Click the Sparkles button on either field.",
+        "We generate three drafts in three voices: Warm, Authoritative, Outcome-led.",
+        "Each draft is editable inline before you accept.",
+        "Seed inputs: your name, role, workspace name, and any existing bio text — we never invent credentials.",
+      ]},
+      { kind: "callout", tone: "info", body: "Generated drafts are suggestions, not auto-applied. Nothing changes on your profile until you click Use this one." },
+    ],
+    related: [
+      { slug: "faculty", label: "Invite a faculty member" },
+      { slug: "onboarding-new-faculty", label: "Onboarding new faculty" },
+    ],
+  },
+
+  "class-chat-transcript": {
+    title: "Class chat persists to the recording",
+    lede: "Every message in the live class chat is captured alongside the video. Re-watchers see the same questions and asides that the live audience saw, in time.",
+    audience: "creator",
+    updated: "2026-05-21",
+    keywords: ["class chat", "transcript", "recording chat", "live chat", "side channel"],
+    sections: [
+      { kind: "h2", text: "How it works" },
+      { kind: "p", body: "We listen to the LiveKit chat channel and persist every message with its sender, body, and timestamp to the session record. When the recording finishes uploading, the chat history is attached to it — no extra setup, no manual save." },
+      { kind: "h2", text: "In the player" },
+      { kind: "ul", items: [
+        "A Chat tab sits next to Transcript in the recording player dialog.",
+        "Messages render in chronological order with their original timestamps.",
+        "Clicking a message seeks the video to that moment — handy for catching the context behind a question.",
+        "Hosts can hide individual messages (moderation) without deleting them from the session record.",
+      ]},
+      { kind: "callout", tone: "info", body: "Chat persistence is on by default. To disable it for a class, untick 'Persist chat to recording' on the class edit form before the class starts. Toggling mid-class is intentionally not supported — the live audience has already seen the messages." },
+    ],
+    related: [
+      { slug: "recording-chapters", label: "Auto-chapters from your transcript" },
+      { slug: "recording-player-dialog", label: "The recording player dialog" },
+      { slug: "live-polls", label: "Run a live poll during class" },
+    ],
+  },
+
+  "waiting-room-presence": {
+    title: "See who's actually in the lobby",
+    lede: "Before you open the room, the host sees a live roster of every student who's loaded the waiting room. Polled every 3 seconds. Stops dispatch confusion of 'is anyone here yet?'.",
+    audience: "creator",
+    updated: "2026-05-20",
+    keywords: ["waiting room", "lobby", "presence", "attendance", "live class"],
+    sections: [
+      { kind: "h2", text: "How presence is detected" },
+      { kind: "p", body: "When a student opens /p/<tenant>/live/<roomCode> before the host has opened the room, we register them as present in the lobby. The signal refreshes every 3 seconds — close the tab and they drop off within ~6 seconds." },
+      { kind: "h2", text: "Host view" },
+      { kind: "ul", items: [
+        "Right rail on /dashboard/classes/<id>/host shows the lobby roster.",
+        "Names + initials, ordered by arrival.",
+        "A running count chip ('5 in lobby') updates live.",
+        "When you open the room, every lobby member auto-admits — no per-student click.",
+      ]},
+      { kind: "h2", text: "Why it matters" },
+      { kind: "p", body: "Hosts ship a punctuality stat to students ('Maya started 92% of past classes on time') because of this signal. The lobby roster tells you whether to wait for stragglers or kick off; the auto-admit removes the friction of admitting 30 students one-by-one." },
+      { kind: "callout", tone: "info", body: "Late joiners after you've opened the room skip the lobby — they auto-admit instantly and get the 'You missed: …' agenda banner so they catch up." },
+    ],
+    related: [
+      { slug: "in-class-agenda", label: "Mark agenda items done in class" },
+      { slug: "live-classes-schedule", label: "Schedule a live class" },
+    ],
+  },
+
+  // ============================================================
+  // Docs — the knowledge layer
+  // ============================================================
+  "docs-create-your-first": {
+    title: "Create your first doc",
+    lede: "Start from a template or a blank page. The editor is a Notion-style multiplayer surface — slash commands, drag-to-rearrange, keyboard shortcuts your team already knows.",
+    audience: "creator",
+    keywords: ["docs", "knowledge base", "wiki", "notion alternative", "study guide", "course handbook", "blocknote editor"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Open the hub" },
+      { kind: "p", body: "Open /dashboard/docs. You'll see your sidebar tree on the left, recent docs in the middle, and the template gallery below. The gallery has eight scaffolds — Course handbook, Lesson study guide, Cohort wiki, Public knowledge hub, plus four operations templates." },
+      { kind: "h2", text: "Pick a template (or start blank)" },
+      { kind: "ul", items: [
+        "Click any template tile — we copy its starter content into a new draft doc owned by you.",
+        "Or click 'New blank doc' for an empty page seeded with a single paragraph.",
+        "Templates are starting points — once a doc exists, you can change anything.",
+      ]},
+      { kind: "h2", text: "Write" },
+      { kind: "p", body: "The editor is built on BlockNote with Liveblocks for multi-cursor editing. Type '/' anywhere to open the slash menu — every block type lives there, including our five typed embeds (lesson, recording, whiteboard, quiz, another doc)." },
+      { kind: "ul", items: [
+        "/ — slash menu (everything)",
+        "Cmd/Ctrl + B / I / U — bold / italic / underline",
+        "## + space — heading 2 (Markdown-in works for every block)",
+        "Drag the handle on the left of any block to rearrange",
+        "Drafts auto-save 300ms after the last keystroke — no save button",
+      ]},
+      { kind: "callout", tone: "info", body: "All docs start as Drafts visible only to you. Use the audience picker in the top-right when you're ready to share — see the publishing doc for the six audience options." },
+    ],
+    related: [
+      { slug: "docs-embed-artifacts", label: "Embed lessons, recordings, whiteboards & quizzes" },
+      { slug: "docs-publish-audiences", label: "Publish a doc — private to public" },
+      { slug: "docs-ai-study-guide", label: "AI-generate a study guide from any class" },
+    ],
+  },
+
+  "docs-embed-artifacts": {
+    title: "Embed lessons, recordings, whiteboards & quizzes",
+    lede: "Five typed embeds. Live references, not snapshots — when the source artifact changes, every doc embedding it shows the latest.",
+    audience: "creator",
+    keywords: ["embed lesson", "embed recording", "embed whiteboard", "embed quiz", "cross-link docs", "knowledge graph", "backlinks"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "The five embeds" },
+      { kind: "ul", items: [
+        "Lesson — a card linking to any lesson in any course",
+        "Recording — a past-class recording, optionally timestamped to a specific moment",
+        "Whiteboard — a click-to-open preview of a canvas",
+        "Quiz — a card pointing at a quiz from your bank",
+        "Doc — cross-link to another doc (backlinks are automatic)",
+      ]},
+      { kind: "h2", text: "How to insert one" },
+      { kind: "p", body: "Type '/' to open the slash menu, then start typing the embed type ('lesson', 'recording'…) or scroll to the 'Embeds from your academy' group. Click one and we open a searchable picker across every embeddable artifact in your workspace — pick the one you want and the card lands in your doc at the cursor." },
+      { kind: "h2", text: "Why these are LIVE references" },
+      { kind: "p", body: "Every embed stores only an id, not a snapshot. If a recording gets new chapters, a quiz gets two more questions, or a whiteboard gets re-saved, every doc embedding it shows the latest — automatically. No copy-paste rot." },
+      { kind: "h2", text: "When the source disappears" },
+      { kind: "p", body: "Deleted artifacts don't crash the doc. The embed renders a graceful '⚠ this embed pointed to a recording that no longer exists' stub, so you know what's missing and can replace or remove it." },
+      { kind: "h2", text: "Backlinks come free" },
+      { kind: "p", body: "Every embed writes an edge in the universal ReferenceEdge table. Open any recording/whiteboard/quiz and the right rail's Links tab shows every doc referencing it — no tags to maintain, no manual cross-links." },
+      { kind: "callout", tone: "info", body: "The Doc editor's right rail has a 'Links' tab that shows what THIS doc embeds (forward links) and what embeds THIS doc (backlinks). Two-way graph, zero config." },
+    ],
+    related: [
+      { slug: "docs-create-your-first", label: "Create your first doc" },
+      { slug: "docs-ai-study-guide", label: "AI-generate a study guide from any class" },
+    ],
+  },
+
+  "docs-publish-audiences": {
+    title: "Publish a doc — private, cohort, course or public on the web",
+    lede: "Six audiences, the same model as everything else on the platform. Public docs get a custom slug, OG metadata, and live at /p/<your-tenant>/k/<slug> on your portal.",
+    audience: "creator",
+    keywords: ["publish doc", "share doc", "doc audience", "private doc", "public doc", "knowledge hub", "seo doc", "cohort wiki"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Open the publish dialog" },
+      { kind: "p", body: "In the doc editor top-right, click the audience pill (it shows the current state — 🔒 Private / Draft by default). The publish dialog opens with six options." },
+      { kind: "h2", text: "The six audiences" },
+      { kind: "ul", items: [
+        "🔒 Private — only you.",
+        "🛡 Admins + instructors — for SOPs, runbooks, internal docs.",
+        "🏢 Everyone in workspace — workspace-wide announcements, staff handbooks.",
+        "👥 Community — pick one cohort; only its members can see this doc.",
+        "🎓 Course — pick one course; everyone enrolled (current and future) can see this doc.",
+        "🌐 Public on the web — anyone with the URL, indexed by search engines.",
+      ]},
+      { kind: "h2", text: "Draft vs Published" },
+      { kind: "p", body: "Every doc has a status orthogonal to audience. Audience says WHO can see it; status says WHETHER it's visible at all. A doc published to 'Course' but left as Draft stays invisible to the cohort until you flip status to Published." },
+      { kind: "h2", text: "Public docs — slug & SEO" },
+      { kind: "ul", items: [
+        "Pick a slug — lowercase, hyphens. We validate against the reserved-slugs list so you don't collide with platform routes.",
+        "Set SEO title, description and OG image — these override the doc's title for search engines and link previews.",
+        "Toggle 'noindex' if you want the page reachable by URL but hidden from Google.",
+        "The page lives at /p/<your-tenant>/k/<your-slug> on your portal — same chrome as the rest of your site. The hub index at /p/<your-tenant>/k lists every published-public doc.",
+      ]},
+      { kind: "h2", text: "Who gets notified" },
+      { kind: "p", body: "When a doc goes public for the first time, every admin and instructor in the workspace (except the author) gets a notification. Cohort and course audience changes don't fan out — they're picked up next time a student loads the docs sidebar." },
+      { kind: "callout", tone: "info", body: "Comment-only mode is the right setting for cohort wikis — students can leave comments without editing the doc itself. Set it on the publish dialog → Permissions toggle." },
+    ],
+    related: [
+      { slug: "docs-create-your-first", label: "Create your first doc" },
+      { slug: "docs-embed-artifacts", label: "Embed lessons, recordings, whiteboards & quizzes" },
+      { slug: "seo-and-meta", label: "Tenant SEO + meta tags" },
+    ],
+  },
+
+  "docs-ai-study-guide": {
+    title: "AI-generate a study guide from any class",
+    lede: "End-of-class wizard offers 'Draft a study guide'. We pull transcript + whiteboards + pinned chat questions and produce a publish-ready doc with the recording embedded at the right moments.",
+    audience: "creator",
+    keywords: ["ai study guide", "lesson notes from recording", "auto generate course notes", "class summary ai", "post-class wrap"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Where the prompt appears" },
+      { kind: "p", body: "When you end a live class via /dashboard/classes/<id>/host, the End-of-Class wizard fires. One of its panels is 'Draft a study guide' — it shows up automatically when we have the transcript ready (typically within a minute of class end)." },
+      { kind: "h2", text: "What we pull" },
+      { kind: "ul", items: [
+        "The class transcript (LiveKit egress + STT)",
+        "Whiteboard snapshots taken during class",
+        "Pinned questions from the chat panel",
+        "The class metadata — title, course, cohort, instructor",
+      ]},
+      { kind: "h2", text: "What the AI drafts" },
+      { kind: "ul", items: [
+        "Title and short hook, derived from the class title + topics discussed.",
+        "Sections corresponding to the major topic transitions (the same heuristics that produce recording chapters).",
+        "Recording embeds at the right timestamps — 'see the explanation at 12:34' is a real link to that moment.",
+        "A 5-question recall quiz at the end, drawn from the pinned questions. Accept, edit, or skip it.",
+      ]},
+      { kind: "h2", text: "Audience picker is part of the same flow" },
+      { kind: "p", body: "Before you click 'Draft it', set the audience — usually the cohort that attended the class. The draft lands as a doc shared with that cohort the moment you click Publish. From here you can proof-read, tweak wording, drop additional embeds, then publish without leaving the editor." },
+      { kind: "h2", text: "Backlink — 'generated from'" },
+      { kind: "p", body: "The AI-generated doc records its source class via a 'generated-from' edge in the ReferenceEdge table. Open the source recording later and you'll see this doc listed in the backlinks rail — context flows both ways." },
+      { kind: "callout", tone: "info", body: "Two-minute rule: most teachers proof-read an AI study guide in two minutes before publishing. The drafts are good, not perfect — your voice in the edits is what makes them yours." },
+    ],
+    related: [
+      { slug: "docs-create-your-first", label: "Create your first doc" },
+      { slug: "docs-publish-audiences", label: "Publish a doc — audiences" },
+      { slug: "recording-chapters", label: "Auto-chapters from your transcript" },
+    ],
+  },
+
+  // ============================================================
+  // Public portal — the customer-facing site every tenant ships
+  // ============================================================
+  "portal-page-builder": {
+    title: "Build a page with the section library",
+    lede: "14 reorderable section types — drag, drop, show/hide, draft, publish. No code. No theme-template lock-in.",
+    audience: "creator",
+    keywords: ["page builder", "landing page", "drag and drop", "portal sections", "no-code", "site builder for creators"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Open the page editor" },
+      { kind: "p", body: "Open /dashboard/portal/pages and pick the page you want to edit (Home, About, Courses, or any custom page you've created). The left rail lists every section currently on the page; the right rail is a live iframe preview of the public URL." },
+      { kind: "h2", text: "The 14 section types you can add" },
+      { kind: "ul", items: [
+        "Hero — headline, subhead, eyebrow, two CTAs, optional background image with overlay, optional trust stats strip",
+        "Features — 3+ column grid of titled points with icons",
+        "Courses grid — published courses with thumbnails, ratings, price, early-bird countdown",
+        "Store grid — digital products (sessions, memberships, downloads, webinars, licenses, bundles)",
+        "Testimonials — student quotes with rating stars, avatar, featured subset",
+        "Faculty — team cards with photos, bios, social links, course listings",
+        "CTA — standalone call-to-action block with one or two buttons",
+        "Rich text — Tiptap WYSIWYG for any custom copy",
+        "FAQ — expandable Q&A pairs",
+        "Stats — by-the-numbers row (student count, reviews, outcomes)",
+        "Contact form — lead capture with custom fields",
+        "Blog teaser — latest posts preview",
+        "Video — embedded YouTube/Vimeo/MP4",
+        "Image gallery — photo grid",
+        "Logos strip — trusted-by row",
+        "Trust badges — configurable icons (secure payment, refund window, support SLA)",
+      ]},
+      { kind: "h2", text: "Reorder, hide, or trash" },
+      { kind: "ul", items: [
+        "Drag the handle on any section to move it up or down. The preview updates as you drop.",
+        "Click the eye icon to hide a section without deleting it (useful for seasonal sections).",
+        "Click the trash icon to soft-delete — sections sit in trash for 7 days before purging, so accidental deletes are recoverable.",
+        "Save a version — snapshots the current page state. Restore any version from history if a future edit goes wrong.",
+      ]},
+      { kind: "h2", text: "Drafts vs publish" },
+      { kind: "p", body: "Pages have a draft and a published state. Visitors always see the last-published version; you edit drafts safely. Hit 'Publish' when ready — every change after that promotes again." },
+      { kind: "callout", tone: "info", body: "Every page has per-page SEO. Set meta title, description, OG image, JSON-LD, and noindex flag in the same editor — no separate plugin to install." },
+    ],
+    related: [
+      { slug: "portal-custom-domain", label: "Connect your custom domain" },
+      { slug: "portal-themes-fonts", label: "Themes, fonts, and white-label" },
+      { slug: "blog-publish", label: "Publish a blog post" },
+    ],
+  },
+
+  "portal-custom-domain": {
+    title: "Connect your custom domain",
+    lede: "Every workspace ships on a free subdomain. Pro+ adds a CNAME flow so your portal lives at your own URL — your visitors never see thebigclass.com.",
+    audience: "creator",
+    keywords: ["custom domain", "cname", "white label", "own URL", "creator domain", "subdomain to root", "portal domain"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Your free subdomain (day one)" },
+      { kind: "p", body: "When you sign up, you claim a subdomain like ananya.thebigclass.com. The full portal — home, courses, blog, store, faculty, contact — is live on that URL immediately. You can do everything on the free subdomain that you can on a custom domain; the URL is the only difference." },
+      { kind: "h2", text: "Upgrade to a custom domain" },
+      { kind: "p", body: "On Pro+ open /dashboard/portal/domain. Pick the subdomain you want to point at us — usually learn.<yourdomain>.com or academy.<yourdomain>.com. Avoid the apex (yourdomain.com) unless your DNS provider supports ALIAS records." },
+      { kind: "h2", text: "Add the CNAME record" },
+      { kind: "ul", items: [
+        "In your DNS provider (GoDaddy, Cloudflare, Route 53, etc.), add a CNAME record",
+        "Name (host) — learn (or whatever subdomain you picked)",
+        "Value (target) — <your-slug>.thebigclass.com",
+        "TTL — leave default (or 300 if you want fast propagation)",
+        "Save",
+      ]},
+      { kind: "h2", text: "Verify + SSL" },
+      { kind: "p", body: "DNS propagation can take a few minutes to a few hours. Once we detect the CNAME, your custom domain is live and serves over HTTPS — SSL is auto-provisioned. The dashboard banner shows current status (Pending DNS / Verifying SSL / Live)." },
+      { kind: "callout", tone: "info", body: "You can keep the free subdomain redirecting to your custom domain so old links never break. Both URLs stay valid; one becomes canonical." },
+    ],
+    related: [
+      { slug: "portal-page-builder", label: "Build a page with the section library" },
+      { slug: "portal-themes-fonts", label: "Themes, fonts, and white-label" },
+      { slug: "white-label", label: "Strip platform branding" },
+    ],
+  },
+
+  "portal-themes-fonts": {
+    title: "Themes, fonts, and white-label",
+    lede: "8 designed theme presets, 6 header layouts, 6 footer layouts, Google Fonts picker, custom CSS on Pro+. White-label toggles strip every platform-branded element.",
+    audience: "creator",
+    keywords: ["portal themes", "creator theme", "fonts", "white label", "custom CSS", "brand colors", "portal layout"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Pick a theme preset" },
+      { kind: "p", body: "/dashboard/portal/brand opens with the theme picker. Eight presets ship — Classic Academy, Forest Modern, Midnight Coral, Warm Mono, Ocean Fresh, Royal Bold, Sunset Warm, Mono Minimal. Click one to apply primary + accent + heading font + body font in one move. Tweak from there." },
+      { kind: "h2", text: "Layouts (header + footer)" },
+      { kind: "ul", items: [
+        "6 header layouts — Split classic · Centered minimal · Split with CTA · Logo only · Floating pill · Promo marquee",
+        "6 footer layouts — Multi-column · Compact mono · Newsletter CTA · Brand + contact · Centered tight · Card grid",
+        "Pick once per portal; applies to every page",
+      ]},
+      { kind: "h2", text: "Fonts" },
+      { kind: "p", body: "Heading and body fonts each have their own picker. We bundle the most-used Google Fonts (Playfair, Inter, Manrope, Outfit, Fraunces, Cinzel, Cormorant Garamond, and more). Custom Google Font upload is available on Studio+." },
+      { kind: "h2", text: "Custom CSS (Pro+)" },
+      { kind: "p", body: "When the presets don't quite hit it, drop scoped CSS into /dashboard/portal/brand → Advanced. Your rules are auto-namespaced to your tenant (selector wrapped in [data-portal-tenant=\"your-slug\"]) so they only apply to your portal and never leak across tenants." },
+      { kind: "h2", text: "White-label toggles" },
+      { kind: "ul", items: [
+        "Hide 'Powered by The Big Class' — removes the thin attribution line in the portal footer.",
+        "Hide every platform-branded element — stronger toggle that strips attribution from emails, share previews, and error pages too.",
+        "Both ship with custom domain so visitors see only your brand at your URL.",
+      ]},
+    ],
+    related: [
+      { slug: "portal-page-builder", label: "Build a page with the section library" },
+      { slug: "portal-custom-domain", label: "Connect your custom domain" },
+      { slug: "white-label", label: "Strip platform branding" },
+    ],
+  },
+
+  // ============================================================
+  // Blog — the creator content engine
+  // ============================================================
+  "blog-publish": {
+    title: "Publish a blog post (drafts, scheduling, pinning)",
+    lede: "Write in a Tiptap editor, set tags, drop a cover image, schedule for a future date, optionally pin to the top. Per-post SEO and JSON-LD are auto-wired.",
+    audience: "creator",
+    keywords: ["blog post", "publish blog", "schedule post", "pin post", "creator blog", "content marketing"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Open the blog editor" },
+      { kind: "p", body: "Open /dashboard/blog and click New post. Or, from the blog list, click any existing post to edit." },
+      { kind: "h2", text: "Fill the basics" },
+      { kind: "ul", items: [
+        "Title — your H1, also the default meta title and OG title",
+        "Slug — auto-suggested from the title; override if you want a shorter URL",
+        "Excerpt — one-paragraph preview shown on the blog index and used as meta description fallback",
+        "Cover image — appears at the top of the post and as the OG share preview if you don't set one explicitly",
+        "Tags + categories — free-form labels; visitors can filter the blog index by them",
+        "Body — Tiptap-powered rich-text editor (formatting, lists, links, images, code blocks)",
+      ]},
+      { kind: "h2", text: "Draft, schedule, or publish" },
+      { kind: "ul", items: [
+        "Save as draft — visible only to you. The blog index never shows drafts.",
+        "Set scheduledFor — pick a future date/time. Our nightly cron auto-publishes when the time comes.",
+        "Publish now — goes live immediately. Visitors see the post on /blog and /blog/<slug>. Sitemap and JSON-LD update.",
+      ]},
+      { kind: "h2", text: "Pin a post" },
+      { kind: "p", body: "Toggle Pinned on. The post sticks to the top of /blog. You can pin up to three at once — extras are queued (newest pinned wins)." },
+      { kind: "h2", text: "Reading time + author" },
+      { kind: "p", body: "Reading time auto-calculates at 220 words per minute. Author is whichever workspace user is editing the post — appears as a byline with avatar." },
+      { kind: "callout", tone: "info", body: "Comments are on by default. Toggle Allow comments off per post if you want a comment-free article." },
+    ],
+    related: [
+      { slug: "blog-seo-per-post", label: "Per-post SEO and JSON-LD" },
+      { slug: "blog-comments-reactions", label: "Comments, reactions, and moderation" },
+      { slug: "portal-page-builder", label: "Build a page with the section library" },
+    ],
+  },
+
+  "blog-seo-per-post": {
+    title: "Per-post SEO and JSON-LD",
+    lede: "Override meta title, description, and OG image per post. BlogPosting JSON-LD (with Organization + BreadcrumbList) auto-wires. Sitemap updates on publish.",
+    audience: "creator",
+    keywords: ["blog SEO", "JSON-LD article", "meta title", "OG image per post", "schema.org BlogPosting", "blog sitemap"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Where the SEO panel lives" },
+      { kind: "p", body: "Inside any blog post → SEO tab. Three fields you'll set, three you can leave alone (sensible defaults apply)." },
+      { kind: "h2", text: "What you can override" },
+      { kind: "ul", items: [
+        "Meta title — the <title> in the tab + the SERP headline. Defaults to your post title.",
+        "Meta description — the snippet under the SERP headline. Defaults to your excerpt, then the first 160 chars of body.",
+        "OG image — the social-share thumbnail. Defaults to your cover image, then your tenant default OG.",
+        "noindex — hide this post from search engines while keeping it accessible by URL.",
+        "Custom JSON-LD — paste your own structured-data block if you need a non-default schema.",
+      ]},
+      { kind: "h2", text: "Auto-wired JSON-LD" },
+      { kind: "p", body: "Every published post auto-renders three structured-data blocks in a single @graph:" },
+      { kind: "ul", items: [
+        "BlogPosting — headline, description, image, datePublished, dateModified, author, wordCount, timeRequired, tags-as-keywords, category-as-articleSection",
+        "Organization — your tenant brand name, logo, URL (publisher of the post)",
+        "BreadcrumbList — Home → Blog → This post",
+      ]},
+      { kind: "h2", text: "Sitemap + robots" },
+      { kind: "p", body: "The sitemap.xml regenerates on every publish so search engines discover new posts within hours, not weeks. Robots.txt auto-allows your blog paths." },
+      { kind: "callout", tone: "info", body: "Reading time auto-calculates at 220 wpm and feeds into timeRequired in the JSON-LD. Rich-snippet eligible without any extra work." },
+    ],
+    related: [
+      { slug: "blog-publish", label: "Publish a blog post" },
+      { slug: "seo-and-meta", label: "Tenant SEO + meta tags" },
+    ],
+  },
+
+  "blog-comments-reactions": {
+    title: "Comments, reactions, and moderation",
+    lede: "Six emoji reactions per post. Threaded comments with hidden-flag moderation. Subscribe form below every article. Native share API with clipboard fallback.",
+    audience: "creator",
+    keywords: ["blog comments", "blog reactions", "moderate comments", "blog engagement", "blog share", "blog subscribe form"],
+    updated: "2026-05-24",
+    sections: [
+      { kind: "h2", text: "Comments" },
+      { kind: "ul", items: [
+        "Visible by default — toggle Allow comments off per post to silence one article",
+        "Visitors leave a name + comment; signed-in students post under their profile",
+        "Hide a comment via the moderation menu — it stays in the database but doesn't render publicly",
+        "Notifications fan out to the post author when a new comment lands",
+      ]},
+      { kind: "h2", text: "Reactions" },
+      { kind: "p", body: "Six curated emojis — 👍 ❤️ 🎉 💡 🔥 👀 — that visitors can toggle on each post. Counts persist; one reaction per visitor per emoji per post." },
+      { kind: "h2", text: "Subscribe form" },
+      { kind: "p", body: "A subscribe form renders below every post (and can be disabled per post). Submissions feed into your portal leads inbox — the same place contact-form leads land." },
+      { kind: "h2", text: "Sharing" },
+      { kind: "p", body: "The share button uses the Web Share API on mobile (iOS / Android show the native share sheet) and falls back to clipboard copy with a toast on desktop." },
+      { kind: "callout", tone: "info", body: "Spam: comments don't currently have CAPTCHA. If you start getting spam, hide it via the moderation menu and consider disabling comments on high-traffic posts where the conversation doesn't add value." },
+    ],
+    related: [
+      { slug: "blog-publish", label: "Publish a blog post" },
+      { slug: "blog-seo-per-post", label: "Per-post SEO and JSON-LD" },
+    ],
   },
 }
 

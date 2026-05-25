@@ -3,6 +3,7 @@ import { Inter, Playfair_Display, Geist_Mono, Great_Vibes, Allura, Dancing_Scrip
 import { Analytics } from '@vercel/analytics/next'
 import { CertificateProvider } from '@/lib/certificate-store'
 import { LMSProvider } from '@/lib/lms-store'
+import { DocsProvider } from '@/lib/docs'
 import { OrgSettingsProvider } from '@/lib/org-settings'
 import { TenantProvider } from '@/lib/tenant-store'
 import { StoreProvider } from '@/lib/store-store'
@@ -189,6 +190,7 @@ export default function RootLayout({
           <TenantProvider>
             <OrgSettingsProvider>
               <LMSProvider>
+                <DocsProvider>
                 <StoreProvider>
                   <CertificateProvider>
                     <WallProvider>
@@ -202,6 +204,7 @@ export default function RootLayout({
                     </WallProvider>
                   </CertificateProvider>
                 </StoreProvider>
+                </DocsProvider>
               </LMSProvider>
             </OrgSettingsProvider>
           </TenantProvider>

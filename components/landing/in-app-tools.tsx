@@ -36,8 +36,8 @@ export function InAppTools() {
             <span className="text-primary">Built into every class.</span>
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-            No external Miro license, no Zoom subscription, no &quot;please install this Chrome
-            extension.&quot; The two tools you teach with are inside the app — on every plan, on every
+            No standalone whiteboard licence, no separate video-conferencing seat, no &ldquo;please install this Chrome
+            extension.&rdquo; The two tools you teach with are inside the app — on every plan, on every
             class.
           </p>
         </div>
@@ -48,7 +48,7 @@ export function InAppTools() {
             eyebrowIcon={PenSquare}
             eyebrow="Multiplayer whiteboard"
             title="Sketch together. Live."
-            body="A real-time multiplayer canvas built into every live class. Sketch diagrams, teach math, brainstorm with your cohort — saved per session. No Miro account."
+            body="A real-time multiplayer canvas built into every live class. Sketch diagrams, teach math, brainstorm with your cohort — saved per session. No standalone whiteboard account."
             bullets={[
               "Hand-drawn aesthetic — feels human",
               "Every cursor labelled with the participant's name",
@@ -65,7 +65,7 @@ export function InAppTools() {
             title="Click. Teach. We record."
             body="Built-in cloud room — students join with a name, no signup, no app install. Click Start recording and a server-side worker captures the full room and uploads to your CDN."
             bullets={[
-              "No Zoom signup — students join from the browser",
+              "No third-party signup — students join from the browser",
               "Adaptive 1080p simulcast — weak networks degrade gracefully",
               "Server-side recording → your Cloudflare R2 bucket",
               "Auto-email with the Watch link when the file lands",

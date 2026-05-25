@@ -60,6 +60,7 @@ import {
 import { useLMS, generateId, type Quiz, type QuizQuestion } from "@/lib/lms-store"
 import { useConfirm } from "@/lib/use-confirm"
 import { QuizTemplatePicker } from "@/components/quiz/quiz-template-picker"
+import { ModuleTrashButton } from "@/components/dashboard/module-trash-button"
 import { QUIZ_TEMPLATES, type QuizTemplate } from "@/lib/quiz-templates"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Sparkles } from "lucide-react"
@@ -413,6 +414,7 @@ export default function QuizzesPage() {
         </div>
         <div className="flex items-center gap-2">
           <TakeATourButton tourId="quizzes-list-v1" />
+          <ModuleTrashButton kinds={["quiz"]} noun="quiz" />
           {/* Single Create Quiz entrypoint — opens the template picker.
               The picker itself carries "Start blank instead" in its
               header for the from-scratch path, so this one button

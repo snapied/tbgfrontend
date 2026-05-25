@@ -86,7 +86,7 @@ const INBOX_TOUR: TourStep[] = [
   },
 ]
 
-type InboxKind = "question" | "discussion" | "batch" | "lead" | "blog" | "quiz"
+type InboxKind = "question" | "discussion" | "batch" | "lead" | "blog" | "quiz" | "assignment"
 type ItemStatus = "active" | "resolved"
 
 interface InboxItem {
@@ -120,6 +120,7 @@ const KIND_LABELS: Record<InboxKind, string> = {
   lead: "Lead",
   blog: "Blog",
   quiz: "Quiz",
+  assignment: "Assignment",
 }
 
 const KIND_ICONS: Record<InboxKind, typeof FileQuestion> = {
@@ -129,6 +130,7 @@ const KIND_ICONS: Record<InboxKind, typeof FileQuestion> = {
   lead: Briefcase,
   blog: MessageCircle,
   quiz: ClipboardCheck,
+  assignment: ClipboardCheck,
 }
 
 // Filter pills — Discussions and Batches were two separate sources
@@ -146,6 +148,16 @@ const FILTERS: { id: "all" | InboxKind; label: string }[] = [
   // inline-grade flow inside the inbox (clicking deep-links to the
   // quiz review page).
   { id: "quiz", label: "Quizzes" },
+  // Assignments — same notification-fallback pattern as quizzes.
+  // Covers three actionable events: assignment/project/test
+  // published (visible to the publisher as confirmation),
+  // assignment.submitted (teacher needs to grade), and
+  // assignment.graded (student got their result). Clicking
+  // deep-links to the assignment detail page where the row is
+  // actionable. Without this pill assignment notifications
+  // landed in the bell but never showed up in the unified inbox
+  // teachers were trained to triage from.
+  { id: "assignment", label: "Assignments" },
 ]
 
 function strip(html: string, max = 140): string {
@@ -372,7 +384,27 @@ export default function InboxPage() {
           // submissions from the same surface as questions/leads
           // instead of relying on the bell only. Fired by
           // submitQuizAttempt in lms-store via quizSubmittedNotification.
-          t === "quiz.submitted"
+          t === "quiz.submitted" ||
+          // Assignments / projects / tests — every actionable
+          // event in the assignment lifecycle. `assignment.published`
+          // (and the project/test variants) fires when the teacher
+          // publishes one; `assignment.submitted` fires when a
+          // student submits and the teacher needs to grade;
+          // `assignment.graded` fires for the student. All three
+          // belong in the inbox so the teacher (and student) can
+          // triage from one place instead of hunting the bell.
+          t === "assignment.published" ||
+          t === "project.published" ||
+          t === "test.published" ||
+          t === "assignment.submitted" ||
+          t === "assignment.graded" ||
+          // Live poll launch + result broadcast — fanned out to
+          // every enrolled student + invited co-instructor when
+          // the host opens / closes a poll in the live class.
+          // Lands in the bell *and* the inbox so visitors who
+          // missed the in-call moment see what happened later.
+          t === "live-poll.launched" ||
+          t === "live-poll.closed"
         )
       })
       for (const n of eligible) {
@@ -389,7 +421,9 @@ export default function InboxPage() {
         // notifications that surface here are doubt-related. Quiz
         // submissions get their own kind so the new "Quizzes" filter
         // pill can scope to them (and the icon picker renders a
-        // ClipboardCheck instead of the question mark).
+        // ClipboardCheck instead of the question mark). Same for
+        // assignments / projects / tests — all three normalise to
+        // the "assignment" inbox kind so the new pill catches them.
         const kind: InboxKind = (n.type.startsWith("lead") || n.type === "enquiry.received")
           ? "lead"
           : n.type.startsWith("discussion")
@@ -398,7 +432,20 @@ export default function InboxPage() {
               ? "batch"
               : n.type === "quiz.submitted"
                 ? "quiz"
-                : "question"
+                : n.type === "assignment.published" ||
+                  n.type === "project.published" ||
+                  n.type === "test.published" ||
+                  n.type === "assignment.submitted" ||
+                  n.type === "assignment.graded"
+                  ? "assignment"
+                  // Polls share the "question" kind icon (the
+                  // FileQuestion glyph reads as "something the
+                  // teacher is asking") and slot into the
+                  // Questions pill. Polls are conceptually a
+                  // question the host put to the room.
+                  : n.type === "live-poll.launched" || n.type === "live-poll.closed"
+                    ? "question"
+                    : "question"
         // If the notification IS for a doubt/lead that still exists in
         // the source data, attach replyContext so the inline Reply UI
         // works. This covers the case where the source exists but was
@@ -481,6 +528,7 @@ export default function InboxPage() {
       lead: 0,
       blog: 0,
       quiz: 0,
+      assignment: 0,
     }
     for (const i of items) c[i.kind]++
     return c

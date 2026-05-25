@@ -13,6 +13,7 @@ import {
   Copy,
   Download,
   Eye,
+  Heart,
   Key,
   Loader2,
   Package,
@@ -22,6 +23,7 @@ import {
   Share2,
   Sparkles,
   Trash2,
+  Users,
   Video,
   X,
 } from "lucide-react"
@@ -144,12 +146,13 @@ const KIND_OPTIONS: Array<{
   hint: string
   icon: React.ReactNode
 }> = [
-  { value: "course",     label: "Course access",   hint: "Sell access to a course you've built.",        icon: <BookOpen className="h-4 w-4" /> },
-  { value: "download",   label: "Digital download", hint: "PDF, audio, video, ZIP — one or many files.",  icon: <Download className="h-4 w-4" /> },
-  { value: "bundle",     label: "Bundle",           hint: "Combine products at a special price.",         icon: <Package className="h-4 w-4" /> },
+  { value: "course",     label: "Course access",    hint: "Sell access to a course you've built.",        icon: <BookOpen className="h-4 w-4" /> },
+  { value: "community",  label: "Paid community",   hint: "Subscription-gated cohort feed. Auto-joins buyers.", icon: <Users className="h-4 w-4" /> },
   { value: "membership", label: "Membership",       hint: "Recurring access to a set of products.",       icon: <Sparkles className="h-4 w-4" /> },
   { value: "session",    label: "1-on-1 session",   hint: "Coaching call with a booking link.",           icon: <CalendarClock className="h-4 w-4" /> },
   { value: "webinar",    label: "Paid webinar",     hint: "Charge for a live class.",                     icon: <Video className="h-4 w-4" /> },
+  { value: "download",   label: "Digital download", hint: "PDF, audio, video, ZIP — one or many files.",  icon: <Download className="h-4 w-4" /> },
+  { value: "bundle",     label: "Bundle",           hint: "Combine products at a special price.",         icon: <Package className="h-4 w-4" /> },
   { value: "license",    label: "License key",      hint: "Templates / software with serial keys.",       icon: <Key className="h-4 w-4" /> },
 ]
 
@@ -264,6 +267,11 @@ function ProductEditorForm({ productId, initialKind }: ProductEditorProps) {
   const [webinarScheduledAt, setWebinarScheduledAt] = useState(existing?.delivery.kind === "webinar" ? existing.delivery.scheduledAt?.slice(0, 16) ?? "" : "")
   const [licenseKeyPool, setLicenseKeyPool] = useState<string[]>(existing?.delivery.kind === "license" ? existing.delivery.keyPool ?? [] : [])
   const [licenseTemplate, setLicenseTemplate] = useState(existing?.delivery.kind === "license" ? existing.delivery.keyTemplate ?? "TBC-XXXX-XXXX-XXXX" : "TBC-XXXX-XXXX-XXXX")
+  // Paid-community state — linked cohort id, optional welcome post,
+  // optional starter-pack product ids granted alongside community access.
+  const [communityId, setCommunityId] = useState<string>(existing?.delivery.kind === "community" ? existing.delivery.linkedCommunityId : "")
+  const [communityWelcome, setCommunityWelcome] = useState<string>(existing?.delivery.kind === "community" ? existing.delivery.welcomeMessage ?? "" : "")
+  const [communityStarterPack, setCommunityStarterPack] = useState<string[]>(existing?.delivery.kind === "community" ? existing.delivery.includedProductIds ?? [] : [])
 
   // UX state
   const [showPolish, setShowPolish] = useState(false)
@@ -301,7 +309,7 @@ function ProductEditorForm({ productId, initialKind }: ProductEditorProps) {
   useEffect(() => {
     if (firstRender.current) { firstRender.current = false; return }
     setDirty(true)
-  }, [kind, title, subtitle, slug, description, coverImageUrl, previewVideoUrl, features, outcomes, tags, refundPolicy, inventoryLimit, status, pricingType, amount, currency, comparePrice, intervalDays, trialDays, pwywSuggested, courseId, files, childProductIds, includedProductIds, sessionMinutes, bookingUrl, webinarMeetingUrl, webinarScheduledAt, licenseKeyPool, licenseTemplate])
+  }, [kind, title, subtitle, slug, description, coverImageUrl, previewVideoUrl, features, outcomes, tags, refundPolicy, inventoryLimit, status, pricingType, amount, currency, comparePrice, intervalDays, trialDays, pwywSuggested, courseId, files, childProductIds, includedProductIds, sessionMinutes, bookingUrl, webinarMeetingUrl, webinarScheduledAt, licenseKeyPool, licenseTemplate, communityId, communityWelcome, communityStarterPack])
 
   // Auto-slug from title
   useEffect(() => {
@@ -341,8 +349,14 @@ function ProductEditorForm({ productId, initialKind }: ProductEditorProps) {
       case "session":    return { kind: "session", durationMinutes: parseInt(sessionMinutes) || 30, bookingUrl: bookingUrl || undefined }
       case "webinar":    return { kind: "webinar", meetingUrl: webinarMeetingUrl || undefined, scheduledAt: webinarScheduledAt ? new Date(webinarScheduledAt).toISOString() : undefined }
       case "license":    return { kind: "license", keyPool: licenseKeyPool, keyTemplate: licenseTemplate }
+      case "community":  return {
+        kind: "community",
+        linkedCommunityId: communityId,
+        welcomeMessage: communityWelcome.trim() || undefined,
+        includedProductIds: communityStarterPack.length > 0 ? communityStarterPack : undefined,
+      }
     }
-  }, [kind, courseId, files, childProductIds, includedProductIds, sessionMinutes, bookingUrl, webinarMeetingUrl, webinarScheduledAt, licenseKeyPool, licenseTemplate])
+  }, [kind, courseId, files, childProductIds, includedProductIds, sessionMinutes, bookingUrl, webinarMeetingUrl, webinarScheduledAt, licenseKeyPool, licenseTemplate, communityId, communityWelcome, communityStarterPack])
 
   const missing: string[] = []
   if (!title.trim()) missing.push("title")
@@ -670,6 +684,9 @@ function ProductEditorForm({ productId, initialKind }: ProductEditorProps) {
                 webinarScheduledAt={webinarScheduledAt} setWebinarScheduledAt={setWebinarScheduledAt}
                 licenseKeyPool={licenseKeyPool} setLicenseKeyPool={setLicenseKeyPool}
                 licenseTemplate={licenseTemplate} setLicenseTemplate={setLicenseTemplate}
+                communityId={communityId} setCommunityId={setCommunityId}
+                communityWelcome={communityWelcome} setCommunityWelcome={setCommunityWelcome}
+                communityStarterPack={communityStarterPack} setCommunityStarterPack={setCommunityStarterPack}
                 excludeProductId={existing?.id}
               />
             </div>
@@ -891,6 +908,9 @@ function DeliveryFields(props: {
   webinarScheduledAt: string; setWebinarScheduledAt: (v: string) => void
   licenseKeyPool: string[]; setLicenseKeyPool: (k: string[]) => void
   licenseTemplate: string; setLicenseTemplate: (t: string) => void
+  communityId: string; setCommunityId: (v: string) => void
+  communityWelcome: string; setCommunityWelcome: (v: string) => void
+  communityStarterPack: string[]; setCommunityStarterPack: (ids: string[]) => void
   excludeProductId?: string
 }) {
   const {
@@ -905,6 +925,9 @@ function DeliveryFields(props: {
     webinarScheduledAt, setWebinarScheduledAt,
     licenseKeyPool, setLicenseKeyPool,
     licenseTemplate, setLicenseTemplate,
+    communityId, setCommunityId,
+    communityWelcome, setCommunityWelcome,
+    communityStarterPack, setCommunityStarterPack,
     excludeProductId,
   } = props
 
@@ -957,8 +980,153 @@ function DeliveryFields(props: {
       </div>
     )
   }
+  if (kind === "community") {
+    return (
+      <CommunityDeliveryPanel
+        communityId={communityId}
+        setCommunityId={setCommunityId}
+        welcome={communityWelcome}
+        setWelcome={setCommunityWelcome}
+        starterPack={communityStarterPack}
+        setStarterPack={setCommunityStarterPack}
+        excludeProductId={excludeProductId}
+      />
+    )
+  }
   // license
   return <LicensePanel keyPool={licenseKeyPool} onPoolChange={setLicenseKeyPool} template={licenseTemplate} onTemplateChange={setLicenseTemplate} />
+}
+
+// ─── Community delivery — pick the linked cohort + welcome + extras ──
+//
+// A "Paid community" product grants membership to a StudentGroup
+// (community / cohort). On checkout, the buyer is auto-added to
+// `memberIds` via the LMS store's listener and the optional welcome
+// message is posted as an announcement to the group feed.
+//
+// Power-user controls:
+//   • Link to an existing community (most common)
+//   • Quick-create a new community right here (so creators don't
+//     have to flip to /dashboard/students just to ship a product)
+//   • Welcome message — posted automatically on join
+//   • Starter pack — optional bundle of additional products granted
+//     alongside community access (e.g. a course or a download)
+function CommunityDeliveryPanel({
+  communityId,
+  setCommunityId,
+  welcome,
+  setWelcome,
+  starterPack,
+  setStarterPack,
+  excludeProductId,
+}: {
+  communityId: string
+  setCommunityId: (v: string) => void
+  welcome: string
+  setWelcome: (v: string) => void
+  starterPack: string[]
+  setStarterPack: (ids: string[]) => void
+  excludeProductId?: string
+}) {
+  const { studentGroups, currentUser, addStudentGroup } = useLMS()
+  const linked = studentGroups.find((g) => g.id === communityId)
+
+  function quickCreate() {
+    const name = window.prompt("Name the new community (e.g. 'Maths Cohort 04'):")?.trim()
+    if (!name) return
+    const nowIso = new Date().toISOString()
+    const id = generateId("grp")
+    addStudentGroup({
+      id,
+      name,
+      memberIds: [],
+      visibility: "closed",
+      createdBy: currentUser?.id,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    })
+    setCommunityId(id)
+    toast.success(`Community "${name}" created. Linked to this product.`)
+  }
+
+  return (
+    <div className="space-y-4">
+      <Field
+        label="Which community?"
+        required
+        hint="Buyers are auto-added to this group's members the moment payment clears. Subscription pricing lapses access when the sub does."
+      >
+        <div className="flex items-stretch gap-2">
+          <Select value={communityId} onValueChange={setCommunityId}>
+            <SelectTrigger>
+              <SelectValue placeholder="Pick a community" />
+            </SelectTrigger>
+            <SelectContent>
+              {studentGroups.length === 0 ? (
+                <div className="px-2 py-3 text-xs text-muted-foreground">
+                  No communities yet — click <span className="font-semibold">+ New</span> to start one.
+                </div>
+              ) : (
+                studentGroups.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.name}
+                    {g.memberIds.length > 0 ? ` · ${g.memberIds.length} members` : ""}
+                  </SelectItem>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          <Button type="button" variant="outline" size="sm" onClick={quickCreate} className="gap-1">
+            <Plus className="h-3.5 w-3.5" />
+            New
+          </Button>
+        </div>
+        {linked && (
+          <div className="mt-2 flex items-center gap-2 rounded-md border border-border bg-muted/30 px-2.5 py-1.5 text-[11px]">
+            <Users className="h-3.5 w-3.5 text-primary" />
+            <span className="font-semibold">{linked.name}</span>
+            <span className="text-muted-foreground">·</span>
+            <span className="text-muted-foreground">{linked.memberIds.length} current members</span>
+            <Link
+              href="/dashboard/students"
+              className="ml-auto inline-flex items-center gap-1 font-semibold text-primary hover:underline"
+            >
+              Manage <ArrowLeft className="h-3 w-3 rotate-180" />
+            </Link>
+          </div>
+        )}
+      </Field>
+
+      <Field
+        label="Welcome message (optional)"
+        hint="Posted as an announcement to the community feed the moment a buyer joins. Keep it warm and short."
+      >
+        <Textarea
+          value={welcome}
+          onChange={(e) => setWelcome(e.target.value.slice(0, 600))}
+          placeholder="Welcome 👋 — we host live calls every Wednesday at 8 PM IST. Introduce yourself in #intros."
+          rows={3}
+          className="resize-none"
+        />
+        <div className="mt-1 text-right text-[10px] text-muted-foreground">
+          {welcome.length}/600
+        </div>
+      </Field>
+
+      <Field
+        label="Starter pack (optional)"
+        hint="Additional products granted alongside community access — a starter course, welcome PDF, etc. Subscription pricing lapses these too."
+      >
+        <ProductMultiPicker
+          label=""
+          required={false}
+          pickedIds={starterPack}
+          onChange={setStarterPack}
+          excludeId={excludeProductId}
+        />
+      </Field>
+    </div>
+  )
 }
 
 // ============================================================
@@ -1318,6 +1486,7 @@ function deliveryValid(kind: ProductKind, d: ProductDelivery): boolean {
     case "session":    return d.kind === "session" && d.durationMinutes > 0
     case "webinar":    return d.kind === "webinar"
     case "license":    return d.kind === "license"
+    case "community":  return d.kind === "community" && !!d.linkedCommunityId
   }
 }
 function deliveryFieldName(kind: ProductKind): string {
@@ -1329,6 +1498,7 @@ function deliveryFieldName(kind: ProductKind): string {
     case "session":    return "session duration"
     case "webinar":    return "webinar details"
     case "license":    return "license template"
+    case "community":  return "community to grant access to"
   }
 }
 

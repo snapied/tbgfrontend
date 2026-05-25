@@ -259,6 +259,83 @@ export default function DoubtsFeaturePage() {
           </div>
         </section>
 
+        {/* Indian-classroom scenarios — when "post-sale silence" hits
+            an Indian student or parent, the platform breaks the
+            parent-trust contract that took months to build. Showing
+            the three most painful cases puts the feature in the
+            language coaching centres actually live in. */}
+        <section className="border-b border-border bg-background py-16">
+          <div className="mx-auto max-w-6xl px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                In an Indian classroom
+              </p>
+              <h2 className="mt-3 font-serif text-3xl font-bold tracking-tight">
+                When the inbox is the difference between renewal and refund.
+              </h2>
+            </div>
+            <div className="mt-10 grid gap-4 lg:grid-cols-3">
+              <DoubtScenario
+                emoji="🌙"
+                title="Late-night JEE doubt"
+                quote="&ldquo;Student stuck on a coordinate-geometry problem at 10:47 pm. Opens the lesson, taps 'Got a question?', WhatsApp pings me at home, I screenshot the solution from my notebook, reply from the inbox. Done in 9 minutes. Parents notice.&rdquo;"
+                wedge="WhatsApp notification + reply from inbox without opening a separate app"
+              />
+              <DoubtScenario
+                emoji="🤝"
+                title="Pre-sale parent enquiry"
+                quote="&ldquo;Mother visits the public course page Saturday afternoon — taps 'Email the teacher', asks about syllabus + timing. Lands tagged 'Pre-sale' in the inbox with a green border. I reply Sunday morning. Sells the seat.&rdquo;"
+                wedge="Pre-sale vs in-course tagging so leads never sit behind support queue"
+              />
+              <DoubtScenario
+                emoji="📝"
+                title="NEET batch — chapter close"
+                quote="&ldquo;After every Biology class, 8-10 doubts hit at once. Same inbox catches in-app, email, and WhatsApp. Bulk-reply to recurring questions; the rare one gets a 5-minute screen-recording reply inline.&rdquo;"
+                wedge="One inbox, three channels — never bounce between tools mid-reply"
+              />
+            </div>
+          </div>
+        </section>
+
+        {/* Direct alternatives — Indian coaching centres usually
+            compare against WhatsApp groups, Telegram channels, or
+            Google Forms. Naming them explicitly answers the actual
+            question instead of the abstract one. */}
+        <section className="border-b border-border bg-muted/30 py-16">
+          <div className="mx-auto max-w-5xl px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                vs. the alternatives
+              </p>
+              <h2 className="mt-3 font-serif text-3xl font-bold tracking-tight">
+                Why coaching centres stop running support from WhatsApp groups.
+              </h2>
+            </div>
+            <div className="mx-auto mt-10 grid max-w-3xl gap-3">
+              <CompRow
+                rival="A messaging group"
+                problem="Every doubt buried under 200 'good morning' messages. No course context, no audit trail, no second-instructor handoff."
+                ours="Each doubt tagged with course + lesson. Threaded reply. Other admins see the thread without you forwarding."
+              />
+              <CompRow
+                rival="A generic form tool"
+                problem="Submissions land in a spreadsheet you check on Tuesday. Student gets no acknowledgement. Lead aging silently."
+                ours="Acknowledgement email auto-fires. In-app + email + WhatsApp ping. Sidebar badge so you can't miss it."
+              />
+              <CompRow
+                rival="A built-in platform support inbox"
+                problem="One generic support@ inbox. Doesn't distinguish in-course doubts from pre-sale enquiries. No WhatsApp delivery."
+                ours="Two doorways, one inbox. Pre-sale and support visually separated. WhatsApp native, not bolted on."
+              />
+              <CompRow
+                rival="A broadcast channel"
+                problem="One-way broadcast. Students DM you privately; the next admin has zero visibility into the thread."
+                ours="Inbox is shared workspace state. Any admin sees + replies. Audit-friendly for parent escalations."
+              />
+            </div>
+          </div>
+        </section>
+
         <section className="py-16">
           <div className="mx-auto max-w-3xl px-6 text-center lg:px-8">
             <h2 className="font-serif text-3xl font-bold tracking-tight">
@@ -313,5 +390,41 @@ function Channel({
         <p className="text-sm leading-relaxed text-muted-foreground">{body}</p>
       </CardContent>
     </Card>
+  )
+}
+
+function DoubtScenario({
+  emoji, title, quote, wedge,
+}: { emoji: string; title: string; quote: string; wedge: string }) {
+  return (
+    <div className="flex h-full flex-col rounded-2xl border border-border bg-card p-5 shadow-sm">
+      <div className="flex items-center gap-2">
+        <span aria-hidden className="text-2xl">{emoji}</span>
+        <h3 className="font-serif text-base font-bold">{title}</h3>
+      </div>
+      <p className="mt-3 text-sm italic leading-relaxed text-muted-foreground">{quote}</p>
+      <div className="mt-auto pt-4">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-primary">The wedge</p>
+        <p className="mt-1 text-xs leading-relaxed">{wedge}</p>
+      </div>
+    </div>
+  )
+}
+
+function CompRow({ rival, problem, ours }: { rival: string; problem: string; ours: string }) {
+  return (
+    <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-[170px_1fr_1fr]">
+      <div className="flex items-center">
+        <span className="text-sm font-bold">{rival}</span>
+      </div>
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-destructive">What hurts</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{problem}</p>
+      </div>
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-success">The Big Class</p>
+        <p className="mt-0.5 text-xs leading-relaxed">{ours}</p>
+      </div>
+    </div>
   )
 }

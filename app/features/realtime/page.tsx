@@ -103,7 +103,7 @@ export default function RealtimeFeaturePage() {
           title="Recording-ready emails — automatic."
           body={
             <>
-              Stop recording → LiveKit finishes encoding → file uploads to R2 → backend poller detects the URL → instructor gets a workspace-branded email titled &quot;Recording ready — {`{class title}`}&quot; with a Watch button. No manual share. No &quot;hey did the recording come through?&quot; Slack message.
+              Stop recording → LiveKit finishes encoding → file uploads to R2 → backend poller detects the URL → instructor gets a workspace-branded email titled &quot;Recording ready — {`{class title}`}&quot; with a Watch button. No manual share. No &quot;hey did the recording come through?&quot; chat-group message.
             </>
           }
           bullets={[

@@ -2,20 +2,38 @@
 
 import Link from "next/link"
 import {
+  ArrowRightLeft,
   Award,
   BarChart3,
+  BarChart4,
+  Bell,
   Captions,
+  ClipboardCheck,
+  ClipboardList,
+  FileText,
+  Filter,
+  Film,
   Globe2,
+  Hand,
   Heart,
   History,
+  Layers,
+  Link2,
   Lock,
+  MoonStar,
+  Palette,
+  PenSquare,
+  Play,
   Repeat,
   ShieldCheck,
   Sparkles,
+  ThumbsUp,
   Trophy,
   UserPlus,
+  Users,
   Video,
   Webhook as WebhookIcon,
+  Wifi,
 } from "lucide-react"
 import { Header } from "@/components/landing/header"
 import { Footer } from "@/components/landing/footer"
@@ -32,6 +50,226 @@ interface UpdateEntry {
 }
 
 const UPDATES: UpdateEntry[] = [
+  // ── Today: hero refresh + alternatives suite ─────────────────
+  {
+    date: "May 24, 2026",
+    tag: "Improvement",
+    icon: Sparkles,
+    title: "Textual hero CTA — typography over chrome",
+    body:
+      "The above-the-fold CTA is now a clean text-led cluster: a large bold 'Launch your academy free →' as a primary link with an animated underline + arrow slide, paired with a quieter 'or see pricing' secondary, and a single trust line below (no card · 60-second setup · cancel any day). Plus a tertiary nudge to try the certificate designer with no signup. Premium feel via typography + micro-animation, not visual weight.",
+  },
+  {
+    date: "May 24, 2026",
+    tag: "Feature",
+    icon: ArrowRightLeft,
+    title: "Eight alternative-platform comparison pages",
+    body:
+      "Dedicated /alternatives/<slug> pages for Teachable, Kajabi, Thinkific, Podia, Gumroad, LearnWorlds, Graphy, and TagMango. Each one ships a side-by-side illustration, a savings calculator with real ₹ math, illustrated pain-point cards, a feature × rival matrix, a 5-step migration timeline, a per-rival FAQ, and a closing CTA — all tinted to a per-rival accent. Surfaced in a new featured panel inside the Resources mega-menu.",
+    link: { href: "/alternatives/kajabi", label: "See the Kajabi comparison" },
+  },
+
+  // ── Marketing sprint ─────────────────────────────────────────
+  {
+    date: "May 23, 2026",
+    tag: "Improvement",
+    icon: Sparkles,
+    title: "Homepage hero rebuilt around the 4 USPs",
+    body:
+      "New H1 'An academy that's actually yours' plus a live USP showcase in the right column — animated ₹ earnings counter, all-in-one teacher-side surface stack, export demo, India-native chip cycle. Below the hero: a dedicated Four-USP section, a feature × tool-category honesty matrix, and a 'Switching from?' chip rail. Every visitor-facing surface scrubbed of competitor brand names; alternatives live on their own pages.",
+  },
+  {
+    date: "May 23, 2026",
+    tag: "Feature",
+    icon: PenSquare,
+    title: "Whiteboard feature page — 25+ teaching templates surfaced",
+    body:
+      "The whiteboard page now leads with the template library, not the canvas. K-12 grade-band scaffolds (KG → Class 11-12), teaching scaffolds (lesson plan, K-W-L, Frayer, lab report), thinking templates (mind map, Venn, brainstorm), analysis (SWOT, persona, fishbone), planning (Eisenhower, OKR, retro). Three Indian-classroom scenarios show how vedic-maths, NEET-bio, and JEE-coaching teachers actually use the surface.",
+    link: { href: "/features/whiteboard", label: "See the whiteboard" },
+  },
+  {
+    date: "May 23, 2026",
+    tag: "Feature",
+    icon: ClipboardCheck,
+    title: "New quizzes feature page — 18 ready-to-fire templates",
+    body:
+      "Entrance prep (JEE Mathematics drill, NEET Biology MCQs, GMAT data sufficiency), classroom (pop quiz, math fluency, physics laws, chemistry equations), higher ed (essay rubric, case study), engineering (code review, system design), management (PM scenarios, product sense). Five question types, auto + teacher grading, anti-cheat, leaderboard feed, cross-channel score notifications.",
+    link: { href: "/features/quizzes", label: "See quiz templates" },
+  },
+
+  // ── Week 2: engagement levers ────────────────────────────────
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: FileText,
+    title: "Post types in cohort communities — and wins auto-cross-post to the Wall of Love",
+    body:
+      "Composer now opens with a 4-way type chooser: Announcement (auto-pins, host-only), Question (mark answered with a green ✓), Win (auto-🎉, cross-posts to the public Wall of Love), Discussion (the catch-all). A filter chip rail above the feed lets students slice by type with live counts. Questions tracked through to resolution with an authored-by-comment credit for future helpfulness scoring.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: BarChart4,
+    title: "Community health pulse + at-risk member nudges",
+    body:
+      "Host-only collapsible strip on every batch detail page: 14-day DAU ratio, posts/day, reactions/post — each with a trend arrow vs the prior 14-day window. Expand to a drawer with the at-risk member list (no activity in 7 days) and a one-click 'Send a check-in to all' button that fires cross-channel notifications via the same dispatcher live polls use.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: MoonStar,
+    title: "Dead-community recovery — auto-surfaces when a batch goes quiet",
+    body:
+      "When a batch has >5 members and no posts in 14 days, a host-only amber banner appears with three one-click actions: send a templated 'we miss you' (auto-pins as a real post), schedule a Q&A session (deep-links the new-class form with course pre-selected), or archive (soft-delete via the existing trash with 7-day recovery). Dismissible for 7 days so the host gets a fresh nudge if it keeps drifting.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: Play,
+    title: "Up-next autoplay in the recording player",
+    body:
+      "In the last 30 seconds of any recording, an 'Up next' preview card slides into the bottom-right with the next recording's title + duration. When the video ends, it promotes to a 10-second countdown with a progress bar — click the card to skip ahead, click X to stay on this recording. Same-course continuation preferred; falls back to next-in-sort-order.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Improvement",
+    icon: History,
+    title: "Watch-history pill rail on the recordings list",
+    body:
+      "Three sort-mode pills on /dashboard/recordings: Newest (default for teachers), Continue (in-progress recordings sorted by last-played-first, with a live count of your backlog), Recent (everything you've touched, last-played first). Default sticks per-browser via localStorage so a returning student lands in the mode they left in.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: Hand,
+    title: "Raised-hand variants — Got it / Public / Private",
+    body:
+      "Students raising a hand now have three intents on a chevron popover next to the main button: raise publicly (whole-room question, the default), ask privately (host sees the question in amber with a 'wants a DM, not a mic unmute' hint), or 'Got it — never mind' (lowers the hand and signals a tiny 👍 to the host instead of a silent disappear). Host queue colour-codes the two visibility states.",
+  },
+
+  // ── Week 1: bleeding wounds ──────────────────────────────────
+  {
+    date: "May 22, 2026",
+    tag: "Improvement",
+    icon: Sparkles,
+    title: "Welcome-back banner — signed-in users skip the marketing pitch",
+    body:
+      "Signed-in operators visiting / now see a one-line banner at the top: avatar + 'Welcome back, [name]. Cohort 7 live class in 32 min.' with a direct 'Open dashboard' CTA. Pulls from the same liveSessions selector the dashboard uses, dismissible for 7 days via localStorage. The marketing surface still renders below for users who landed there intentionally.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: Link2,
+    title: "Recordings now have shareable timestamp links",
+    body:
+      "Every recording has a standalone route at /dashboard/recordings/<id>?t=<seconds>. The player exposes a 'Copy link to this moment' button that writes the current playhead into the URL so you can paste 'watch this at minute 12:30' into a community post or email. Direct visits auto-seek and resume from the deep-linked moment.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Improvement",
+    icon: Filter,
+    title: "Unified filters popover on the recordings list",
+    body:
+      "The two parallel chip rails (watch state + visibility tier) collapsed into a single 'Filters' button with grouped checkboxes inside a popover, plus an active-pill rail so you always see what's narrowing your results without re-opening. Same pattern coming to other list pages next.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Improvement",
+    icon: Repeat,
+    title: "Resume overlay countdown + Enter/R shortcuts",
+    body:
+      "Opening a half-watched recording now shows 'Resume from 12:30?' with a 4-second auto-resume countdown. Move the cursor over the overlay to cancel the countdown, press Enter to resume, R to start over. Calmer than the previous 'wait forever for a click' pattern.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: Bell,
+    title: "Per-community notification preferences + 24h snooze",
+    body:
+      "A bell popover in every batch header lets members pick one of four notification levels (Everything, @Mentions + replies, Announcements only, Off), plus a separate 'ping me when a live class starts' toggle that's independent of feed activity. A 'Quiet for 24 hours' snooze pill defers everything except class-start alerts. New defaults are 'mentions + announcements' so a fresh member isn't drowned on day one.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: Wifi,
+    title: "Sticky 'live now' bar in every community feed",
+    body:
+      "When a class attached to the community is live or starting within 15 minutes, a colour-coded bar pinned to the top of the feed shows the class title, the countdown, and a one-click Join / Hop into the lobby button. Auto-hides when the class ends or the host dismisses it.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Improvement",
+    icon: Users,
+    title: "New batches now ship with three seeded posts",
+    body:
+      "Fresh batches no longer open to an empty feed — they ship with three real posts the host can edit or delete: a pinned welcome card, an 'introduce yourself' thread, and a 'what you'll get from this cohort' post. The first student to land sees an active-looking community instead of dead silence.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: ThumbsUp,
+    title: "Comprehension check inside live classes",
+    body:
+      "Students get two pill buttons during class: 'With you 👍' and 'Lost 🤔'. The host sees a live ratio with an automatic alert when more than 30% of votes flip to Lost — 'slow down or ask a question.' Votes expire every 2 minutes so the ratio reflects current mood, not cumulative drift.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: Wifi,
+    title: "Host connection health bar — recording survives a wifi drop",
+    body:
+      "Floating bar in the top-left of the live host stage. Green when connected with student count + recording state. On disconnect, flips to amber 'Reconnecting — your class is still live, recording continues' and auto-mutes the host mic so garbled half-connected audio doesn't blast the room. After three failed reconnects, escalates to a red 'Connection lost' card with a one-tap 'Refresh & rejoin' button.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Improvement",
+    icon: ClipboardList,
+    title: "End-of-class wrap — one screen, not three steps",
+    body:
+      "The wrap wizard collapsed from a 3-step form to a single recap card with everything pre-filled: outcome defaults to 'held', summary auto-drafts from the agenda items you ticked off, follow-up defaults to none. Host's only required action is one click: 'Looks good — send to students'. Edit anything inline before publishing.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Feature",
+    icon: Film,
+    title: "Recording-processing card — no more dead time between class end and player ready",
+    body:
+      "The 30-180 seconds between class end and the recording URL landing used to show nothing. Now: a processing card on the class detail page with three synthetic stages (Saving → Encoding → Uploading) and a live pseudo-progress bar. Students see the recording is on its way; the host email still fires when the file is genuinely ready.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Improvement",
+    icon: Layers,
+    title: "Live class right-rail panels — one expanded at a time",
+    body:
+      "Host stage panels (Agenda, Polls, Hands, Breakouts) now follow mutual-exclusion: only one is expanded at a time. When a hand goes up, the Hands panel auto-previews for 4 seconds then restores whichever panel was previously open. Counters live on the panel pills so the host sees backlog depth at a glance.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Improvement",
+    icon: Video,
+    title: "Inline AV preflight strip — no more first-visit modal wall",
+    body:
+      "First-time visitors to a live class lobby no longer get a blocking modal asking to test camera + mic. Replaced with a silent traffic-light strip inside the waiting room (📷 mic / 📹 camera / 📶 network), auto-probing in the background. The full AV wizard still mounts but only opens when the student clicks 'Run a full setup check' OR a probe fails.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Fix",
+    icon: ShieldCheck,
+    title: "Removed unverified review count from structured data",
+    body:
+      "JSON-LD on the homepage previously declared aggregateRating with a specific count + score that wasn't backed by a public review page — Google's rich-snippet policy disallows that and would have suppressed the snippet (or worse, flagged in Search Console). Removed pending a real reviews surface.",
+  },
+  {
+    date: "May 22, 2026",
+    tag: "Fix",
+    icon: Palette,
+    title: "Hover-revealed CTAs now visible on touch devices",
+    body:
+      "Dozens of feature tiles across the marketing site used Tailwind's opacity-0 / group-hover:opacity-100 pattern for 'See how it works →' affordances. On touchscreens (which never fire hover) those CTAs were permanently invisible. A single CSS rule in @media (hover: none) now forces them visible at 70% opacity so a tap target is always clear.",
+  },
+
+  // ── Older entries follow ─────────────────────────────────────
   {
     date: "May 21, 2026",
     tag: "Feature",

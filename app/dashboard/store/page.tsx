@@ -18,6 +18,7 @@ import {
   ShoppingBag,
   Sparkles,
   TrendingUp,
+  Users,
   Video,
 } from "lucide-react"
 import {
@@ -431,11 +432,12 @@ const QUICK_START_KINDS: Array<{
   icon: React.ReactNode
   gradient: string
 }> = [
-  { kind: "course",     label: "Course access",   hint: "Sell access to a course you've built.",        example: "e.g. React Fundamentals",      icon: <BookOpen className="h-5 w-5" />,       gradient: "from-violet-500/15 to-fuchsia-500/15" },
-  { kind: "download",   label: "Digital download", hint: "PDF, audio, video, ZIP — one or many files.", example: "e.g. The Notion Templates Pack", icon: <Download className="h-5 w-5" />,       gradient: "from-sky-500/15 to-cyan-500/15" },
-  { kind: "membership", label: "Membership",       hint: "Recurring access to a set of products.",       example: "e.g. The Maker Club",          icon: <Sparkles className="h-5 w-5" />,       gradient: "from-amber-500/15 to-rose-500/15" },
+  { kind: "course",     label: "Course access",    hint: "Sell access to a course you've built.",        example: "e.g. React Fundamentals",       icon: <BookOpen className="h-5 w-5" />,       gradient: "from-violet-500/15 to-fuchsia-500/15" },
+  { kind: "community",  label: "Paid community",   hint: "Subscription-gated cohort feed. Auto-joins buyers.", example: "e.g. The Founders Circle",      icon: <Users className="h-5 w-5" />,          gradient: "from-rose-500/15 to-fuchsia-500/15" },
+  { kind: "membership", label: "Membership",       hint: "Recurring access to a set of products.",       example: "e.g. The Maker Club",           icon: <Sparkles className="h-5 w-5" />,       gradient: "from-amber-500/15 to-rose-500/15" },
   { kind: "session",    label: "1-on-1 session",   hint: "Coaching call with a booking link.",           example: "e.g. 30-min strategy call",     icon: <CalendarClock className="h-5 w-5" />,  gradient: "from-emerald-500/15 to-lime-500/15" },
   { kind: "webinar",    label: "Paid webinar",     hint: "Charge for a live class.",                     example: "e.g. Friday Q&A",               icon: <Video className="h-5 w-5" />,          gradient: "from-blue-500/15 to-indigo-500/15" },
+  { kind: "download",   label: "Digital download", hint: "PDF, audio, video, ZIP — one or many files.",  example: "e.g. The Notion Templates Pack", icon: <Download className="h-5 w-5" />,       gradient: "from-sky-500/15 to-cyan-500/15" },
   { kind: "bundle",     label: "Bundle",           hint: "Combine products at a special price.",         example: "e.g. Year-end bundle",          icon: <Package className="h-5 w-5" />,        gradient: "from-orange-500/15 to-red-500/15" },
   { kind: "license",    label: "License key",      hint: "Templates / software with serial keys.",       example: "e.g. Lifetime license",         icon: <Key className="h-5 w-5" />,            gradient: "from-slate-500/15 to-zinc-500/15" },
 ]
@@ -506,6 +508,7 @@ function StatTile({ icon, label, value }: { icon: React.ReactNode; label: string
 export function KindBadge({ kind }: { kind: ProductKind }) {
   const map = {
     course:     { icon: <BookOpen     className="h-3 w-3" />, label: "Course"     },
+    community:  { icon: <Users        className="h-3 w-3" />, label: "Community"  },
     download:   { icon: <Download     className="h-3 w-3" />, label: "Download"   },
     bundle:     { icon: <Package      className="h-3 w-3" />, label: "Bundle"     },
     membership: { icon: <Sparkles     className="h-3 w-3" />, label: "Membership" },

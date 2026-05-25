@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, CalendarRange, CheckCircle2, Copy, ExternalLink, Link as LinkIcon, Mail, MessageSquare, Radio, Repeat, Send, Video } from "lucide-react"
 import { toast } from "sonner"
 import { readCurrentTenantSlug } from "@/lib/tenant-store"
@@ -150,7 +150,25 @@ function defaultStart(): string {
 
 export default function NewClassPage() {
   const router = useRouter()
-  const { courses, currentUser, enrollments, users, addLiveSession, addNotifications, openLiveRoom } = useLMS()
+  const {
+    courses,
+    currentUser,
+    enrollments,
+    users,
+    addLiveSession,
+    addNotifications,
+    openLiveRoom,
+    // For prefill-from-previous-session via ?fromSessionId — the
+    // wrap wizard's "Schedule next class" follow-up hands off the
+    // source session id; we look it up here and pre-fill the form
+    // with title (Week-N incremented), scheduledAt (+7d), duration,
+    // agenda, host, provider, meeting URL.
+    liveSessions,
+  } = useLMS()
+  const searchParams = useSearchParams()
+  const prefillCourseId = searchParams?.get("courseId") ?? ""
+  const fromSessionId = searchParams?.get("fromSessionId") ?? ""
+  const fromSession = fromSessionId ? liveSessions.find((s) => s.id === fromSessionId) : undefined
 
   // Pre-generated room code + tenant + origin so the join URL renders BEFORE
   // submit. All three rely on browser-only state (Date.now/Math.random,
@@ -170,22 +188,65 @@ export default function NewClassPage() {
     ? `${appBase}/p/${tenantSlug}/live/${previewRoomCode}`
     : ""
 
-  const [courseId, setCourseId] = useState("")
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
-  const [meetingUrl, setMeetingUrl] = useState("")
+  // Prefill bundle. When the wrap wizard's "Schedule next class"
+  // path lands here it carries ?fromSessionId=<just-ended-class>.
+  // We pull the source session and pre-fill every editable field so
+  // a weekly-series teacher just confirms instead of re-typing.
+  // ?courseId on its own (without fromSessionId) pre-selects the
+  // course but leaves everything else default — the lighter
+  // "schedule next" entry point from the class list still works.
+  const prefill = (() => {
+    if (!fromSession) {
+      return {
+        courseId: prefillCourseId,
+        title: "",
+        description: "",
+        meetingUrl: "",
+        provider: "in-house" as LiveSession["provider"],
+        scheduledAt: defaultStart(),
+        duration: "60",
+        hostId: currentUser?.id ?? "",
+      }
+    }
+    // +7 days at the same local time. Same-cadence default is
+    // correct for the weekly cohort case (the most common reason
+    // to use "Schedule next class"). Teacher can edit before save.
+    const nextStart = new Date(Date.parse(fromSession.scheduledAt) + 7 * 24 * 60 * 60 * 1000)
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const nextStartLocal = `${nextStart.getFullYear()}-${pad(nextStart.getMonth() + 1)}-${pad(nextStart.getDate())}T${pad(nextStart.getHours())}:${pad(nextStart.getMinutes())}`
+    // Title — bump "Week N" when present, else suffix "(next week)".
+    const weekMatch = fromSession.title.match(/\bweek\s*(\d+)\b/i)
+    const nextTitle = weekMatch
+      ? fromSession.title.replace(/\bweek\s*(\d+)\b/i, `Week ${Number(weekMatch[1]) + 1}`)
+      : `${fromSession.title} (next week)`
+    return {
+      courseId: fromSession.courseId || prefillCourseId,
+      title: nextTitle,
+      description: fromSession.description ?? "",
+      meetingUrl: fromSession.meetingUrl ?? "",
+      provider: fromSession.provider,
+      scheduledAt: nextStartLocal,
+      duration: String(fromSession.durationMinutes ?? 60),
+      hostId: fromSession.hostId,
+    }
+  })()
+
+  const [courseId, setCourseId] = useState(prefill.courseId)
+  const [title, setTitle] = useState(prefill.title)
+  const [description, setDescription] = useState(prefill.description)
+  const [meetingUrl, setMeetingUrl] = useState(prefill.meetingUrl)
   // Default to in-house — that's our hosted video room, no external
   // link required. Instructors who prefer Zoom/Meet/Teams just override.
   const [providerOverride, setProviderOverride] = useState<LiveSession["provider"] | null>(
-    "in-house",
+    prefill.provider,
   )
-  const [scheduledAt, setScheduledAt] = useState(defaultStart())
-  const [duration, setDuration] = useState("60")
+  const [scheduledAt, setScheduledAt] = useState(prefill.scheduledAt)
+  const [duration, setDuration] = useState(prefill.duration)
   // Host (instructor) for this class. Defaults to the logged-in
   // user so the common "I'm scheduling my own class" case is
   // zero-click; can be reassigned to any faculty member when an
   // admin is scheduling on someone else's behalf.
-  const [hostUserId, setHostUserId] = useState<string>(currentUser?.id ?? "")
+  const [hostUserId, setHostUserId] = useState<string>(prefill.hostId || currentUser?.id || "")
   const [notifyInApp, setNotifyInApp] = useState(true)
   const [notifyEmail, setNotifyEmail] = useState(true)
   const [notifyWhatsApp, setNotifyWhatsApp] = useState(true)

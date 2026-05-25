@@ -178,7 +178,7 @@ function LibraryMockup() {
             { t: "UX Foundations",     d: "Continue lesson 8 of 21",     Icon: Package,  cta: "Continue" },
             { t: "Wireframe Kit (zip)", d: "Download · 12 MB · 1 file",  Icon: Download, cta: "Download" },
             { t: "Studio Member",       d: "Renews 12 Jun 2026",          Icon: Tag,      cta: "Manage" },
-            { t: "Portfolio 1:1 — Wed", d: "4 pm · Google Meet · 60 min", Icon: Calendar, cta: "Join" },
+            { t: "Portfolio 1:1 — Wed", d: "4 pm · Video call · 60 min", Icon: Calendar, cta: "Join" },
           ].map((i) => (
             <div key={i.t} className="flex items-center gap-2 rounded-md border border-border/60 bg-card p-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary">

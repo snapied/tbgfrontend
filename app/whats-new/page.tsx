@@ -19,12 +19,12 @@ const SITE_URL = "https://thebigclass.com"
 export const metadata: Metadata = {
   title: "What's new · The Big Class",
   description:
-    "Every meaningful improvement shipped on The Big Class — live class recording, unified inbox, cohort community tools, simpler forms, and more. Updated as we ship.",
+    "Every meaningful improvement shipped on The Big Class — live polls, raised-hand queues, recording chapters, in-class agenda, lobby presence, community classes tab, and the running changelog.",
   alternates: { canonical: `${SITE_URL}/whats-new` },
   openGraph: {
     title: "What's new on The Big Class",
     description:
-      "Live class cloud recording, unified inbox with inline replies, cohort community with @mentions, Simple/Advanced forms, and more — the running changelog.",
+      "Live polls, raised hands, in-class agenda, lobby presence, auto-chaptered recordings, classes tab in the community, two-field bio with AI drafting — the running changelog.",
     url: `${SITE_URL}/whats-new`,
     type: "article",
   },
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "What's new on The Big Class",
     description:
-      "Cloud recording, unified inbox, cohort community, simpler forms, sticky onboarding. The running product changelog.",
+      "Live polls + raised hands + recording chapters + community classes tab. The running product changelog.",
   },
 }
 
@@ -52,6 +52,59 @@ interface ChangeSection {
 
 const SECTIONS: ChangeSection[] = [
   {
+    id: "in-class-wedges",
+    emoji: "🟢",
+    title: "Inside the live room — the May 2026 sprint",
+    blurb:
+      "A burst of features that show up where students actually feel them: during the call. Polls, raised hands, agenda checkpoints, lobby presence, chat persistence, recording chapters, community classes tab, and an instructor bio that finally syncs.",
+    items: [
+      {
+        title: "Live polls with notification fan-out",
+        body: "Launch a 2–4 option poll from the host rail. Students vote inside the call; results render in real time. Launch + close both fire a notification to every enrolled student and every invited co-instructor — minus the launching host — so absentees can tap in to vote.",
+        href: "/help/live-polls",
+      },
+      {
+        title: "Raised-hand queue with Live #N badge",
+        body: "Students raise without unmuting. The host's right-rail Hands panel orders questions by raise time with a Live #N badge and a one-click Answer button. Persists across host reconnects.",
+        href: "/help/raised-hands",
+      },
+      {
+        title: "Mark agenda items done in class",
+        body: "Add an agenda when you schedule. During the call, click items to mark them Done (timestamped) or Skipped. 3 / 7 pacing chip lives at the top of the panel. Late joiners see a 'You missed: …' banner pulled from your check-offs.",
+        href: "/help/in-class-agenda",
+      },
+      {
+        title: "Waiting-room presence",
+        body: "Before you open the door, you see a live roster of every student who's loaded the lobby (3s polling). When you hit Start, everyone auto-admits — no per-student click. Late joiners after that skip the lobby and auto-admit instantly.",
+        href: "/help/waiting-room-presence",
+      },
+      {
+        title: "Class chat persists to the recording",
+        body: "Live chat messages are captured with sender + body + timestamp and attached to the recording. Re-watchers see the Chat tab in the player; clicking a message seeks the video to that moment.",
+        href: "/help/class-chat-transcript",
+      },
+      {
+        title: "Auto-generated recording chapters",
+        body: "We parse WebVTT transcripts for transition phrases ('now let's talk about', 'moving on to') and emit 5–12 chapter markers per recording, ≥90s apart. Chip rail below the video — click any chip to seek.",
+        href: "/help/recording-chapters",
+      },
+      {
+        title: "Classes tab inside the community",
+        body: "Every community attached to a course now has a Classes tab — upcoming live sessions, recordings grid with per-viewer watched / unwatched badges, a Join button when the host opens the room, and a 'wraps in N days' cohort banner. End-of-class recap auto-posts to the feed.",
+        href: "/help/community-classes-tab",
+      },
+      {
+        title: "Two-field instructor bio + AI 'Help me write'",
+        body: "Short tagline (≤55 chars, used on cards) + long About (Tiptap rich text). Two-way sync between the faculty edit form and the public profile page, with a manual 'Sync from public profile' button. Sparkles button generates three opinionated AI drafts (Warm / Authoritative / Outcome-led).",
+        href: "/help/instructor-bio-sync",
+      },
+      {
+        title: "Host time-left + overtime pill",
+        body: "Host-only pill in the bottom bar shows minutes remaining against the scheduled end time. Goes amber 5m before end, red after — a quiet pacing signal without leaking the scheduled end to students.",
+      },
+    ],
+  },
+  {
     id: "live-classes",
     emoji: "🎥",
     title: "Live classes you can run from the browser",
@@ -70,7 +123,7 @@ const SECTIONS: ChangeSection[] = [
       },
       {
         title: "Watch recordings inline (new dialog)",
-        body: "Click Watch on any past class and the recording opens in an inline player dialog with full playback controls. Supports MP4 files, YouTube, Loom, Vimeo, and Wistia — falls back to a download link for anything else.",
+        body: "Click Watch on any past class and the recording opens in an inline player dialog with full playback controls. Supports MP4 files, common video-host embed URLs, and direct CDN links — falls back to a download link for anything else.",
         href: "/help/recording-player-dialog",
       },
       {
@@ -120,7 +173,7 @@ const SECTIONS: ChangeSection[] = [
     emoji: "👥",
     title: "Cohort community tools",
     blurb:
-      "Your Batch detail page just became a Slack-grade workspace — minus Slack. Mentions, file previews, broadcasts, post editing.",
+      "Your Batch detail page just became a chat-grade workspace — without the separate-app overhead. Mentions, file previews, broadcasts, post editing.",
     items: [
       {
         title: "@-mention picker",
@@ -228,7 +281,7 @@ export default function WhatsNewPage() {
               What&apos;s new
             </h1>
             <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
-              The running list of meaningful improvements we&apos;ve shipped — cloud recording, a unified inbox, cohort community tools, an onboarding rail, and the small stuff that quietly piles up. Most items link to a help article that goes deeper.
+              The running list of meaningful improvements we&apos;ve shipped — most recently, a sprint of in-class wedges (live polls with notification fan-out, raised-hand queues, in-class agenda, lobby presence, auto-chaptered recordings, a community classes tab, two-field instructor bio). Below that: cloud recording, a unified inbox, cohort community tools, and the small stuff that quietly piles up. Most items link to a help article that goes deeper.
             </p>
           </div>
         </section>

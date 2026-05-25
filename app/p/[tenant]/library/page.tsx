@@ -25,6 +25,7 @@ import {
   Receipt,
   ShoppingBag,
   Sparkles,
+  Users,
   Video,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -106,6 +107,7 @@ export default function PortalLibraryPage({
       webinar: [],
       license: [],
       membership: [],
+      community: [],
     }
     for (const e of ents) g[e.type].push(e)
     return g
@@ -211,6 +213,15 @@ export default function PortalLibraryPage({
               <div className="grid gap-3 sm:grid-cols-2">
                 {grouped.course.map((e) => (
                   <CourseTile key={e.id} entitlement={e} basePath={basePath} />
+                ))}
+              </div>
+            </Section>
+          )}
+          {grouped.community.length > 0 && (
+            <Section title="Communities">
+              <div className="grid gap-3 sm:grid-cols-2">
+                {grouped.community.map((e) => (
+                  <CommunityTile key={e.id} entitlement={e} basePath={basePath} />
                 ))}
               </div>
             </Section>
@@ -332,6 +343,40 @@ function MembershipTile({ entitlement }: { entitlement: Entitlement }) {
       title={product?.title ?? "Membership"}
       hint={entitlement.expiresAt ? `Renews ${new Date(entitlement.expiresAt).toLocaleDateString()}` : "Active"}
       cover={product?.coverImageUrl}
+    />
+  )
+}
+
+function CommunityTile({
+  entitlement,
+  basePath,
+}: {
+  entitlement: Entitlement
+  basePath: string
+}) {
+  const { products } = useStore()
+  const { studentGroups } = useLMS()
+  const product = products.find((p) => p.id === entitlement.productId)
+  // entitlement.reference points at the StudentGroup id
+  const group = studentGroups.find((g) => g.id === entitlement.reference)
+  const expires = entitlement.expiresAt
+    ? `Renews ${new Date(entitlement.expiresAt).toLocaleDateString()}`
+    : "Member"
+  const memberCount = group?.memberIds.length ?? 0
+  return (
+    <Tile
+      icon={<Users className="h-4 w-4" />}
+      title={group?.name ?? product?.title ?? "Community"}
+      hint={`${expires} · ${memberCount} ${memberCount === 1 ? "member" : "members"}`}
+      cover={product?.coverImageUrl}
+      action={
+        group
+          ? {
+              label: "Open community",
+              href: `${basePath}/my/communities/${group.id}`,
+            }
+          : undefined
+      }
     />
   )
 }

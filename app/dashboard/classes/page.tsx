@@ -250,6 +250,77 @@ export default function ClassesPage() {
     showFlash(`Cancelled ${ids.length} session${ids.length === 1 ? "" : "s"}.`)
   }
 
+  // Quick reschedule via a small datetime prompt. We use the
+  // browser's native prompt for the POC — it's fast and keyboard-
+  // friendly. A richer date-time picker dialog can wrap this later
+  // without touching the row code path. The new time also clears
+  // any cached `notifiedAt` stamp so students get re-notified
+  // about the change (they wouldn't otherwise).
+  const rescheduleSession = (s: LiveSession) => {
+    const current = new Date(s.scheduledAt)
+    // Build a yyyy-mm-ddTHH:mm string in the user's local tz —
+    // matches the format <input type="datetime-local"> uses and
+    // is what the prompt user actually types.
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const defaultStr = `${current.getFullYear()}-${pad(current.getMonth() + 1)}-${pad(current.getDate())}T${pad(current.getHours())}:${pad(current.getMinutes())}`
+    const next = window.prompt(
+      `Reschedule "${s.title}"\nFormat: YYYY-MM-DDTHH:MM (24h, your local time)`,
+      defaultStr,
+    )
+    if (!next) return
+    const nextMs = Date.parse(next)
+    if (!Number.isFinite(nextMs)) {
+      toast.error("Couldn't read that time — try YYYY-MM-DDTHH:MM.")
+      return
+    }
+    updateLiveSession(s.id, {
+      scheduledAt: new Date(nextMs).toISOString(),
+      notifiedAt: undefined,
+    })
+    showFlash(
+      `Rescheduled to ${new Date(nextMs).toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}`,
+    )
+  }
+
+  // Clone the row into a fresh session +7 days. Title gets a "Week
+  // N" suffix when the source title already has one; otherwise we
+  // append a "(next week)" hint so the duplicate is obvious in the
+  // list. Everything else (agenda, duration, host, meeting URL,
+  // course, provider) is carried over so a weekly series teacher
+  // confirms with one click instead of re-filling 6 fields.
+  const scheduleNextInSeries = (s: LiveSession) => {
+    const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000
+    const nextStart = new Date(Date.parse(s.scheduledAt) + ONE_WEEK_MS)
+    const weekMatch = s.title.match(/\bweek\s*(\d+)\b/i)
+    const nextTitle = weekMatch
+      ? s.title.replace(/\bweek\s*(\d+)\b/i, `Week ${Number(weekMatch[1]) + 1}`)
+      : `${s.title} (next week)`
+    const cloned: LiveSession = {
+      ...s,
+      id: generateId("session"),
+      title: nextTitle,
+      scheduledAt: nextStart.toISOString(),
+      status: "scheduled",
+      // Reset live-room + recap state so the clone reads as
+      // fresh-and-upcoming instead of inheriting "live" / "ended"
+      // metadata from its parent.
+      roomState: undefined,
+      roomOpenedAt: undefined,
+      roomStartedAt: undefined,
+      roomEndedAt: undefined,
+      recordings: undefined,
+      recordingUrl: undefined,
+      wasHeld: undefined,
+      summary: undefined,
+      notifiedAt: undefined,
+    }
+    addLiveSession(cloned)
+    toast.success(
+      `Scheduled "${cloned.title}" · ${nextStart.toLocaleString(undefined, { weekday: "short", hour: "2-digit", minute: "2-digit" })}`,
+    )
+    showFlash(`Scheduled · ${cloned.title}`)
+  }
+
   const sessions = useMemo(() => {
     const sorted = [...liveSessions].sort((a, b) =>
       b.scheduledAt.localeCompare(a.scheduledAt),
@@ -348,16 +419,32 @@ export default function ClassesPage() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats. Live now + Upcoming tiles double as one-click
+          filters so a teacher who lands here and wants "just the
+          live ones" doesn't have to find the dropdown filter. */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatTile icon={<Video />} label="Total" value={`${liveSessions.length}`} />
+        <StatTile
+          icon={<Video />}
+          label="Total"
+          value={`${liveSessions.length}`}
+          active={statusFilter === "all"}
+          onClick={() => setStatusFilter("all")}
+        />
         <StatTile
           icon={<Radio className="animate-pulse" />}
           label="Live now"
           value={`${liveCount}`}
           accent={liveCount > 0}
+          active={statusFilter === "live"}
+          onClick={() => setStatusFilter("live")}
         />
-        <StatTile icon={<Calendar />} label="Upcoming" value={`${upcomingCount}`} />
+        <StatTile
+          icon={<Calendar />}
+          label="Upcoming"
+          value={`${upcomingCount}`}
+          active={statusFilter === "upcoming"}
+          onClick={() => setStatusFilter("upcoming")}
+        />
         <StatTile icon={<Users />} label="Total joins" value={`${totalAttendance}`} />
       </div>
 
@@ -699,6 +786,28 @@ export default function ClassesPage() {
                               <DropdownMenuItem onClick={() => setEditing(s)}>
                                 <Pencil className="mr-2 h-4 w-4" /> Edit
                               </DropdownMenuItem>
+                              {/* Quick reschedule — opens a small
+                                  datetime picker prompt right in the
+                                  row. Teachers running back-to-back
+                                  classes don't have to open the
+                                  detail page to push a class an
+                                  hour. Disabled once the class has
+                                  ended; rescheduling a past class
+                                  reads as a mistake more often than
+                                  intent. */}
+                              {status !== "ended" && status !== "cancelled" && (
+                                <DropdownMenuItem onClick={() => rescheduleSession(s)}>
+                                  <Calendar className="mr-2 h-4 w-4" /> Reschedule…
+                                </DropdownMenuItem>
+                              )}
+                              {/* Schedule next in series — clones the
+                                  row +7 days at the same time, with
+                                  "Week N" auto-numbered. Saves the
+                                  3-field re-fill weekly-class teachers
+                                  did manually. */}
+                              <DropdownMenuItem onClick={() => scheduleNextInSeries(s)}>
+                                <Plus className="mr-2 h-4 w-4" /> Schedule next week
+                              </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => notifyMany([s.id])}>
                                 <Send className="mr-2 h-4 w-4" /> Send reminder
                               </DropdownMenuItem>
@@ -803,32 +912,60 @@ function StatTile({
   label,
   value,
   accent,
+  onClick,
+  active,
 }: {
   icon: React.ReactNode
   label: string
   value: string
   accent?: boolean
+  /** Optional click handler. When provided the tile becomes a
+   *  button (cursor + hover-lift + focus ring) so visitors discover
+   *  it's interactive. Used to wire stat tiles to filter chips. */
+  onClick?: () => void
+  /** Visual "this filter is on" state. Adds a primary ring so the
+   *  tile reads as the active selection. */
+  active?: boolean
 }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg",
-              accent ? "bg-destructive/15 text-destructive" : "bg-primary/10 text-primary",
-            )}
-          >
-            <span className="[&>svg]:h-5 [&>svg]:w-5">{icon}</span>
-          </div>
-          <div>
-            <p className="text-xl font-bold tabular-nums">{value}</p>
-            <p className="text-xs text-muted-foreground">{label}</p>
-          </div>
+  const interactive = !!onClick
+  const inner = (
+    <CardContent className="p-4">
+      <div className="flex items-center gap-3">
+        <div
+          className={cn(
+            "flex h-10 w-10 items-center justify-center rounded-lg",
+            accent ? "bg-destructive/15 text-destructive" : "bg-primary/10 text-primary",
+          )}
+        >
+          <span className="[&>svg]:h-5 [&>svg]:w-5">{icon}</span>
         </div>
-      </CardContent>
-    </Card>
+        <div>
+          <p className="text-xl font-bold tabular-nums">{value}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
+        </div>
+      </div>
+    </CardContent>
   )
+  if (interactive) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-pressed={active}
+        className="text-left"
+      >
+        <Card
+          className={cn(
+            "transition-shadow hover:shadow-md",
+            active && "ring-2 ring-primary",
+          )}
+        >
+          {inner}
+        </Card>
+      </button>
+    )
+  }
+  return <Card>{inner}</Card>
 }
 
 function StatusBadge({ status }: { status: "upcoming" | "live" | "ended" | "cancelled" }) {

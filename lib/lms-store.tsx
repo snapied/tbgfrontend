@@ -852,7 +852,28 @@ export interface LiveSession {
   // and in a side panel during the class. Each item is optional
   // minutes so a teacher can hint pacing without locking it in.
   // Empty array = no agenda set; the surfaces collapse cleanly.
-  agenda?: Array<{ title: string; minutes?: number }>
+  // Per-item progress markers added during the live class:
+  //   • `done`        — host clicked the ✓ on this item
+  //   • `skipped`     — host clicked ⏭ (didn't cover, moving on)
+  //   • `markedAt`    — ISO timestamp of the last mark; used by the
+  //                     late-joiner recap to show "covered at 11:42".
+  // All three are optional so old agendas (without markers) keep
+  // rendering through their inferred-from-elapsed-time logic.
+  agenda?: Array<{ title: string; minutes?: number; done?: boolean; skipped?: boolean; markedAt?: string }>
+  /**
+   * Pre-staged polls (CL6) — composed at scheduling time, fired
+   * one-click during class from the host's Poll panel. Each entry
+   * keeps a question + 2-4 options; the host clicks Launch when
+   * timing is right (no mid-lecture composition). Once fired, the
+   * entry's `launchedPollId` is set so the host sees "Launched"
+   * and the entry isn't re-launchable in the same session.
+   */
+  prestagedPolls?: Array<{
+    id: string
+    question: string
+    options: string[]
+    launchedPollId?: string
+  }>
   // Per-class chat enablement. Default behaviour is "on" — most
   // classes benefit from chat. Instructors running focused
   // recording-only or lecture-style sessions can flip this off
@@ -877,6 +898,26 @@ export interface LiveSession {
   // Slides, PDFs, links, embeds, notes — anything the teacher wants to
   // make available to students who attended (or to no-shows as catch-up).
   materials?: SessionMaterial[]
+  // Class chat transcript — captured during the live class and
+  // persisted alongside the recording on End. Pulled from LiveKit's
+  // chat data channel via the ChatTranscriptRecorder. Renders in
+  // the recording details sheet under "Class chat" so a viewer
+  // re-watching the class also gets the side-channel context.
+  // Empty/undefined for classes without chat or for older sessions.
+  chatTranscript?: Array<{
+    id: string
+    /** Participant identity from LiveKit; matches the `from` field
+     *  on the chat data channel. */
+    fromId?: string
+    /** Display name (resolved at capture time so we don't have to
+     *  re-resolve on render). */
+    fromName?: string
+    /** Plain text. Same content the student typed; we don't strip
+     *  formatting because LiveKit's default chat is plain-text. */
+    text: string
+    /** ISO timestamp. Sorted ascending on persist. */
+    sentAt: string
+  }>
   createdAt: string
   // Notifications fired once when the session was created/updated so we don't
   // re-notify on every page load.
@@ -1146,11 +1187,34 @@ export interface BatchSpace {
 // but doesn't gate content. Posts are stored separately from the
 // batch record so we can prune / paginate them independently as a
 // batch grows.
+// Post-type taxonomy.
+//   • announcement — host-only by convention; pinned styling + the
+//                    fan-out path triggers on launch.
+//   • question     — student wants an answer. Surfaces a "Mark as
+//                    answered" affordance; resolved questions show
+//                    a green check and credit helpfulness to the
+//                    commenter who got marked.
+//   • win          — student win; visually warmer, optionally
+//                    cross-posts to the public Wall of Love when
+//                    the workspace opts in.
+//   • discussion   — default; the catch-all chat / thought post.
+// Legacy posts without a `type` field render as "discussion".
+export type BatchPostType = "announcement" | "question" | "win" | "discussion"
+
 export interface BatchPost {
   id: string
   batchId: string               // owning StudentGroup id
   spaceId?: string              // which space inside the batch this lives in
   authorId: string              // user id (student or teacher)
+  /** What kind of post is this? See BatchPostType. Defaults to
+   *  "discussion" at render time when absent (every pre-C2 post). */
+  type?: BatchPostType
+  /** Set on question-type posts when the host (or any commenter) marks
+   *  the question answered. ISO timestamp. The comment that resolved
+   *  it (when known) is tracked separately in answeredByCommentId so
+   *  helpfulness points can be credited to its author. */
+  answeredAt?: string
+  answeredByCommentId?: string
   // Body may now be rich-text HTML (Tiptap) or plain text — we render
   // through the same RichTextContent component that the blog uses,
   // so legacy plain bodies still display fine.
@@ -3591,6 +3655,74 @@ export function LMSProvider({ children }: { children: ReactNode }) {
   // --- Student groups ---
   const addStudentGroup = useCallback((group: StudentGroup) => {
     setStudentGroups((prev) => [group, ...prev])
+    // Seed three system posts so a newly-created batch never opens to
+    // an empty feed (the #1 reason cohorts feel dead on day 1). These
+    // are real BatchPosts owned by the creator — they can edit, pin,
+    // or delete any of them. The Welcome post pins automatically so it
+    // anchors the top of the feed for the first month.
+    //
+    // We only seed when the batch is created with no posts yet. The
+    // check is implicit (a brand-new batch can't have posts), so this
+    // is safe to call here. If a workspace export later re-adds an
+    // existing batch via addStudentGroup, we'd risk duplicating the
+    // seeds — but workspace import goes through a different code path
+    // (setStudentGroups directly), so this is fine in practice.
+    const nowIso = new Date().toISOString()
+    const authorId = group.createdBy ?? group.memberIds?.[0] ?? "system"
+    const seeded: BatchPost[] = [
+      {
+        id: `${group.id}-seed-welcome-${Date.now()}`,
+        batchId: group.id,
+        spaceId: "space-general",
+        authorId,
+        body:
+          `<p>Welcome to <strong>${escapeHtml(group.name)}</strong> 👋</p>` +
+          `<p>This is your home base — questions, wins, schedule changes, everything lives here.</p>` +
+          `<p>Tap <em>Introduce yourself</em> below to say hi. We'll do this together.</p>`,
+        pinned: true,
+        hidden: false,
+        comments: [],
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: `${group.id}-seed-intro-${Date.now() + 1}`,
+        batchId: group.id,
+        spaceId: "space-general",
+        authorId,
+        body:
+          `<p><strong>Introduce yourself 👋</strong></p>` +
+          `<p>Drop a reply with:</p>` +
+          `<ul><li>Your name + where you're tuning in from</li>` +
+          `<li>One thing you're trying to build</li>` +
+          `<li>One thing you hope to walk out of this cohort with</li></ul>`,
+        pinned: false,
+        hidden: false,
+        comments: [],
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+      {
+        id: `${group.id}-seed-whatyouget-${Date.now() + 2}`,
+        batchId: group.id,
+        spaceId: "space-general",
+        authorId,
+        body:
+          `<p><strong>What you'll get from ${escapeHtml(group.name)}</strong></p>` +
+          `<ul>` +
+          `<li>Live sessions — show up, ask, leave with answers</li>` +
+          `<li>Every class recorded with chapters and a chat transcript</li>` +
+          `<li>This common room — questions get answered, wins get celebrated</li>` +
+          `</ul>` +
+          `<p>Edit this post any time to make it yours.</p>`,
+        pinned: false,
+        hidden: false,
+        comments: [],
+        createdAt: nowIso,
+        updatedAt: nowIso,
+      },
+    ]
+    setBatchPosts((prev) => [...seeded, ...prev])
   }, [])
   const updateStudentGroup = useCallback((id: string, patch: Partial<StudentGroup>) => {
     setStudentGroups((prev) =>
@@ -4744,6 +4876,82 @@ export function LMSProvider({ children }: { children: ReactNode }) {
     }
     window.addEventListener("entitlement.course-granted", handler)
     return () => window.removeEventListener("entitlement.course-granted", handler)
+  }, [])
+
+  // Cross-store auto-join for **paid community** products. Same
+  // pattern as the course path above — the storefront fires
+  // `entitlement.community-granted` with the StudentGroup id; we
+  // add the buyer to that group's memberIds (idempotent). The
+  // optional welcomeMessage from the product config is posted to
+  // the group's General space if one exists, so the new member
+  // lands on a friendly first post instead of an empty feed.
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const handler = (ev: Event) => {
+      const detail = (ev as CustomEvent<{
+        customerId?: string
+        communityId?: string
+        welcomeMessage?: string
+        productTitle?: string
+      }>).detail
+      if (!detail?.customerId || !detail?.communityId) return
+
+      let targetGroupName: string | undefined
+      setStudentGroups((prev) =>
+        prev.map((g) => {
+          if (g.id !== detail.communityId) return g
+          targetGroupName = g.name
+          if (g.memberIds.includes(detail.customerId!)) return g
+          return {
+            ...g,
+            memberIds: [...g.memberIds, detail.customerId!],
+            updatedAt: new Date().toISOString(),
+          }
+        }),
+      )
+
+      // Post the welcome message — best-effort, swallows errors so
+      // a missing batchPosts store can't break the purchase flow.
+      const msg = detail.welcomeMessage?.trim()
+      if (msg && detail.communityId) {
+        try {
+          const nowIso = new Date().toISOString()
+          setBatchPosts((prev) => [
+            {
+              id: `bp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+              batchId: detail.communityId!,
+              authorId: "system",
+              type: "announcement",
+              body: msg,
+              createdAt: nowIso,
+              updatedAt: nowIso,
+              reactions: {},
+              pinned: false,
+              hidden: false,
+              comments: [],
+            },
+            ...prev,
+          ])
+        } catch {
+          /* welcome-post failure must not break checkout */
+        }
+      }
+      // Light telemetry breadcrumb — useful for the demo so the
+      // creator can see "new member joined" without checking the
+      // DB. Coalesced into a single console line, never thrown.
+      try {
+        console.info(
+          "[community-join]",
+          detail.productTitle ?? "community product",
+          "→",
+          targetGroupName ?? detail.communityId,
+        )
+      } catch {
+        /* fine */
+      }
+    }
+    window.addEventListener("entitlement.community-granted", handler)
+    return () => window.removeEventListener("entitlement.community-granted", handler)
   }, [])
 
   // Aggregate hydration flag — true once every slice has read its

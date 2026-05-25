@@ -91,7 +91,7 @@ export default function RecordingsFeaturePage() {
           bullets={[
             "Single library at /dashboard/recordings — every class with a recording",
             "Fuzzy search across class titles",
-            "Inline player dialog — MP4 / WebM / YouTube / Loom / Vimeo / Wistia",
+            "Inline player dialog — MP4 / WebM + common video-host embed URLs",
             "Native HTML5 controls + picture-in-picture",
             "Same player surfaces on class detail, past meetings, and student view",
           ]}
@@ -114,6 +114,54 @@ export default function RecordingsFeaturePage() {
           ]}
           mockup={<R2UploadMockup />}
         />
+
+        {/* Playback + discovery — the recently-shipped player +
+            list improvements. Card grid so the visitor sees all
+            of them at once instead of scrolling through 5
+            FeatureSplits. */}
+        <section className="border-y border-border bg-muted/30 py-16">
+          <div className="mx-auto max-w-6xl px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                Player + library
+              </p>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+                Watch the way you actually watch lectures.
+              </h2>
+              <p className="mt-3 text-base text-muted-foreground">
+                Speed control, chapter navigation, resume-where-you-left-off,
+                searchable transcripts, and a list that knows what you&rsquo;ve
+                already watched.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <PlayerCard
+                title="Auto-generated chapters"
+                body="Transcript-derived chapter markers parsed from transition phrases (&ldquo;Now let's talk about&hellip;&rdquo;, &ldquo;Moving on to&hellip;&rdquo;). Click to seek. 5–12 chapters per recording, ≥90s spacing so you never get a chapter cluster."
+              />
+              <PlayerCard
+                title="Playback speed"
+                body="0.75× / 1× / 1.25× / 1.5× / 2× chips below the video. Speed persists across recordings — set 1.5× once, every video opens at 1.5×."
+              />
+              <PlayerCard
+                title="Resume from last position"
+                body="Player remembers where you stopped. Open it again → ‘Resume from 12:34?’ overlay. Watched-90% trips the Completed badge."
+              />
+              <PlayerCard
+                title="Class chat in the recording"
+                body="Side-channel chat from the live class persists alongside the video. Re-watchers see the questions that came up in real time, not just the lecture."
+              />
+              <PlayerCard
+                title="Watch-state filters"
+                body="Unwatched / In progress / Watched chips on the recordings list, with live counts. Slice a 40-recording backlog down to the 8 you haven't started yet."
+              />
+              <PlayerCard
+                title="Visibility tier filter"
+                body="Filter the list by who can see each recording — Public, Enrolled, Community, or Link only. Self-hides on workspaces where everything is set to the default tier."
+              />
+            </div>
+          </div>
+        </section>
 
         <FeatureCTA />
       </main>
@@ -187,6 +235,18 @@ function RecordingsLibraryMockup() {
         ))}
       </div>
     </PreviewFrame>
+  )
+}
+
+// ============================================================
+// Player + library — compact card
+// ============================================================
+function PlayerCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-5">
+      <h3 className="text-sm font-bold leading-snug">{title}</h3>
+      <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{body}</p>
+    </div>
   )
 }
 

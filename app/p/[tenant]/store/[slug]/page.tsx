@@ -13,8 +13,10 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock,
+  MessageSquare,
   Package,
   ShoppingCart,
+  Users,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -42,8 +44,18 @@ export default function PortalProductDetailPage({
   const { currentUser } = useLMS()
   const brand = useTenantBrand()
 
+  const { studentGroups } = useLMS()
   const product = getProductBySlug(slug)
   const storeHref = `/p/${encodeURIComponent(tenant)}/store`
+
+  // Resolve the linked community (if this is a community product)
+  // so the detail page can surface what the buyer joins on purchase
+  // and link straight to the feed once they own it.
+  const linkedCommunityId =
+    product?.delivery.kind === "community" ? product.delivery.linkedCommunityId : undefined
+  const linkedCommunity = linkedCommunityId
+    ? studentGroups.find((g) => g.id === linkedCommunityId)
+    : undefined
 
   if (!product || product.status !== "published") {
     return (
@@ -205,12 +217,24 @@ export default function PortalProductDetailPage({
               </div>
 
               {owns ? (
-                <Button asChild className="w-full" size="lg">
-                  <Link href={`/p/${tenant}/library`}>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    You own this — open library
-                  </Link>
-                </Button>
+                // For community products we point straight at the
+                // feed; for everything else we send to the library
+                // (same behavior as before).
+                product.delivery.kind === "community" && linkedCommunity ? (
+                  <Button asChild className="w-full" size="lg">
+                    <Link href={`/p/${tenant}/my/communities/${linkedCommunity.id}`}>
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      You&rsquo;re a member — open community
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button asChild className="w-full" size="lg">
+                    <Link href={`/p/${tenant}/library`}>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      You own this — open library
+                    </Link>
+                  </Button>
+                )
               ) : soldOut ? (
                 <Button disabled className="w-full" size="lg">
                   Sold out
@@ -239,6 +263,72 @@ export default function PortalProductDetailPage({
               )}
             </CardContent>
           </Card>
+
+          {/* Community-product "what you join" card — only shown when
+              the product's delivery is community-kind. Names the
+              linked group and previews its current size, so the buyer
+              isn't paying to join a black box. */}
+          {product.delivery.kind === "community" && (
+            <Card className="border-primary/30 bg-primary/[0.03]">
+              <CardContent className="space-y-3 p-5">
+                <h3 className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+                  <Users className="h-3.5 w-3.5" />
+                  Community access
+                </h3>
+                {linkedCommunity ? (
+                  <>
+                    <div>
+                      <p className="text-sm font-semibold">{linkedCommunity.name}</p>
+                      {linkedCommunity.description && (
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                          {linkedCommunity.description}
+                        </p>
+                      )}
+                      <p className="mt-2 text-[11px] text-muted-foreground">
+                        {linkedCommunity.memberIds.length}{" "}
+                        {linkedCommunity.memberIds.length === 1 ? "member" : "members"} so far
+                      </p>
+                    </div>
+                    <ul className="space-y-1 text-xs">
+                      <li className="flex items-start gap-1.5">
+                        <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-success" />
+                        <span>Posts, threaded comments, reactions, @-mentions</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-success" />
+                        <span>Live AMAs + recordings posted to the feed</span>
+                      </li>
+                      <li className="flex items-start gap-1.5">
+                        <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-success" />
+                        <span>Leaderboard, pinned posts, file uploads</span>
+                      </li>
+                      {(product.delivery.includedProductIds?.length ?? 0) > 0 && (
+                        <li className="flex items-start gap-1.5">
+                          <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0 text-success" />
+                          <span>
+                            Starter pack — {product.delivery.includedProductIds!.length} bonus{" "}
+                            {product.delivery.includedProductIds!.length === 1 ? "product" : "products"}
+                          </span>
+                        </li>
+                      )}
+                      {product.pricing.type === "subscription" && (
+                        <li className="flex items-start gap-1.5">
+                          <Clock className="mt-0.5 h-3 w-3 shrink-0 text-muted-foreground" />
+                          <span>
+                            Recurring access — keeps your seat while the subscription is active.
+                          </span>
+                        </li>
+                      )}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    The community linked to this product is currently being set up.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Testimonials */}
           {(product.testimonials?.length ?? 0) > 0 && (

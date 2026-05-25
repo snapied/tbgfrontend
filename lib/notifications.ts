@@ -369,6 +369,128 @@ export function whiteboardAccessDecidedNotification(args: {
   }
 }
 
+/**
+ * Fired to everyone in the class — students + invited co-
+ * instructors — the moment the host launches an in-class poll.
+ * Used so the bell pings + the inbox lights up for participants
+ * who haven't actively opened the poll panel yet.
+ *
+ * URL deep-links into the public live page (or the host page for
+ * instructors) so a tap on the notification drops the recipient
+ * straight into the call where the poll is active.
+ */
+export function livePollLaunchedNotification(args: {
+  sessionId: string
+  sessionTitle: string
+  question: string
+  optionCount: number
+  /** "public" → /p/<tenant>/live/<roomCode>
+   *  "host"   → /dashboard/classes/<sessionId>/host
+   *  Choose per-recipient when fanning out. */
+  joinUrl: string
+}): DispatchPayload {
+  return {
+    type: "live-poll.launched",
+    title: `Poll: ${args.question}`,
+    body: `${args.optionCount}-option poll just opened in "${args.sessionTitle}". Tap to vote before it closes.`,
+    url: args.joinUrl,
+    meta: {
+      sessionId: args.sessionId,
+      kind: "poll",
+      question: args.question,
+    },
+  }
+}
+
+/**
+ * Fired when the host closes a poll. Carries the winning option
+ * + counts so the notification body reads as a stand-alone
+ * summary (recipients who never voted still get the result).
+ *
+ * The body is intentionally short — full breakdown lives in the
+ * inbox row when the inbox aggregator routes this notification
+ * type.
+ */
+export function livePollClosedNotification(args: {
+  sessionId: string
+  sessionTitle: string
+  question: string
+  winner: { label: string; count: number; pct: number } | null
+  totalVotes: number
+  /** Deep-link to the recording detail page once available, else
+   *  back to the class detail page where the recap surfaces the
+   *  closed poll. */
+  resultsUrl: string
+}): DispatchPayload {
+  const winnerLine = args.winner
+    ? `Winner: "${args.winner.label}" with ${args.winner.pct}% (${args.winner.count} of ${args.totalVotes})`
+    : `No votes were cast.`
+  return {
+    type: "live-poll.closed",
+    title: `Poll closed: ${args.question}`,
+    body: `${args.sessionTitle} · ${winnerLine}`,
+    url: args.resultsUrl,
+    meta: {
+      sessionId: args.sessionId,
+      kind: "poll-result",
+      question: args.question,
+      winnerLabel: args.winner?.label,
+      totalVotes: args.totalVotes,
+    },
+  }
+}
+
+// ────────────────────────────────────────────────────────────────
+// Docs (knowledge layer) — 3 payload builders.
+// All three deep-link to /dashboard/docs/<id> (or the public /k/
+// route when applicable) so the recipient lands on the right view.
+// ────────────────────────────────────────────────────────────────
+
+export function docMentionNotification(args: {
+  docId: string
+  docTitle: string
+  by: string
+  excerpt: string
+}): DispatchPayload {
+  return {
+    type: "doc.mention",
+    title: `${args.by} tagged you in "${args.docTitle}"`,
+    body: args.excerpt,
+    url: `/dashboard/docs/${args.docId}`,
+    meta: { docId: args.docId, kind: "doc-mention" },
+  }
+}
+
+export function docCommentNotification(args: {
+  docId: string
+  docTitle: string
+  by: string
+  excerpt: string
+}): DispatchPayload {
+  return {
+    type: "doc.comment",
+    title: `New comment on "${args.docTitle}"`,
+    body: `${args.by}: ${args.excerpt}`,
+    url: `/dashboard/docs/${args.docId}`,
+    meta: { docId: args.docId, kind: "doc-comment" },
+  }
+}
+
+export function docPublishedNotification(args: {
+  docId: string
+  docTitle: string
+  by: string
+  publicSlug?: string
+}): DispatchPayload {
+  return {
+    type: "doc.published",
+    title: `"${args.docTitle}" was just published`,
+    body: `${args.by} published a new doc${args.publicSlug ? " to your public knowledge hub" : ""}.`,
+    url: args.publicSlug ? `/k/${args.publicSlug}` : `/dashboard/docs/${args.docId}`,
+    meta: { docId: args.docId, kind: "doc-published", publicSlug: args.publicSlug },
+  }
+}
+
 export function detectProvider(url: string): "google-meet" | "zoom" | "ms-teams" | "other" {
   const u = url.toLowerCase().trim()
   if (u.includes("meet.google.com")) return "google-meet"

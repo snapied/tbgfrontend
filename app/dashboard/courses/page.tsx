@@ -53,6 +53,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { useTenant } from "@/lib/tenant-store"
 import { tenantPublicUrl } from "@/lib/tenant-resolver"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
+import { ModuleTrashButton } from "@/components/dashboard/module-trash-button"
 
 // Verb labels shown on every visibility action — confirm dialog,
 // toast, and dialog header all read from the same map so the copy
@@ -425,6 +426,7 @@ export default function CoursesPage() {
             noun="Course"
           />
           <TakeATourButton tourId="courses-v1" />
+          <ModuleTrashButton kinds={["course", "course-module", "course-lesson"]} noun="course" />
           {atCourseCap ? (
             <Button asChild data-tour="courses-new" variant="outline" title={`You're at the ${cap}-course cap on your current plan. Upgrade to add another.`}>
               <Link href="/dashboard/billing">

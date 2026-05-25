@@ -55,7 +55,14 @@ import {
   UserPlus,
   Video,
   X,
+  Radio,
+  Clock,
+  PlayCircle,
 } from "lucide-react"
+import { CommunityNotificationPrefsPopover } from "@/components/dashboard/community-notification-prefs-popover"
+import { CommunityMemberOnboarding } from "@/components/dashboard/community-member-onboarding"
+import { CommunityHealthPulse } from "@/components/dashboard/community-health-pulse"
+import { DeadCommunityRecoveryBanner } from "@/components/dashboard/dead-community-recovery"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -103,9 +110,11 @@ import {
   DEFAULT_BATCH_SPACES,
   type BatchSpace,
   type BatchPost,
+  type BatchPostType,
 } from "@/lib/lms-store"
 import { fuzzySearch } from "@/lib/fuzzy-search"
 import { useTenant } from "@/lib/tenant-store"
+import { useWall } from "@/lib/wall-store"
 import { CommunityMemberToolkit } from "@/components/dashboard/community-member-toolkit"
 import { useCommunityMemberPrefs } from "@/lib/community-member-prefs"
 import { CommunityBulkInviteDialog } from "@/components/dashboard/community-bulk-invite-dialog"
@@ -121,6 +130,7 @@ import {
   setThreadMuted,
 } from "@/lib/community-post-prefs"
 import { RichTextEditor } from "@/components/editor/rich-text-editor"
+import { SlashCommandPopover } from "@/components/dashboard/slash-command-popover"
 import type { Editor } from "@tiptap/react"
 import {
   RichTextContent,
@@ -256,7 +266,17 @@ export default function BatchDetailPage({
     updateBatchPost,
     addNotifications,
     notifications,
+    // Live sessions for the attached course — used by the
+    // upcoming-class banner below. Communities have historically
+    // had zero awareness of class schedules; this connection
+    // closes the loop so a cohort sees its next class in the same
+    // surface they hang out in.
+    liveSessions,
   } = useLMS()
+  // Wall of Love writer — used by the C2 wins → WoL bridge so a
+  // student picking the "Win" post type auto-publishes to the
+  // public showcase too.
+  const { addEntry: wallAddEntry } = useWall()
   // Ref to the latest notifications array so the reaction-notify
   // closure below sees fresh data without churning on every render.
   // Reading through a ref keeps the onToggleReaction prop identity
@@ -342,6 +362,14 @@ export default function BatchDetailPage({
         </div>
         <div className="flex items-center gap-2">
           <TakeATourButton tourId="batch-detail-v1" label="Take a tour" />
+          {/* Per-community notification preferences. Lives next to the
+              community settings menu so the member can mute / snooze /
+              opt down to mentions-only in one click without leaving
+              the surface they're actively reading. */}
+          <CommunityNotificationPrefsPopover
+            userId={currentUser?.id}
+            communityId={batch.id}
+          />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm">
@@ -412,6 +440,117 @@ export default function BatchDetailPage({
 
       <ProductTour tourId="batch-detail-v1" steps={BATCH_TOUR} />
 
+      {/* Next live class banner — connects the previously isolated
+          Community surface to the Live Classes module. Surfaces only
+          when the community is attached to a course AND that course
+          has a session in the next 48h (or live right now). Closes
+          the long-standing one-way gap: end-of-class recap posts
+          into the community feed, but the community didn't know
+          when the *next* class was scheduled. */}
+      <NextLiveClassBanner
+        sessions={liveSessions.filter((s) => course && s.courseId === course.id)}
+      />
+
+      {/* First-visit-per-batch member onboarding overlay (C3).
+          Surfaces a 4-step centered modal the very first time a
+          member lands here, covering instructors / classes /
+          intro / notifications. Auto-dismisses once finished or
+          skipped. Members only — admins don't need it. */}
+      {currentUser && currentUser.role !== "admin" && currentUser.role !== "instructor" && (
+        <CommunityMemberOnboarding
+          userId={currentUser.id}
+          batchId={batch.id}
+          batchName={batch.name}
+          instructorNames={[
+            ...(Instructor ? [Instructor.name] : []),
+            ...coTeachers.map((u) => u.name),
+          ]}
+          hasUpcomingClass={liveSessions.some(
+            (s) => course && s.courseId === course.id && Date.parse(s.scheduledAt) > Date.now(),
+          )}
+          onIntroAction={() => {
+            const el = document.querySelector<HTMLElement>("[data-tour='community-composer']")
+            el?.scrollIntoView({ behavior: "smooth", block: "center" })
+          }}
+        />
+      )}
+
+      {/* Community health pulse (host-only). One-line summary
+          collapses to a 14-day metrics drawer with an at-risk
+          member list + one-click "Send a check-in" nudge. */}
+      {(currentUser?.role === "admin" || currentUser?.role === "instructor") && (
+        <CommunityHealthPulse
+          batchName={batch.name}
+          members={members.map((m) => ({ id: m.id, name: m.name }))}
+          posts={getPostsForBatch(batch.id)}
+          onSendCheckIn={(memberIds, draft) => {
+            const recipients = users.filter((u) => memberIds.includes(u.id))
+            if (recipients.length === 0) return
+            const entries = buildNotifications(recipients, {
+              type: "community.checkin",
+              title: `Check-in from ${batch.name}`,
+              body: draft,
+              url: `/dashboard/batches/${batch.id}`,
+              meta: { batchId: batch.id, kind: "checkin" },
+            })
+            addNotifications(entries)
+            toast.success(`Check-in sent to ${recipients.length} ${recipients.length === 1 ? "member" : "members"}.`)
+          }}
+        />
+      )}
+
+      {/* Dead-community recovery banner (host-only). Surfaces when
+          the batch has >5 members and no posts in 14 days. Three
+          one-click actions: send a templated "we miss you", schedule
+          a Q&A, or archive (soft-delete via the trash). Self-hides
+          for 7d on dismiss so the host gets a fresh nudge if it
+          keeps drifting. */}
+      {(currentUser?.role === "admin" || currentUser?.role === "instructor") && (() => {
+        const allPosts = getPostsForBatch(batch.id)
+        const lastPostAt = allPosts.length > 0
+          ? allPosts
+              .map((p) => p.createdAt)
+              .sort((a, b) => b.localeCompare(a))[0]
+          : null
+        return (
+          <DeadCommunityRecoveryBanner
+            batchId={batch.id}
+            batchName={batch.name}
+            memberCount={batch.memberIds.length}
+            lastPostAtIso={lastPostAt}
+            createdAtIso={batch.createdAt ?? batch.updatedAt}
+            courseId={batch.courseId}
+            onSendMissYou={(draft) => {
+              const now = new Date().toISOString()
+              addBatchPost({
+                id: `${batch.id}-misyou-${Date.now()}`,
+                batchId: batch.id,
+                spaceId: "space-general",
+                authorId: currentUser?.id ?? batch.createdBy ?? "system",
+                body: `<p>${draft}</p>`,
+                pinned: true,
+                hidden: false,
+                comments: [],
+                createdAt: now,
+                updatedAt: now,
+              })
+              toast.success(`Sent to ${batch.name}. It's pinned at the top — edit any time.`)
+            }}
+            onArchive={async () => {
+              const ok = await confirm({
+                title: `Archive "${batch.name}"?`,
+                description: "It'll move to trash for 7 days. Members lose access; you can restore from trash any time.",
+                confirmLabel: "Archive",
+                destructive: true,
+              })
+              if (!ok) return
+              deleteStudentGroup(batch.id)
+              router.push("/dashboard/batches")
+            }}
+          />
+        )
+      })()}
+
       <Tabs defaultValue="room" className="w-full">
         <TabsList>
           <TabsTrigger value="room" className="gap-1.5">
@@ -422,6 +561,25 @@ export default function BatchDetailPage({
             <Users2 className="h-3.5 w-3.5" />
             Directory <span className="text-muted-foreground">({batch.memberIds.length})</span>
           </TabsTrigger>
+          {/* Classes tab — visible only when the community is
+              attached to a course. Surfaces upcoming sessions +
+              past recordings for that course in a community-native
+              view. Without this, the only class connection was
+              the recap auto-post we drop in the feed at End — a
+              cold cohort had to leave to find their schedule. */}
+          {course && (
+            <TabsTrigger value="classes" className="gap-1.5">
+              <Video className="h-3.5 w-3.5" />
+              Classes
+              {(() => {
+                const courseSessions = liveSessions.filter((s) => s.courseId === course.id)
+                if (courseSessions.length === 0) return null
+                return (
+                  <span className="text-muted-foreground">({courseSessions.length})</span>
+                )
+              })()}
+            </TabsTrigger>
+          )}
           {/* Sprint C Communities #24 — pending requests tab. Admin-
               only; hidden when no pending requests so we don't bait
               admins with an empty surface. The badge surfaces the
@@ -457,22 +615,59 @@ export default function BatchDetailPage({
             posts={getPostsForBatch(batch.id, activeSpaceId)}
             mentionables={mentionables}
             isAdmin={currentUser?.role === "admin" || currentUser?.role === "instructor"}
-            onAdd={(body, embedUrl, attachments) => {
+            onAdd={(body, embedUrl, attachments, type) => {
               if (!currentUser) return
+              const postId = generateId("post")
+              const nowIso = new Date().toISOString()
+              const resolvedType: BatchPostType = type ?? "discussion"
               addBatchPost({
-                id: generateId("post"),
+                id: postId,
                 batchId: batch.id,
                 spaceId: activeSpaceId,
                 authorId: currentUser.id,
                 body,
                 embedUrl,
                 attachments,
-                pinned: false,
+                type: resolvedType,
+                // Announcement-type posts auto-pin so the host's
+                // signal floats above regular chatter without a
+                // second click.
+                pinned: resolvedType === "announcement",
+                // Wins get a 🎉 reaction seeded from the system so a
+                // fresh post never looks sad. The author's own id is
+                // used as the "reactor" — they get the celebration
+                // immediately, others can stack on.
+                reactions:
+                  resolvedType === "win"
+                    ? { "🎉": [currentUser.id] }
+                    : undefined,
                 hidden: false,
                 comments: [],
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
+                createdAt: nowIso,
+                updatedAt: nowIso,
               })
+              // Wins → Wall of Love bridge. Auto-promote the post to
+              // the public Wall when it's a "win" and the workspace
+              // hasn't opted out. The Wall entry credits the author
+              // and pulls the body as the quote text (HTML stripped
+              // so the Wall renders clean text, not <p> tags). Future
+              // iteration: per-workspace toggle in settings; today we
+              // ship as an always-on default since teachers explicitly
+              // picked "Win" as the post type.
+              if (resolvedType === "win") {
+                const plainBody = previewText(body) || "(a win — see the cohort feed)"
+                wallAddEntry({
+                  id: `wall-${postId}`,
+                  kind: "quote",
+                  caption: plainBody,
+                  studentId: currentUser.id,
+                  studentName: currentUser.name,
+                  courseId: batch.courseId,
+                  vibe: "win",
+                  addedBy: currentUser.id,
+                  createdAt: nowIso,
+                })
+              }
               // Two-tier notifications:
               //   1) Anyone @mentioned in the body gets a louder "you were
               //      tagged" notification with the author's name in the title.
@@ -650,6 +845,18 @@ export default function BatchDetailPage({
               addNotifications(entries)
             }}
             onToggleCommentHidden={setBatchPostCommentHidden}
+            onMarkAnswered={(postId, commentId) => {
+              updateBatchPost(postId, {
+                answeredAt: new Date().toISOString(),
+                answeredByCommentId: commentId,
+              })
+            }}
+            onReopenQuestion={(postId) => {
+              updateBatchPost(postId, {
+                answeredAt: undefined,
+                answeredByCommentId: undefined,
+              })
+            }}
           />
         </TabsContent>
 
@@ -670,6 +877,20 @@ export default function BatchDetailPage({
             }
           />
         </TabsContent>
+
+        {/* Classes tab — visible only when the community is
+            attached to a course. Closes the community-↔-class
+            loop: students see the next session + browse past
+            recordings without leaving the cohort surface. */}
+        {course && (
+          <TabsContent value="classes" className="mt-5">
+            <CommunityClassesTab
+              courseId={course.id}
+              courseTitle={course.title}
+              sessions={liveSessions.filter((s) => s.courseId === course.id)}
+            />
+          </TabsContent>
+        )}
 
         {/* Sprint C Communities #24 — pending requests panel.
             Admin-only TabsContent; the TabsTrigger above is also
@@ -878,6 +1099,340 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;")
+}
+
+// ---------------------------------------------------------------
+// Next-live-class banner. Surfaces the upcoming class for the
+// course this community is attached to. Three states:
+//   • Live now    → "🟢 Class is live · Join" (primary action,
+//                   pulse indicator)
+//   • Upcoming    → "⏰ Next class · Tomorrow 10:00" (with countdown
+//                   when within 6h)
+//   • Nothing     → renders null
+// Lookahead window is 48h so a Thursday cohort planning their week
+// catches Monday's class too. Cancelled sessions are skipped.
+// ---------------------------------------------------------------
+function NextLiveClassBanner({
+  sessions,
+}: {
+  sessions: Array<{
+    id: string
+    title: string
+    scheduledAt: string
+    durationMinutes?: number
+    status?: string
+    roomCode?: string | null
+  }>
+}) {
+  const now = Date.now()
+  const lookahead = now + 48 * 3_600_000
+  const candidate = sessions
+    .filter((s) => s.status !== "cancelled")
+    .filter((s) => {
+      const start = Date.parse(s.scheduledAt)
+      if (!Number.isFinite(start)) return false
+      const end = start + (s.durationMinutes ?? 60) * 60_000
+      // Include sessions that JUST started (within the duration
+      // window + 30 min grace) so a late visitor sees "Join now".
+      return start <= lookahead && end + 30 * 60_000 > now
+    })
+    .sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))[0]
+  // Dismissal state — once dismissed for this candidate, the bar
+  // stays hidden until the page is reloaded OR a different session
+  // takes the "next live" slot. We key by session id so dismissing
+  // today's class doesn't suppress tomorrow's.
+  const [dismissedId, setDismissedId] = useState<string | null>(null)
+
+  if (!candidate) return null
+  if (dismissedId === candidate.id) return null
+  const start = Date.parse(candidate.scheduledAt)
+  const diffMs = start - now
+  const isLive = diffMs <= 0
+  const minsUntil = Math.round(diffMs / 60_000)
+  const hoursUntil = Math.round(diffMs / 3_600_000)
+  // "Starting soon" = within 15 min. Promotes the lobby join CTA so a
+  // student lands warm rather than discovering the class half-started.
+  const startingSoon = !isLive && diffMs > 0 && diffMs <= 15 * 60_000
+  const label = isLive
+    ? "Live now"
+    : startingSoon
+      ? `Starting in ${Math.max(1, minsUntil)} min`
+      : minsUntil < 60
+        ? `Starts in ${minsUntil} min`
+        : hoursUntil < 24
+          ? `Starts in ${hoursUntil}h`
+          : new Date(start).toLocaleString(undefined, {
+              weekday: "short",
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+  // Live + starting-soon get the sticky treatment so they ride the
+  // scroll. Further-out scheduled classes render in-flow (the bar
+  // doesn't need to chase the reader when the class is hours away).
+  const stickyEligible = isLive || startingSoon
+  return (
+    <div
+      className={
+        stickyEligible
+          ? "sticky top-0 z-30 -mx-4 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+          : ""
+      }
+    >
+      <div
+        className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 ${
+          isLive
+            ? "border-emerald-500/40 bg-emerald-500/[0.08]"
+            : startingSoon
+              ? "border-amber-500/40 bg-amber-500/[0.06]"
+              : "border-primary/30 bg-primary/5"
+        }`}
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="relative inline-flex h-2.5 w-2.5 shrink-0">
+            {isLive && (
+              <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/60" />
+            )}
+            <span
+              className={`relative inline-flex h-2.5 w-2.5 rounded-full ${
+                isLive ? "bg-emerald-500" : startingSoon ? "bg-amber-500" : "bg-primary"
+              }`}
+            />
+          </span>
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              {isLive ? "Live now" : startingSoon ? "Starting soon" : "Next class"}
+            </p>
+            <p className="truncate text-sm font-semibold">
+              {candidate.title}{" "}
+              <span className="font-normal text-muted-foreground">· {label}</span>
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <Button asChild size="sm" variant={isLive ? "default" : startingSoon ? "default" : "outline"}>
+            <Link href={`/dashboard/classes/${candidate.id}`}>
+              {isLive ? "Join now" : startingSoon ? "Hop into the lobby" : "View class"}
+            </Link>
+          </Button>
+          <button
+            type="button"
+            aria-label="Hide for now"
+            title="Hide for now"
+            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground"
+            onClick={() => setDismissedId(candidate.id)}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------
+// Classes tab — community-native view of the attached course's
+// live classes. Two stacked sections:
+//   • Upcoming — scheduled + not yet ended, soonest first.
+//                Each row deep-links to /dashboard/classes/<id>
+//                where the host opens the room.
+//   • Past     — sessions with a recording, newest first. Click
+//                a row to play inline (jumps to /dashboard/
+//                recordings?q=<title>) — for now we deep-link so
+//                the existing player handles auth / progress. A
+//                future iteration mounts RecordingPlayerDialog
+//                inline.
+// Cancelled sessions are dropped. Empty state explains the link
+// to the course so the gap is obvious if a teacher attached the
+// community without scheduling anything yet.
+// ---------------------------------------------------------------
+function CommunityClassesTab({
+  courseId,
+  courseTitle,
+  sessions,
+}: {
+  courseId: string
+  courseTitle: string
+  sessions: Array<{
+    id: string
+    title: string
+    scheduledAt: string
+    durationMinutes?: number
+    status?: string
+    roomState?: string
+    roomEndedAt?: string
+    recordingUrl?: string
+    summary?: string
+  }>
+}) {
+  void courseId
+  const now = Date.now()
+  const upcoming = sessions
+    .filter((s) => s.status !== "cancelled")
+    .filter((s) => {
+      const start = Date.parse(s.scheduledAt)
+      if (!Number.isFinite(start)) return false
+      const end = start + (s.durationMinutes ?? 60) * 60_000
+      // "Upcoming" = scheduled in the future OR currently live
+      // (within the duration window + 30 min grace).
+      return end + 30 * 60_000 > now || s.roomState === "live" || s.roomState === "open"
+    })
+    .sort((a, b) => Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))
+  const past = sessions
+    .filter((s) => s.status !== "cancelled")
+    .filter((s) => !!s.recordingUrl)
+    .sort((a, b) => (b.roomEndedAt ?? b.scheduledAt).localeCompare(a.roomEndedAt ?? a.scheduledAt))
+
+  if (upcoming.length === 0 && past.length === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
+          <Video className="h-10 w-10 text-muted-foreground/40" />
+          <div>
+            <p className="font-semibold">No classes yet</p>
+            <p className="mt-1 max-w-md text-sm text-muted-foreground">
+              {courseTitle} has no scheduled classes. Once the instructor schedules
+              one, it&apos;ll show up here so this cohort can join from inside the
+              community.
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/classes/new">
+              <Plus className="mr-1.5 h-3.5 w-3.5" /> Schedule a class
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Upcoming */}
+      {upcoming.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <Radio className="h-4 w-4 text-primary" />
+            <h2 className="text-base font-semibold">Upcoming</h2>
+            <span className="text-xs text-muted-foreground">· {upcoming.length}</span>
+          </div>
+          <div className="space-y-2">
+            {upcoming.map((s) => {
+              const start = Date.parse(s.scheduledAt)
+              const isLive = s.roomState === "live" || s.roomState === "open" || (start <= now && start + (s.durationMinutes ?? 60) * 60_000 + 30 * 60_000 > now)
+              const startsIn = Math.round((start - now) / 60_000)
+              const label = isLive
+                ? "Live now"
+                : startsIn < 60
+                  ? `Starts in ${Math.max(1, startsIn)} min`
+                  : startsIn < 1440
+                    ? `Starts in ${Math.round(startsIn / 60)}h`
+                    : new Date(start).toLocaleString(undefined, {
+                        weekday: "short",
+                        month: "short",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })
+              return (
+                <Link
+                  key={s.id}
+                  href={`/dashboard/classes/${s.id}`}
+                  className="group block"
+                >
+                  <Card className={cn(
+                    "transition-shadow group-hover:shadow-md",
+                    isLive && "border-emerald-500/40 bg-emerald-500/5",
+                  )}>
+                    <CardContent className="flex items-center justify-between gap-3 p-4">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="relative inline-flex h-2.5 w-2.5 shrink-0">
+                          {isLive && (
+                            <span className="absolute inset-0 animate-ping rounded-full bg-emerald-500/60" />
+                          )}
+                          <span className={cn(
+                            "relative inline-flex h-2.5 w-2.5 rounded-full",
+                            isLive ? "bg-emerald-500" : "bg-primary",
+                          )} />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold group-hover:text-primary">
+                            {s.title}
+                          </p>
+                          <p className="text-[11.5px] text-muted-foreground">
+                            <span className="font-medium text-foreground">{label}</span>
+                            {s.durationMinutes && <> · {s.durationMinutes} min</>}
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant={isLive ? "default" : "outline"}
+                        className="shrink-0"
+                      >
+                        {isLive ? "Join" : "Details"}
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* Past recordings */}
+      {past.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <PlayCircle className="h-4 w-4 text-primary" />
+            <h2 className="text-base font-semibold">Recordings</h2>
+            <span className="text-xs text-muted-foreground">· {past.length}</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {past.map((s) => {
+              const when = new Date(s.roomEndedAt ?? s.scheduledAt).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+              return (
+                <Link
+                  key={s.id}
+                  href={`/dashboard/recordings?q=${encodeURIComponent(s.title)}`}
+                  className="group block"
+                >
+                  <Card className="h-full transition-shadow group-hover:shadow-md">
+                    <CardContent className="space-y-2 p-4">
+                      <div className="flex items-start gap-2">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                          <PlayCircle className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="line-clamp-2 text-sm font-semibold group-hover:text-primary">
+                            {s.title}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            <Clock className="-mt-0.5 mr-1 inline h-3 w-3" />
+                            {when}
+                            {s.durationMinutes && <> · {s.durationMinutes} min</>}
+                          </p>
+                        </div>
+                      </div>
+                      {s.summary && (
+                        <p className="line-clamp-2 text-[12px] text-muted-foreground">
+                          {s.summary}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Link>
+              )
+            })}
+          </div>
+        </section>
+      )}
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------
@@ -1952,7 +2507,7 @@ type CommonRoomProps = {
   posts: ReturnType<typeof useLMS>["batchPosts"]
   /** People available for @mention — Instructor first, then members. */
   mentionables: Mentionable[]
-  onAdd: (body: string, embedUrl?: string, attachments?: Attachment[]) => void
+  onAdd: (body: string, embedUrl?: string, attachments?: Attachment[], type?: BatchPostType) => void
   onAddComment: (postId: string, body: string) => void
   onEditPost: (postId: string, nextBody: string) => void
   onTogglePin: (postId: string) => void
@@ -1961,6 +2516,11 @@ type CommonRoomProps = {
   onDeletePost: (postId: string) => void
   onToggleReaction: (postId: string, emoji: string) => void
   onToggleCommentHidden: (postId: string, commentId: string, hidden: boolean) => void
+  /** Mark a question-type post as answered. Optional commentId credits
+   *  the resolver — used by the helpfulness signal. */
+  onMarkAnswered?: (postId: string, commentId?: string) => void
+  /** Re-open an answered question. */
+  onReopenQuestion?: (postId: string) => void
 }
 
 // localStorage key for the composer draft. Scoped per (community,
@@ -2581,6 +3141,18 @@ function CommonRoom(props: CommonRoomProps) {
 
   const [body, setBody] = useState("")
   const [embedUrl, setEmbedUrl] = useState("")
+  // Post type picker. Defaults to "discussion" — the catch-all. Admin
+  // users default to "announcement" instead so a host's typical
+  // intent (broadcast to the cohort) is one-click. Students can flip
+  // to "question" or "win" — see the chooser strip in the composer
+  // shell below for the affordance.
+  const [postType, setPostType] = useState<BatchPostType>(
+    props.isAdmin ? "announcement" : "discussion",
+  )
+  // Post-type filter chips for the feed. "all" is the default; the
+  // four type chips below let a member slice "just questions" or
+  // "just wins" without reading everything.
+  const [typeFilter, setTypeFilter] = useState<BatchPostType | "all">("all")
   const [showEmbedInput, setShowEmbedInput] = useState(false)
   // Sprint A Communities #11 — feed tab state. Three tabs:
   //   "for-you" : smart-sorted (recency × engagement × pinned bonus)
@@ -2807,7 +3379,12 @@ function CommonRoom(props: CommonRoomProps) {
 
   const orderedPosts = useMemo(() => {
     // 1. Visibility filter (hidden posts only visible to admins).
-    const visible = props.isAdmin ? props.posts : props.posts.filter((p) => !p.hidden)
+    const visibleBase = props.isAdmin ? props.posts : props.posts.filter((p) => !p.hidden)
+    // 1b. Post-type filter (C2). Legacy posts without a `type` field
+    // fall into the "discussion" bucket.
+    const visible = typeFilter === "all"
+      ? visibleBase
+      : visibleBase.filter((p) => (p.type ?? "discussion") === typeFilter)
     // 2. Search filter BEFORE any sort so pinned posts that don't
     // match the query don't artificially float to the top and bury
     // the actual hits. Case-insensitive substring across body,
@@ -2883,7 +3460,7 @@ function CommonRoom(props: CommonRoomProps) {
       return recency * engagement * pinnedBoost * activeBoost
     }
     return [...filtered].sort((a, b) => score(b) - score(a))
-  }, [props.posts, props.isAdmin, props.getUserById, postSearch, feedTab])
+  }, [props.posts, props.isAdmin, props.getUserById, postSearch, feedTab, typeFilter])
 
   function submit() {
     // Allow posts with only attachments — the body can be empty if the user
@@ -2893,11 +3470,16 @@ function CommonRoom(props: CommonRoomProps) {
       body,
       embedUrl.trim() || undefined,
       pendingAttachments.length > 0 ? pendingAttachments : undefined,
+      postType,
     )
     setBody("")
     setEmbedUrl("")
     setShowEmbedInput(false)
     setPendingAttachments([])
+    // Reset type to the role-aware default so the next post starts
+    // from a sensible baseline. Admins typically broadcast → return
+    // to "announcement"; students typically chat → "discussion".
+    setPostType(props.isAdmin ? "announcement" : "discussion")
     // Draft is now redundant — purge it so reopening this space
     // doesn't offer to "restore" the post that just shipped.
     dirtyRef.current = false
@@ -3085,37 +3667,88 @@ function CommonRoom(props: CommonRoomProps) {
             Hidden entirely when the feed has zero posts (otherwise
             the strip looks like dead navigation). */}
         {props.posts.length > 0 && (
-          <div
-            role="tablist"
-            aria-label="Feed sort"
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-background p-0.5 text-[12px] font-semibold"
-          >
-            {(
-              [
-                { id: "for-you" as const, label: "For you", hint: "Smart sort by recency + engagement" },
-                { id: "latest" as const, label: "Latest", hint: "Newest first, pinned floated" },
-                ...(pinnedCount > 0
-                  ? [{ id: "pinned" as const, label: `Pinned · ${pinnedCount}`, hint: "Only pinned posts" }]
-                  : []),
+          <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="tablist"
+              aria-label="Feed sort"
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-background p-0.5 text-[12px] font-semibold"
+            >
+              {(
+                [
+                  { id: "for-you" as const, label: "For you", hint: "Smart sort by recency + engagement" },
+                  { id: "latest" as const, label: "Latest", hint: "Newest first, pinned floated" },
+                  ...(pinnedCount > 0
+                    ? [{ id: "pinned" as const, label: `Pinned · ${pinnedCount}`, hint: "Only pinned posts" }]
+                    : []),
+                ]
+              ).map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={feedTab === tab.id}
+                  title={tab.hint}
+                  onClick={() => setFeedTab(tab.id)}
+                  className={cn(
+                    "rounded-full px-3 py-1 transition-colors",
+                    feedTab === tab.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                  )}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            {/* Post-type filter chips (C2). Stacks horizontally with
+                the sort tabs. Each chip shows a live count of posts
+                matching its type so a student knows whether to dig in
+                before clicking. "All" reverts. */}
+            {(() => {
+              const visibleBase = props.isAdmin
+                ? props.posts
+                : props.posts.filter((p) => !p.hidden)
+              const countOf = (t: BatchPostType | "all") =>
+                t === "all"
+                  ? visibleBase.length
+                  : visibleBase.filter((p) => (p.type ?? "discussion") === t).length
+              const types: Array<{ id: BatchPostType | "all"; emoji: string; label: string }> = [
+                { id: "all",          emoji: "•",  label: "All" },
+                { id: "announcement", emoji: "📣", label: "Announcements" },
+                { id: "question",     emoji: "❓", label: "Questions" },
+                { id: "win",          emoji: "🎉", label: "Wins" },
+                { id: "discussion",   emoji: "💬", label: "Chat" },
               ]
-            ).map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={feedTab === tab.id}
-                title={tab.hint}
-                onClick={() => setFeedTab(tab.id)}
-                className={cn(
-                  "rounded-full px-3 py-1 transition-colors",
-                  feedTab === tab.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
+              return (
+                <div className="inline-flex items-center gap-1.5">
+                  {types.map((t) => {
+                    const count = countOf(t.id)
+                    if (t.id !== "all" && count === 0) return null
+                    const active = typeFilter === t.id
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setTypeFilter(t.id)}
+                        className={cn(
+                          "inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition",
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        )}
+                        aria-pressed={active}
+                      >
+                        <span aria-hidden>{t.emoji}</span>
+                        {t.label}
+                        <span className={`tabular-nums ${active ? "opacity-80" : "text-muted-foreground/70"}`}>
+                          {count}
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })()}
           </div>
         )}
 
@@ -3147,6 +3780,49 @@ function CommonRoom(props: CommonRoomProps) {
                     Discard
                   </Button>
                 </div>
+              </div>
+            )}
+            {/* Post-type chooser (C2). Four 1-tap pills above the
+                composer so the author commits to an intent before
+                writing — same pattern Notion uses for "page type."
+                Admin posts default to Announcement; everyone else
+                to Discussion. Wins auto-cross-post to the Wall of
+                Love when submitted (see parent handler). */}
+            {props.currentUserId && (
+              <div className="mb-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Post as
+                </span>
+                {(
+                  [
+                    { id: "announcement", emoji: "📣", label: "Announcement", hint: "Pinned to top, fans out" },
+                    { id: "question",     emoji: "❓", label: "Question",    hint: "Mark answered when resolved" },
+                    { id: "win",          emoji: "🎉", label: "Win",         hint: "Cross-posts to the Wall of Love" },
+                    { id: "discussion",   emoji: "💬", label: "Chat",        hint: "Just sharing a thought" },
+                  ] as Array<{ id: BatchPostType; emoji: string; label: string; hint: string }>
+                )
+                  // Admin-only filter: only admins/instructors can post announcements
+                  .filter((opt) => opt.id !== "announcement" || props.isAdmin)
+                  .map((opt) => {
+                    const active = postType === opt.id
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setPostType(opt.id)}
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 font-semibold transition ${
+                          active
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-border bg-card text-foreground hover:border-primary/40"
+                        }`}
+                        title={opt.hint}
+                        aria-pressed={active}
+                      >
+                        <span aria-hidden>{opt.emoji}</span>
+                        {opt.label}
+                      </button>
+                    )
+                  })}
               </div>
             )}
             <RichTextEditor
@@ -3316,6 +3992,12 @@ function CommonRoom(props: CommonRoomProps) {
                   <Video className="h-3.5 w-3.5" />
                   {showEmbedInput ? "Hide video URL" : "Paste video URL"}
                 </Button>
+                {/* Slash-command popover (C7) — discoverable command
+                    palette for inserting headings, lists, code,
+                    dividers, links, images, and mention cues without
+                    leaving the keyboard. Operates on the editor ref
+                    the composer already holds. */}
+                <SlashCommandPopover editor={editorRef.current} />
               </div>
               <Button
                 size="sm"
@@ -3427,6 +4109,16 @@ function CommonRoom(props: CommonRoomProps) {
                 }}
                 onToggleCommentHidden={(cid, hidden) =>
                   props.onToggleCommentHidden(post.id, cid, hidden)
+                }
+                onMarkAnswered={
+                  props.onMarkAnswered
+                    ? (commentId) => props.onMarkAnswered?.(post.id, commentId)
+                    : undefined
+                }
+                onReopenQuestion={
+                  props.onReopenQuestion
+                    ? () => props.onReopenQuestion?.(post.id)
+                    : undefined
                 }
               />
             ))}
@@ -3749,6 +4441,8 @@ function PostCard({
   onDelete,
   onToggleReaction,
   onToggleCommentHidden,
+  onMarkAnswered,
+  onReopenQuestion,
 }: {
   post: CommonRoomProps["posts"][number]
   isAdmin: boolean
@@ -3763,6 +4457,11 @@ function PostCard({
   onDelete: () => void
   onToggleReaction: (emoji: string) => void
   onToggleCommentHidden: (commentId: string, hidden: boolean) => void
+  /** When the post is a "question" type, optionally let the viewer
+   *  mark it answered. commentId optional — when set, credits the
+   *  resolver for future helpfulness scoring. */
+  onMarkAnswered?: (commentId?: string) => void
+  onReopenQuestion?: () => void
 }) {
   const author = getUserById(post.authorId)
   const [commentBody, setCommentBody] = useState("")
@@ -3897,6 +4596,33 @@ function PostCard({
                 >
                   <BookmarkCheck className="mr-0.5 h-2.5 w-2.5" />
                   Saved
+                </Badge>
+              )}
+              {/* Post-type chip (C2). Subtle visual marker so a reader
+                  scanning the feed sees "this is a question" / "this
+                  is a win" without reading the body. Discussion posts
+                  (the default) get no chip — too noisy. */}
+              {post.type === "announcement" && (
+                <Badge variant="outline" className="border-primary/40 bg-primary/10 text-[10px] text-primary">
+                  📣 Announcement
+                </Badge>
+              )}
+              {post.type === "question" && (
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "text-[10px]",
+                    post.answeredAt
+                      ? "border-success/40 bg-success/10 text-success"
+                      : "border-amber-500/40 bg-amber-500/10 text-amber-700",
+                  )}
+                >
+                  {post.answeredAt ? "✓ Answered" : "❓ Question"}
+                </Badge>
+              )}
+              {post.type === "win" && (
+                <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-[10px] text-emerald-700">
+                  🎉 Win
                 </Badge>
               )}
             </div>
@@ -4138,6 +4864,31 @@ function PostCard({
             <MessageCircle className="h-3 w-3" />
             {post.comments.length} comment{post.comments.length === 1 ? "" : "s"}
           </button>
+          {/* Mark-as-answered affordance for question-type posts.
+              Anyone signed in can mark (Stack Overflow pattern) so
+              the OP can self-resolve and any commenter can wrap up.
+              When already answered, the same chip flips to "Reopen"
+              (admin/author only — keeps drive-by reopens out). */}
+          {post.type === "question" && currentUserId && onMarkAnswered && !post.answeredAt && (
+            <button
+              type="button"
+              onClick={() => onMarkAnswered()}
+              className="ml-auto inline-flex items-center gap-1 rounded-full border border-success/40 bg-success/[0.05] px-2 py-0.5 text-[11px] font-semibold text-success transition-colors hover:bg-success/15"
+              title="Mark this question as answered"
+            >
+              ✓ Mark as answered
+            </button>
+          )}
+          {post.type === "question" && post.answeredAt && (isAuthor || isAdmin) && onReopenQuestion && (
+            <button
+              type="button"
+              onClick={() => onReopenQuestion()}
+              className="ml-auto inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:border-amber-500/40 hover:text-amber-700"
+              title="Re-open this question"
+            >
+              ↺ Re-open
+            </button>
+          )}
         </div>
 
         {/* Comments */}

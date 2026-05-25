@@ -176,7 +176,7 @@
            for CSS transitions — only for prefers-reduced-motion-aware
            media queries. */
         @media (prefers-reduced-motion: reduce) {
-    
+
           *,
           *::before,
           *::after {
@@ -184,6 +184,18 @@
             animation-iteration-count: 1 !important;
             transition-duration: 0.001ms !important;
             scroll-behavior: auto !important;
+          }
+        }
+
+        /* Touch devices have no hover, so hover-revealed CTAs would
+           stay permanently invisible. Force the standard hover-reveal
+           Tailwind combo (opacity-0 + group-hover:opacity-100) to render
+           at 60% opacity on touch — affordance is visible without
+           shouting. Reset hover-only translate/scale so cards don't
+           appear mid-animation on tap. */
+        @media (hover: none) {
+          .group:not(:focus-within) .opacity-0.group-hover\:opacity-100 {
+            opacity: 0.7 !important;
           }
         }
 }

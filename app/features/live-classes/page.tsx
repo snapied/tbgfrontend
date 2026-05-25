@@ -1,14 +1,17 @@
 "use client"
 
 import {
+  BarChart3,
   Bell,
   CalendarCheck,
   CheckCircle2,
   ClipboardCheck,
+  ClipboardList,
   Clock,
   ExternalLink,
   Film,
   Globe,
+  Hand,
   Mail,
   MessageSquare,
   Mic,
@@ -16,6 +19,8 @@ import {
   Pin,
   Play,
   Repeat,
+  Sparkles,
+  Users,
   Video,
 } from "lucide-react"
 import { Header } from "@/components/landing/header"
@@ -35,22 +40,22 @@ export default function LiveClassesFeaturePage() {
         <FeaturePageShell
           eyebrow="Live classes"
           title={<>Live classes that don&apos;t end when you say <span className="text-primary">&quot;bye for now&quot;</span>.</>}
-          subtitle="Built-in cloud room — no Zoom account needed for you or your students. Cloud recording uploads straight to your CDN. We send the invites, mark attendance, stitch the recap, and email everyone when the recording is ready. Zero infra to host."
+          subtitle="Built-in cloud room — no third-party video-conferencing seat needed for you or your students. Cloud recording uploads straight to your CDN. We send the invites, mark attendance, stitch the recap, and email everyone when the recording is ready. Zero infra to host."
           heroImage="/images/features/live-classes.png"
         />
 
         <FeatureSplit
-          title="Built-in cloud room. No Zoom signup. Recording included."
+          title="Built-in cloud room. No third-party seat. Recording included."
           body={
             <>
-              Click <span className="font-medium text-foreground">Start instant class</span> and the room is live. Students open the join link, set a name once, and they&apos;re in — no account, no app install. The whole stack runs on <span className="font-medium text-foreground">LiveKit Cloud</span>, so media is rock-solid even with 30+ participants. Want to use Zoom or Meet instead? Flip to Advanced and paste a URL.
+              Click <span className="font-medium text-foreground">Start instant class</span> and the room is live. Students open the join link, set a name once, and they&apos;re in — no account, no app install. The whole stack runs on <span className="font-medium text-foreground">LiveKit Cloud</span>, so media is rock-solid even with 30+ participants. Already paying for a video-conferencing seat? Flip to Advanced and paste your room URL — we&rsquo;ll auto-detect the provider.
             </>
           }
           bullets={[
             "In-house room runs on LiveKit Cloud — no XMPP, no UDP forwarding",
             "Students join with a display name, no signup, no app",
             "Adaptive 1080p simulcast — weak networks downgrade gracefully",
-            "Or paste a Zoom / Meet / Teams URL — provider auto-detected",
+            "Or paste a third-party meeting URL — provider auto-detected",
           ]}
           mockup={<RecurringSchedulerMockup />}
         />
@@ -107,17 +112,107 @@ export default function LiveClassesFeaturePage() {
           title="The class ends. The class card doesn't."
           body="Mark the session as held, drop the recording URL, paste the summary, and attach materials — slides, Canva embeds, PDFs, screenshots, even a follow-up quiz or homework brief. Students who attended (and the ones who didn't) come back to one page with everything."
           bullets={[
-            "Embed recordings from YouTube, Vimeo, Loom, Zoom, MP4",
+            "Embed recordings from any common video host or direct MP4 URL",
             "Attach quizzes with one click — students take them in-app",
             "Assign homework with a due date and an optional brief",
             "Past Classes archive surfaces sessions missing a recap",
+            "Class chat history persists alongside the recording",
+            "AI-draft button on the wrap-wizard summary",
           ]}
           mockup={<ClassRecapMockup />}
         />
 
+        {/* In-class engagement grid — surfaces the 6 new
+            capabilities shipped over the last three days. Card
+            grid (not FeatureSplit) because each is small and the
+            visitor benefits from seeing the breadth at once. */}
+        <section className="border-y border-border bg-muted/30 py-16">
+          <div className="mx-auto max-w-6xl px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                Inside the live room
+              </p>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+                Engagement primitives every class needs.
+              </h2>
+              <p className="mt-3 text-base text-muted-foreground">
+                Six features that used to require third-party plugins or
+                separate tools — all native, all persisted to the recording.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <InClassCard
+                icon={<BarChart3 className="h-5 w-5" />}
+                title="Live polls"
+                body="2–4 option polls with a launch composer in the host rail and a vote card on every student's stage. Results update live. Launch and result broadcasts fan out as notifications to every invited participant — even the ones who weren't in the room."
+                bullet="Notifications hit students + co-instructors"
+              />
+              <InClassCard
+                icon={<Hand className="h-5 w-5" />}
+                title="Raised-hand queue"
+                body="Students raise hands without unmuting. The host sees them ordered by raise time with Answer / Lower buttons. The button pulses primary the moment any hand goes up so the host doesn't need the panel open to know."
+                bullet="Live #N in queue badge for students"
+              />
+              <InClassCard
+                icon={<ClipboardList className="h-5 w-5" />}
+                title="Mark agenda done"
+                body="The agenda you set pre-class becomes a host checklist mid-class. Tap ✓ to mark done, ⏭ to skip — each with a timestamp. Late joiners see real coverage instead of time-inferred guesses."
+                bullet="Header chip shows 3/7 covered"
+              />
+              <InClassCard
+                icon={<Users className="h-5 w-5" />}
+                title="Waiting-room presence"
+                body="The host preflight shows 'N waiting now' and the first 5 names live as students arrive in the lobby. No more guessing whether to open the room with only one student visible."
+                bullet="3s polling, 15s staleness window"
+              />
+              <InClassCard
+                icon={<Clock className="h-5 w-5" />}
+                title="Time-left pill"
+                body="Host-only in-call indicator that shows 'Time left: 18m' while in window, flips to amber (+7m over) past the planned end, and red after +15 min. Wrap-up cues without checking the clock."
+                bullet="30s tick, no CPU burn"
+              />
+              <InClassCard
+                icon={<MessageSquare className="h-5 w-5" />}
+                title="Chat persists to recording"
+                body="The class chat doesn't evaporate when the room closes. Every message is buffered live, flushed to the session record on End, and rendered alongside the video so re-watchers get the side-channel context."
+                bullet="Session.chatTranscript field"
+              />
+            </div>
+          </div>
+        </section>
+
         <FeatureCTA />
       </main>
       <Footer />
+    </div>
+  )
+}
+
+// Compact card used in the "Inside the live room" grid. Each card
+// is intentionally small — the breadth of capabilities lands at a
+// glance; deep-dives live in the per-feature help docs.
+function InClassCard({
+  icon,
+  title,
+  body,
+  bullet,
+}: {
+  icon: React.ReactNode
+  title: string
+  body: string
+  bullet: string
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 transition-shadow hover:shadow-md">
+      <div className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        {icon}
+      </div>
+      <h3 className="mt-3 font-semibold">{title}</h3>
+      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{body}</p>
+      <p className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-primary">
+        <Sparkles className="h-3 w-3" />
+        {bullet}
+      </p>
     </div>
   )
 }

@@ -3,11 +3,16 @@
 import Link from "next/link"
 import {
   ArrowRight,
+  BarChart3,
   Briefcase,
   Building2,
   CheckCircle2,
+  ClipboardList,
+  Film,
   GraduationCap,
+  Hand,
   Heart,
+  MessageSquare,
   Sparkles,
   User as UserIcon,
   Users,
@@ -158,6 +163,66 @@ export default function UseCasesPage() {
           ))}
         </div>
 
+        {/* In-class scenarios — real moments inside a live class
+            where the May 2026 sprint features pay off. Each card
+            is a 30-second vignette: the problem the host had on
+            other platforms vs. how it plays out here. */}
+        <section className="border-y border-border bg-muted/30 py-16">
+          <div className="mx-auto max-w-6xl px-6 lg:px-8">
+            <div className="mx-auto max-w-3xl text-center">
+              <p className="text-xs font-bold uppercase tracking-wider text-primary">
+                Live-class scenarios
+              </p>
+              <h2 className="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+                The moments other LMS platforms quietly drop.
+              </h2>
+              <p className="mt-3 text-base text-muted-foreground">
+                Six recurring &ldquo;wait, how do I do this live?&rdquo; situations
+                — and how the in-class surface answers them without you alt-tabbing
+                to a second tool.
+              </p>
+            </div>
+            <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <ScenarioCard
+                icon={BarChart3}
+                moment="Mid-lecture pulse check"
+                before="You ask 'who's with me so far?' and three students unmute at once."
+                after="Launch a 4-option poll from the host rail. Results render live; everyone enrolled (plus invited co-instructors) gets a notification so absentees can tap in to vote."
+              />
+              <ScenarioCard
+                icon={Hand}
+                moment="Five hands at once"
+                before="Three students unmute over each other while two type a question in chat. You forget who was first."
+                after="The raised-hand queue orders questions by raise time with a Live #N badge. One click Answers them and clears the queue."
+              />
+              <ScenarioCard
+                icon={ClipboardList}
+                moment="Late joiner walks in at 12:30"
+                before="They DM 'what did I miss?' and you re-explain Module 3 while losing the room."
+                after="Late joiners auto-see a 'You missed: Recap last week, Hooks intro' banner — pulled from the agenda items you ticked off."
+              />
+              <ScenarioCard
+                icon={Users}
+                moment="Punctual start, awkward wait"
+                before="You open the Meet on time but don't know if anyone showed up. You wait 10 minutes for 'enough' students."
+                after="The lobby roster shows you 18 students loaded before you opened the door. Hit Start — everyone auto-admits."
+              />
+              <ScenarioCard
+                icon={MessageSquare}
+                moment="Best question of the class — at minute 41"
+                before="A student types a brilliant question in chat. After the class, the chat is gone and the recording has no context."
+                after="Class chat persists to the recording. Re-watchers see the question at minute 41 and can click it to jump to the moment."
+              />
+              <ScenarioCard
+                icon={Film}
+                moment="60-min lecture, no way to skim"
+                before="A student needs the 4-minute bit on useEffect cleanup. They scrub through the whole hour."
+                after="Auto-chapters parse 'now let's talk about cleanup' from the transcript. The chip rail under the video drops them at minute 38."
+              />
+            </div>
+          </div>
+        </section>
+
         {/* Switch-from playbook strip */}
         <section className="border-y border-border bg-card py-16">
           <div className="mx-auto max-w-4xl px-6 lg:px-8">
@@ -216,6 +281,43 @@ export default function UseCasesPage() {
       </main>
       <Footer />
     </div>
+  )
+}
+
+function ScenarioCard({
+  icon: Icon,
+  moment,
+  before,
+  after,
+}: {
+  icon: React.ElementType
+  moment: string
+  before: string
+  after: string
+}) {
+  return (
+    <Card className="h-full">
+      <CardContent className="space-y-3 p-5">
+        <div className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Icon className="h-4 w-4" />
+          </span>
+          <h3 className="text-sm font-bold leading-snug">{moment}</h3>
+        </div>
+        <div className="rounded-md border border-border bg-muted/40 p-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Elsewhere
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{before}</p>
+        </div>
+        <div className="rounded-md border border-success/30 bg-success/[0.05] p-2.5">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-success">
+            Here
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-foreground">{after}</p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 

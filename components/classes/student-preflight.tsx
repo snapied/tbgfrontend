@@ -80,6 +80,13 @@ function stampPreflightVerified(): void {
   }
 }
 
+/** Public alias for `stampPreflightVerified` so the inline preflight
+ *  strip can mark a successful silent probe as "passed" without
+ *  reimplementing the localStorage key. */
+export function markPreflightFresh(): void {
+  stampPreflightVerified()
+}
+
 /** Returns true when the visitor has run a successful preflight in
  *  the last 7 days. Consumers can use this to skip auto-prompting
  *  the AV wizard on every class. The user can still open it

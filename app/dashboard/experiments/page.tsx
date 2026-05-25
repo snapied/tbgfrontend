@@ -72,6 +72,11 @@ import {
   prebuiltFor,
   type PrebuiltExperiment,
 } from "@/lib/experiments-registry"
+import { ProductTour, TakeATourButton } from "@/components/tour/product-tour"
+import {
+  EXPERIMENTS_TOUR,
+  EXPERIMENTS_TOUR_ID,
+} from "@/components/experiments/experiments-tour"
 
 export default function ExperimentsAdminPage() {
   const { currentTenant } = useTenant()
@@ -116,10 +121,16 @@ export default function ExperimentsAdminPage() {
             Each visitor sticks to the variant they first saw — reports stay honest.
           </p>
         </div>
-        <Button onClick={() => setDialogState({ mode: "create" })}>
-          <Plus className="mr-1.5 h-4 w-4" />
-          Create experiment
-        </Button>
+        <div className="flex items-center gap-2">
+          <TakeATourButton tourId={EXPERIMENTS_TOUR_ID} label="Take a tour" />
+          <Button
+            id="experiments-create-button"
+            onClick={() => setDialogState({ mode: "create" })}
+          >
+            <Plus className="mr-1.5 h-4 w-4" />
+            Create experiment
+          </Button>
+        </div>
       </div>
 
       {/* What this module does — explanatory card. Renders once
@@ -176,7 +187,7 @@ export default function ExperimentsAdminPage() {
           conversion-lift surfaces. Filtered out once the teacher
           spins one up so the list stays honest. */}
       {availablePrebuilts.length > 0 && (
-        <div className="space-y-2">
+        <div id="experiments-prebuilts" className="space-y-2">
           <div className="flex items-center gap-1.5">
             <Zap className="h-4 w-4 text-amber-500" />
             <h2 className="text-[13px] font-bold uppercase tracking-wider">
@@ -263,6 +274,12 @@ export default function ExperimentsAdminPage() {
           }}
         />
       )}
+
+      <ProductTour
+        tourId={EXPERIMENTS_TOUR_ID}
+        steps={EXPERIMENTS_TOUR}
+        promptLabel="Tour A/B experiments in 60 seconds"
+      />
     </div>
   )
 }

@@ -22,6 +22,9 @@
 import { use, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { LateJoinerRecap } from "@/components/classes/late-joiner-recap"
+import { LivePollPanel } from "@/components/classes/live-poll-panel"
+import { useLivePoll } from "@/lib/live-poll"
+import { RaiseHandButton } from "@/components/classes/raise-hand-button"
 import { useReconnectGuard } from "@/lib/live-class-features"
 import Link from "next/link"
 import {
@@ -43,6 +46,8 @@ import { useTenantBrand } from "@/lib/tenant-brand"
 import { LiveKitRoom, LiveKitVideoUI } from "@/components/classes/livekit-room"
 import { AgendaList } from "@/components/classes/agenda-editor"
 import { StudentPreflight } from "@/components/classes/student-preflight"
+import { StudentPreflightInline } from "@/components/classes/student-preflight-inline"
+import { pingPresence, clearPresence } from "@/lib/lobby-presence"
 import { WhiteboardCanvas } from "@/components/whiteboard/whiteboard-canvas"
 import { useWhiteboardAccess } from "@/lib/whiteboard-access"
 import { cn } from "@/lib/utils"
@@ -328,6 +333,12 @@ export default function LiveClassPage({
         tenant={tenant}
         brandLabel={brand.name}
         punctuality={punctuality}
+        // Forward the resolved display name so the waiting-room
+        // can ping the lobby-presence channel — host sees a real
+        // "who's here" count instead of the enrolled-students
+        // total.
+        viewerId={currentUser?.id || `guest-${nameState.displayName || "anon"}`}
+        viewerName={nameState.displayName || currentUser?.name || "Guest"}
       />
     )
   }
@@ -381,6 +392,8 @@ function WaitingRoom({
   tenant,
   brandLabel,
   punctuality,
+  viewerId,
+  viewerName,
 }: {
   session: LiveSession
   courseTitle?: string
@@ -388,6 +401,11 @@ function WaitingRoom({
   tenant: string
   brandLabel?: string
   punctuality: PunctualityStat
+  /** Stable id for the lobby-presence ping. Signed-in user id or
+   *  a guest-<name> fallback. */
+  viewerId: string
+  /** Display name shown to the host in the waiting roster. */
+  viewerName: string
 }) {
   const [now, setNow] = useState(() => Date.now())
   const [preflightOpen, setPreflightOpen] = useState(false)
@@ -395,6 +413,27 @@ function WaitingRoom({
     const t = window.setInterval(() => setNow(Date.now()), 1000)
     return () => window.clearInterval(t)
   }, [])
+  // Lobby-presence ping — every 5s while the waiting-room is
+  // mounted. Clears the entry on unmount (page navigate / refresh).
+  // Host preflight polls the same channel to render real "N waiting"
+  // counts instead of the static enrolled-students total.
+  useEffect(() => {
+    if (!viewerId) return
+    pingPresence(session.id, { id: viewerId, name: viewerName })
+    const id = window.setInterval(() => {
+      pingPresence(session.id, { id: viewerId, name: viewerName })
+    }, 5000)
+    return () => {
+      window.clearInterval(id)
+      clearPresence(session.id, viewerId)
+    }
+  }, [session.id, viewerId, viewerName])
+  // Previously: auto-popped the full StudentPreflight modal on first
+  // visit. That shoved a wizard in front of a student who hadn't
+  // even read the class title yet. Replaced with <StudentPreflightInline />
+  // below the top bar — runs the same probes silently, surfaces
+  // traffic-light status, and only escalates to the modal when the
+  // student clicks "Run a full setup check" OR a probe fails.
 
   const startMs = new Date(session.scheduledAt).getTime()
   const diff = Math.max(0, startMs - now)
@@ -458,6 +497,14 @@ function WaitingRoom({
           >
             Quick setup check
           </Button>
+        </div>
+        {/* Inline preflight strip — silent traffic-light probes inline
+            in the waiting room hero. Replaces the auto-modal that
+            used to interrupt first-visit students. The full StudentPreflight
+            modal still mounts below — but only opens when the student
+            clicks "Run a full setup check" from the strip. */}
+        <div className="mx-auto mt-4 max-w-5xl">
+          <StudentPreflightInline onOpenFullCheck={() => setPreflightOpen(true)} />
         </div>
         <StudentPreflight
           open={preflightOpen}
@@ -846,13 +893,22 @@ function InClassShell({
   })
 
   // Build the agenda + "current item" hint from the session's
-  // pre-class agenda + minute budgets. We tick the cursor through
-  // items by accumulating per-item minutes against elapsed time at
-  // join. The teacher hasn't marked "done" explicitly in the data
-  // model yet, so we infer "done before me" / "current" from time.
+  // pre-class agenda + minute budgets.
+  //
+  // Priority order for each item:
+  //   1. Explicit `done`/`skipped` marks set by the host live via
+  //      InClassAgendaPanel — source of truth when present.
+  //   2. Time-inferred "done before me / current / future" by
+  //      walking per-item minute budgets against elapsed time at
+  //      join. Used as the fallback when the host hasn't touched
+  //      an item.
+  // Current item is the first not-yet-marked-and-not-skipped item
+  // (when explicit marks exist) OR the time-window match
+  // (fallback). Surfaces in the late-joiner recap.
   const agendaWithProgress = useMemo(() => {
     const items = session.agenda ?? []
     if (items.length === 0) return { items: [], currentTitle: null as string | null }
+    const hasExplicitMarks = items.some((i) => i.done || i.skipped)
     const startedMs = session.roomStartedAt
       ? Date.parse(session.roomStartedAt)
       : Date.parse(session.scheduledAt)
@@ -862,10 +918,32 @@ function InClassShell({
     const annotated = items.map((it) => {
       const minutes = it.minutes ?? 5
       const itemEnd = cursor + minutes
-      const status = elapsedMin >= itemEnd ? "done" : elapsedMin >= cursor ? "current" : "future"
-      if (status === "current" && !currentTitle) currentTitle = it.title
+      // Explicit mark wins; otherwise fall back to the time cursor.
+      let done: boolean
+      let isCurrent = false
+      if (it.done || it.skipped) {
+        done = true
+      } else if (hasExplicitMarks) {
+        // The teacher is using the live panel — don't second-guess
+        // unmarked items. Treat them as not-done; the first unmarked
+        // item becomes the "current" cursor.
+        done = false
+        if (!currentTitle) {
+          isCurrent = true
+          currentTitle = it.title
+        }
+      } else {
+        // Legacy time-inferred mode.
+        const status = elapsedMin >= itemEnd ? "done" : elapsedMin >= cursor ? "current" : "future"
+        done = status === "done"
+        if (status === "current" && !currentTitle) {
+          isCurrent = true
+          currentTitle = it.title
+        }
+      }
       cursor = itemEnd
-      return { title: it.title, minutes: it.minutes, done: status === "done" }
+      void isCurrent
+      return { title: it.title, minutes: it.minutes, done }
     })
     return { items: annotated, currentTitle }
   }, [session.agenda, session.roomStartedAt, session.scheduledAt])
@@ -950,6 +1028,23 @@ function InClassShell({
             }
           />
         </div>
+      )}
+      {/* Live poll — student-side card. Renders only when the host
+          has launched one. The hook's shared-storage channel
+          pushes votes back to the host panel in ~1.5s. */}
+      <StudentPollSlot
+        sessionId={session.id}
+        viewerName={nameState.displayName}
+      />
+      {/* Raise hand — floating bottom-right button. Toggles the
+          student's place in the host's hand queue. Self-hides
+          when the room hasn't been joined yet. */}
+      {!hasLeft && nameState.displayName && (
+        <RaiseHandButton
+          sessionId={session.id}
+          viewerId={`student-${nameState.displayName}`}
+          viewerName={nameState.displayName}
+        />
       )}
 
       {/* Sprint C Classes #28 — reconnect overlay. Two render paths:
@@ -1199,6 +1294,32 @@ function EndedScreen({
         </CardContent>
       </Card>
     </main>
+  )
+}
+
+// Student-side poll slot. Only renders when the host has launched
+// a poll — empty when nothing's live so the stage chrome stays
+// clean. Viewer id uses the resolved display name as a stable
+// identifier for guests (signed-in students would have a real
+// user id, but the poll panel works equally well with the guest
+// fallback because we only need unique-per-tab).
+function StudentPollSlot({
+  sessionId,
+  viewerName,
+}: {
+  sessionId: string
+  viewerName: string
+}) {
+  const poll = useLivePoll(sessionId)
+  if (!poll) return null
+  return (
+    <div className="mx-3 mt-2">
+      <LivePollPanel
+        sessionId={sessionId}
+        isHost={false}
+        viewerId={`student-${viewerName || "guest"}`}
+      />
+    </div>
   )
 }
 

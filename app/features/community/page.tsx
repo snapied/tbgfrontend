@@ -2,12 +2,14 @@
 
 import {
   Bell,
+  CalendarClock,
   Crown,
   Heart,
   Mail,
   Medal,
   Megaphone,
   MessageSquare,
+  PlayCircle,
   Send,
   Sparkles,
   Trophy,
@@ -35,7 +37,7 @@ export default function CommunityFeaturePage() {
         />
 
         <FeatureSplit
-          title="Per-batch Common Rooms — Slack-grade, built in."
+          title="Per-batch Common Rooms — chat-grade, built in."
           body={<>Every batch in your workspace gets its own feed. Post rich text, tag specific people, attach any file (images / videos / audio / PDF — type-aware preview), edit your own posts, react with emojis. Members get cross-channel notifications when something lands. Instructors pin the best stuff.</>}
           bullets={[
             "@-mention picker — teachers first, members below, profile deep-link",
@@ -49,6 +51,19 @@ export default function CommunityFeaturePage() {
 
         <FeatureSplit
           reverse
+          title="The cohort doesn't end when class ends."
+          body={<>Every community attached to a course now has a <span className="font-medium text-foreground">Classes tab</span> — a single surface that lists upcoming live sessions, past recordings with watched / unwatched badges, and a &ldquo;wraps in N days&rdquo; banner whenever the cohort has a hard window. When the host finishes a class, the wrap wizard auto-posts a recap into the community feed so re-watchers know what they missed.</>}
+          bullets={[
+            "Classes tab — upcoming live + recordings grid per cohort",
+            "Cohort window banner ('wraps in 12 days') when the course has an end date",
+            "Next-class card with a one-tap Join button when the host opens the room",
+            "Auto-recap post from the wrap wizard with title, summary, and recording link",
+            "Per-viewer watched / unwatched badges so students see their backlog at a glance",
+          ]}
+          mockup={<CommunityClassesMockup />}
+        />
+
+        <FeatureSplit
           title="Leaderboard that rewards real work."
           body="Points come from attending live classes, taking quizzes, passing them, submitting assignments, scoring high on assignments, completing lessons, completing courses. Best score per item counts — no farming. Scoring rules are visible to everyone."
           bullets={[
@@ -128,6 +143,65 @@ function CohortRoomMockup() {
             <div className="aspect-video rounded bg-gradient-to-br from-sky-200 to-sky-100 dark:from-sky-900 dark:to-sky-950" />
             <div className="aspect-video rounded bg-black" />
           </div>
+        </div>
+      </div>
+    </PreviewFrame>
+  )
+}
+
+// ============================================================
+// Mockup — Classes tab in the community
+// ============================================================
+function CommunityClassesMockup() {
+  return (
+    <PreviewFrame title="batches › Cohort 7 › Classes">
+      <div className="space-y-2 text-[11px]">
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] p-2">
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-amber-700">
+            <CalendarClock className="mr-1 inline h-3 w-3" /> Wraps in 12 days
+          </p>
+          <p className="mt-0.5 text-[10px] text-foreground">Cohort 7 · 8 live sessions left</p>
+        </div>
+
+        <div className="rounded-md border border-success/40 bg-success/[0.06] p-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-wide text-success">Live now</p>
+              <p className="mt-0.5 text-[10px] font-semibold">Hooks deep dive — class 4</p>
+            </div>
+            <button className="rounded bg-success px-2 py-1 text-[9px] font-bold text-white">Join</button>
+          </div>
+        </div>
+
+        <p className="pt-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Recordings
+        </p>
+        {[
+          { title: "useEffect patterns", when: "2d ago", state: "watched" },
+          { title: "State machines in React", when: "5d ago", state: "in-progress" },
+          { title: "Suspense + transitions", when: "1w ago", state: "unwatched" },
+        ].map((r) => (
+          <div key={r.title} className="flex items-center gap-2 rounded-md border border-border bg-card p-2">
+            <PlayCircle className="h-4 w-4 text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[10px] font-semibold">{r.title}</p>
+              <p className="text-[8px] text-muted-foreground">{r.when}</p>
+            </div>
+            {r.state === "watched" && (
+              <span className="rounded-full bg-success/15 px-1.5 py-0.5 text-[8px] font-bold text-success">✓ Watched</span>
+            )}
+            {r.state === "in-progress" && (
+              <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[8px] font-bold text-amber-700">In progress</span>
+            )}
+            {r.state === "unwatched" && (
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-[8px] font-bold text-muted-foreground">New</span>
+            )}
+          </div>
+        ))}
+
+        <div className="rounded-md border border-primary/30 bg-primary/[0.05] p-2">
+          <p className="text-[9px] font-semibold uppercase tracking-wide text-primary">📣 Auto-recap</p>
+          <p className="mt-0.5 text-[10px]">Class 4 just wrapped — recap posted to the feed.</p>
         </div>
       </div>
     </PreviewFrame>

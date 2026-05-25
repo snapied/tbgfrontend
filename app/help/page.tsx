@@ -30,6 +30,7 @@ import {
   Film,
   Globe,
   GraduationCap,
+  Hand,
   Heart,
   KeyRound,
   Languages,
@@ -37,6 +38,7 @@ import {
   Lock,
   Megaphone,
   MessageCircleQuestion,
+  MessageSquare,
   Newspaper,
   Package,
   Palette,
@@ -93,6 +95,21 @@ const LIVE_CLASSES: Topic[] = [
   { href: "/help/recordings-index",           title: "The Recordings index page",         body: "Every class with a recording in one searchable table — no hunting.",          icon: Film,            status: "new" },
   { href: "/help/recording-player-dialog",    title: "Watching a recording inline",       body: "Click Watch → inline player. MP4 / YouTube / Loom / Vimeo / Wistia.",          icon: Play,            status: "new" },
   { href: "/help/live-classes-attendance",    title: "Attendance — auto + manual",         body: "Auto-logged on Join. Editable after. Auto-nudges on 3+ absences.",            icon: CalendarClock,   status: "new" },
+]
+
+// In-class wedges — the May 2026 sprint set. Polls, raised hands,
+// in-class agenda, waiting-room presence, chat persistence,
+// auto-chapters. These are the features visitors search for after
+// reading the live-classes feature page.
+const INSIDE_LIVE_ROOM: Topic[] = [
+  { href: "/help/live-polls",              title: "Run a live poll during class",             body: "2–4 option polls. Launch + close fan out as notifications to enrolled students and co-instructors.", icon: BarChart3,    status: "new" },
+  { href: "/help/raised-hands",            title: "How the raised-hand queue works",          body: "Students raise; you see an ordered queue with a Live #N badge and one-click Answer.",                 icon: Hand,          status: "new" },
+  { href: "/help/in-class-agenda",         title: "Mark agenda items done in class",          body: "3 / 7 pacing chip, late-joiner recap, AI summary seeded from what actually happened.",                icon: ClipboardList, status: "new" },
+  { href: "/help/waiting-room-presence",   title: "See who's actually in the lobby",          body: "Live roster of every student who's loaded the waiting room. Auto-admit when you open the door.",   icon: Users,         status: "new" },
+  { href: "/help/class-chat-transcript",   title: "Class chat persists to the recording",     body: "Live chat messages render in the recording player at their original timestamps.",                     icon: MessageSquare, status: "new" },
+  { href: "/help/recording-chapters",      title: "Auto-chapters from your transcript",       body: "Transition phrases become seekable chapters. 5–12 per recording, ≥90s spacing.",                     icon: Film,          status: "new" },
+  { href: "/help/community-classes-tab",   title: "Surface your class series in the community", body: "Upcoming live + recordings grid + cohort window banner, all in the community surface.",            icon: Users,         status: "new" },
+  { href: "/help/instructor-bio-sync",     title: "Two-field bio + AI 'Help me write'",       body: "Short tagline + long About, two-way sync, three opinionated AI drafts.",                              icon: Sparkles,      status: "new" },
 ]
 
 // What's new — a single rail of the most-recent shipped features. Mirrors the
@@ -350,6 +367,7 @@ export default function HelpIndexPage() {
         </section>
 
         <Group title="What's new" topics={WHATS_NEW} />
+        <Group title="Inside the live room" topics={INSIDE_LIVE_ROOM} />
         <Group title="For creators" topics={FOR_CREATORS} />
         <Group title="Courses" topics={COURSES} />
         <Group title="Live classes" topics={LIVE_CLASSES} />

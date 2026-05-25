@@ -128,7 +128,7 @@ export function NewFeaturesShowcase() {
 
           <FeatureCard
             href="/features/faculty"
-            badge="Teams"
+            badge="Multi-faculty"
             badgeIcon={<Users className="h-3 w-3" />}
             title="Co-taught by default"
             body="Invite as many teachers as you need. Per-module owners, multi-tenant accounts, zxcvbn passwords."

@@ -17,6 +17,7 @@ import {
   Download,
   Key,
   Search,
+  Users,
   Video as VideoIcon,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
@@ -30,6 +31,7 @@ import { useTenantBrand } from "@/lib/tenant-brand"
 
 const KIND_META: Record<ProductKind, { label: string; icon: typeof BookOpen }> = {
   course:     { label: "Course", icon: BookOpen },
+  community:  { label: "Community", icon: Users },
   download:   { label: "Download", icon: Download },
   bundle:     { label: "Bundle", icon: Box },
   membership: { label: "Membership", icon: Crown },
@@ -55,7 +57,7 @@ export default function PortalStorePage({
   )
   const counts = useMemo(() => {
     const out: Record<ProductKind, number> = {
-      course: 0, download: 0, bundle: 0,
+      course: 0, community: 0, download: 0, bundle: 0,
       membership: 0, session: 0, webinar: 0, license: 0,
     }
     for (const p of published) out[p.kind]++

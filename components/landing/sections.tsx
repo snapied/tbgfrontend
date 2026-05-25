@@ -40,7 +40,7 @@ const ROWS: FeatureRow[] = [
     icon: Video,
     title: "Live classes — scheduled, run, recapped.",
     body:
-      "Paste a Google Meet / Zoom / Teams link and we handle the rest: in-app + email + WhatsApp reminders, attendance tracking, and a post-class recap card that pins the recording, summary, slides, quizzes and homework right under the session.",
+      "Open the built-in cloud room — or paste a meeting URL from any common video-conferencing tool — and we handle the rest: in-app + email + WhatsApp reminders, attendance tracking, and a post-class recap card that pins the recording, summary, slides, quizzes and homework right under the session.",
     bullets: [
       "Recurring series — daily, weekly, every-N-days, or fully custom",
       "Bulk-edit, bulk-notify, bulk-cancel from the list view",
@@ -53,11 +53,11 @@ const ROWS: FeatureRow[] = [
     icon: BookOpen,
     title: "Courses with real structure.",
     body:
-      "Build modules and lessons, embed YouTube/Vimeo/Loom, upload PDFs and slides, drop in inline quizzes. Students get a clean player with per-lesson progress that rolls up into course completion.",
+      "Build modules and lessons, embed video from any common host, upload PDFs and slides, drop in inline quizzes. Students get a clean player with per-lesson progress that rolls up into course completion.",
     bullets: [
       "Drag-and-drop curriculum builder",
       "Auto-grade or teacher-review quizzes",
-      "Lesson resources (Canva, Gamma, Slides, Notion, Figma embedded)",
+      "Lesson resources (slide decks, design files, doc embeds — any common tool)",
       "Per-student progress with completion percentage",
     ],
   },
@@ -111,7 +111,7 @@ export function FeaturesSection() {
             Everything in one workspace.
           </h2>
           <p className="mt-4 text-lg text-muted-foreground">
-            Stop stitching together Zoom, Google Forms, Razorpay, a Notion page and a WhatsApp group. One login, one brand, one place students go to.
+            Stop stitching together a video tool, a form tool, a payments tool, a doc tool and a chat group. One login, one brand, one place students go to.
           </p>
         </div>
 
@@ -159,7 +159,7 @@ function FeatureRowCard({ row, reverse }: { row: FeatureRow; reverse: boolean })
 
 // ============================================================
 // Inline product previews. Premium glassmorphic visual illustration
-// mockups matching Stripe, Linear, and Graphy style premium design.
+// mockups in the style of modern SaaS marketing surfaces.
 // ============================================================
 
 function FeatureMockup({ row }: { row: FeatureRow }) {
@@ -176,7 +176,7 @@ function FeatureMockup({ row }: { row: FeatureRow }) {
       break
     case "/features/storefront":
       imgSrc = "/storefront_illustration.png"
-      imgAlt = "SaaS storefront course listing and UPI Razorpay checkout mockup illustration"
+      imgAlt = "SaaS storefront course listing and UPI checkout mockup illustration"
       break
     case "/features/community":
       imgSrc = "/community_illustration.png"
@@ -224,7 +224,7 @@ export function TemplatesSection() {
               Launch your own academy this afternoon.
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Pick your subdomain, drop in your logo, paste a Meet link — your students get an invite the same hour. No demos, no sales calls, no setup fees.
+              Pick your subdomain, drop in your logo, schedule your first class — your students get an invite the same hour. No demos, no sales calls, no setup fees.
             </p>
             <div className="mt-6 flex flex-col items-start gap-3 sm:flex-row">
               <Button asChild size="lg" className="gap-2">

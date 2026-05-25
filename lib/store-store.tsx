@@ -47,6 +47,11 @@ export type ProductKind =
   | "session"       // 1-on-1 booking (calendar link delivered on purchase)
   | "webinar"       // paid live event (joins via a meeting link)
   | "license"       // serial-key delivery for software / templates
+  | "community"     // paid access to a cohort/community — auto-adds the
+                    // buyer to the linked StudentGroup's memberIds on
+                    // checkout. Supports one-time or subscription
+                    // pricing; subscription pricing expires access on
+                    // lapse.
 
 export type PricingModel =
   | { type: "free" }
@@ -86,6 +91,21 @@ export type ProductDelivery =
   | { kind: "session"; durationMinutes: number; bookingUrl?: string; instructorEmail?: string }
   | { kind: "webinar"; sessionId?: string; meetingUrl?: string; scheduledAt?: string }
   | { kind: "license"; keyPool?: string[]; keyTemplate?: string }
+  | {
+      kind: "community"
+      /** StudentGroup id from lms-store the buyer is added to on
+       *  successful checkout. Same id stays valid across cohort
+       *  refreshes — the community lives, members just join. */
+      linkedCommunityId: string
+      /** Optional welcome message posted to the community feed after
+       *  the buyer joins. Plain text; rendered with no formatting. */
+      welcomeMessage?: string
+      /** Optional list of additional product ids (e.g. a course, a
+       *  download bundle) granted alongside community access. Lets
+       *  creators ship a "community + starter pack" combo with one
+       *  SKU instead of forcing a bundle wrapper. */
+      includedProductIds?: string[]
+    }
 
 export interface ProductTestimonial {
   id: string
@@ -213,6 +233,10 @@ export type EntitlementType =
   | "webinar"
   | "license"
   | "membership"
+  | "community"     // paid access to a StudentGroup. reference =
+                    // the group id. Subscriptions stamp expiresAt;
+                    // the LMS listener auto-removes the buyer from
+                    // memberIds on lapse.
 
 export interface Entitlement {
   // The thing the customer can do/see RIGHT NOW. Denormalised from orders
@@ -653,6 +677,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           break
         }
+        case "community": {
+          // Grant the headline community entitlement. Subscription
+          // pricing carries an expiresAt so lapsing the sub also
+          // lapses community membership.
+          const expiresAt = product.pricing.type === "subscription"
+            ? addDays(now, intervalDaysFor(product.pricing))
+            : undefined
+          out.push(make("community", product.delivery.linkedCommunityId, expiresAt))
+          // Optional starter-pack expansion — recurse into any
+          // additionally bundled product ids. Mirrors the membership
+          // pattern so a "community + welcome course" product works
+          // out of the box.
+          for (const includedId of product.delivery.includedProductIds ?? []) {
+            const included = products.find(p => p.id === includedId)
+            if (!included) continue
+            const subEnts = grantEntitlementsForProduct(included, customerId, orderId)
+            for (const e of subEnts) {
+              if (expiresAt) e.expiresAt = expiresAt
+            }
+            out.push(...subEnts)
+          }
+          break
+        }
       }
       return out
     },
@@ -811,6 +858,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           window.dispatchEvent(
             new CustomEvent("entitlement.course-granted", {
               detail: { customerId: input.customerId, courseId: e.reference },
+            }),
+          )
+        }
+        if (e.type === "community" && e.reference) {
+          // Resolve the linked community product so the LMS listener
+          // can post the optional welcome message into the feed.
+          const sourceProduct = products.find(p => p.id === e.productId)
+          const welcomeMessage =
+            sourceProduct?.delivery.kind === "community"
+              ? sourceProduct.delivery.welcomeMessage
+              : undefined
+          window.dispatchEvent(
+            new CustomEvent("entitlement.community-granted", {
+              detail: {
+                customerId: input.customerId,
+                communityId: e.reference,
+                welcomeMessage,
+                productTitle: sourceProduct?.title,
+              },
             }),
           )
         }

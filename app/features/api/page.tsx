@@ -173,9 +173,9 @@ export default function ApiFeaturePage() {
               Built like every API you already trust
             </h2>
             <p className="mt-3 max-w-3xl text-muted-foreground">
-              We didn&apos;t reinvent auth, error envelopes, or pagination — we matched what
-              Stripe, GitHub, and Linear already taught your engineers. Less to learn, more to
-              ship.
+              We didn&apos;t reinvent auth, error envelopes, or pagination — we matched the
+              modern REST conventions your engineers already use everywhere else. Less to learn,
+              more to ship.
             </p>
             <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Pillar
@@ -207,7 +207,7 @@ export default function ApiFeaturePage() {
               <Pillar
                 icon={<KeyRound className="h-5 w-5 text-primary" />}
                 title="One-time secret reveal"
-                body="The full key is shown exactly once on creation — same pattern Stripe + GitHub use. We never store plaintext. Lost it? Revoke and reissue."
+                body="The full key is shown exactly once on creation — the standard one-time-reveal pattern. We never store plaintext. Lost it? Revoke and reissue."
               />
             </div>
           </div>

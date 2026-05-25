@@ -37,6 +37,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { usePresence } from "@/lib/lobby-presence"
 
 type CheckStatus = "ok" | "warn" | "fail" | "checking" | "idle"
 
@@ -45,9 +46,17 @@ interface Props {
   backendAuthed: boolean | null
   /** Students currently enrolled in the parent course. */
   enrolledCount: number
+  /** Optional session id — when passed, the Audience row also
+   *  shows the live waiting-room count + names so the host
+   *  knows who's actually here vs the enrolled total. */
+  sessionId?: string
 }
 
-export function PreflightChecklist({ backendAuthed, enrolledCount }: Props) {
+export function PreflightChecklist({ backendAuthed, enrolledCount, sessionId }: Props) {
+  // Live lobby presence — count + names. Returns [] when no session
+  // id is supplied (ad-hoc rooms) so the Audience row falls back
+  // to its enrolled-count behaviour. Polls every 3s.
+  const waiting = usePresence(sessionId ?? "")
   // Camera + mic permission state. "idle" = not yet checked at all;
   // "ok"/"fail" = we have a confirmed answer; "checking" = active probe.
   const [camStatus, setCamStatus] = useState<CheckStatus>("idle")
@@ -255,12 +264,25 @@ export function PreflightChecklist({ backendAuthed, enrolledCount }: Props) {
           />
           <ChecklistRow
             icon={<Users className="h-4 w-4" />}
-            status={enrolledStatus}
+            status={waiting.length > 0 ? "ok" : enrolledStatus}
             label="Audience"
             detail={
-              enrolledCount === 0
-                ? "No students enrolled in this course yet — opening the room won't admit anyone."
-                : `${enrolledCount} student${enrolledCount === 1 ? "" : "s"} enrolled in the course.`
+              waiting.length > 0 ? (
+                <>
+                  <span className="font-semibold text-foreground">
+                    {waiting.length} waiting now
+                  </span>{" "}
+                  · {enrolledCount} enrolled in the course
+                  <span className="mt-1 block truncate text-[11px] text-muted-foreground">
+                    {waiting.slice(0, 5).map((p) => p.name).join(", ")}
+                    {waiting.length > 5 ? ` +${waiting.length - 5} more` : ""}
+                  </span>
+                </>
+              ) : enrolledCount === 0 ? (
+                "No students enrolled in this course yet — opening the room won't admit anyone."
+              ) : (
+                `${enrolledCount} student${enrolledCount === 1 ? "" : "s"} enrolled in the course · none waiting yet.`
+              )
             }
           />
         </ul>
@@ -279,7 +301,7 @@ function ChecklistRow({
   icon: React.ReactNode
   status: CheckStatus
   label: string
-  detail: string
+  detail: React.ReactNode
   action?: React.ReactNode
 }) {
   return (
@@ -292,7 +314,7 @@ function ChecklistRow({
           <StatusIcon status={status} />
           {label}
         </p>
-        <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p>
+        <div className="mt-0.5 text-xs text-muted-foreground">{detail}</div>
       </div>
       {action && <div className="shrink-0">{action}</div>}
     </li>

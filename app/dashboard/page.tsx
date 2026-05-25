@@ -9,6 +9,9 @@ import { useCertificateStore } from "@/lib/certificate-store"
 import { useLMS } from "@/lib/lms-store"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
 import { GettingStartedCard } from "@/components/dashboard/getting-started"
+import { ContinueRail } from "@/components/dashboard/continue-rail"
+import { DemoSeedBanner } from "@/components/dashboard/demo-seed-banner"
+import { DocsHomeCard } from "@/components/dashboard/docs-home-card"
 
 // Starter tour for fresh teachers landing on the dashboard. Selectors
 // hit the sidebar items (which carry `data-tour=...` markers) and
@@ -91,6 +94,13 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8">
       <ProductTour tourId="dashboard-v1" steps={DASHBOARD_TOUR} />
+
+      {/* Demo-seed banner — only renders on the renu-rawat tenant.
+          Offers one-click seed of realistic K12 demo data so the
+          dashboard / store / portal / docs / community are all
+          populated for screen recordings + live pitches. */}
+      <DemoSeedBanner />
+
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -112,6 +122,12 @@ export default function DashboardPage() {
           (or dismisses it manually). New tenants land on a clear path
           instead of an empty dashboard with 30 sidebar items. */}
       <GettingStartedCard />
+
+      {/* Continue-where-you-left-off — aggregates in-progress
+          recordings, classes starting in next 24h, draft recaps,
+          and the last-edited course into one cross-module rail.
+          Self-hides when there's nothing pending. */}
+      <ContinueRail />
 
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -219,6 +235,11 @@ export default function DashboardPage() {
         </Card>
       </div>
 
+      {/* Docs — the knowledge layer. Self-contained widget that
+          shows recent docs the viewer can see, with two starter
+          template shortcuts when the user is new. */}
+      <DocsHomeCard />
+
       {/* Certificate Batches */}
       {recentBatches.length > 0 && (
         <Card>
@@ -274,6 +295,17 @@ export default function DashboardPage() {
 
       {/* Quick Actions */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="hover:border-primary/50 transition-colors cursor-pointer">
+          <Link href="/dashboard/docs">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-5 w-5 text-primary" />
+                Write a Doc
+              </CardTitle>
+              <CardDescription>Handbooks, study guides, public knowledge pages</CardDescription>
+            </CardHeader>
+          </Link>
+        </Card>
         <Card className="hover:border-primary/50 transition-colors cursor-pointer">
           <Link href="/dashboard/courses/new">
             <CardHeader>

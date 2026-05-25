@@ -6,12 +6,17 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "seed:renu-rawat": "node scripts/open-seed.mjs"
   },
   "dependencies": {
     "@excalidraw/excalidraw": "^0.18.1",
     "@hookform/resolvers": "^3.9.1",
     "@jitsi/react-sdk": "^1.4.4",
+    "@liveblocks/client": "^3.19.3",
+    "@liveblocks/node": "^3.19.3",
+    "@liveblocks/react": "^3.19.3",
+    "@liveblocks/yjs": "^3.19.3",
     "@livekit/components-react": "^2.9.21",
     "@livekit/components-styles": "^1.2.0",
     "@radix-ui/react-accordion": "1.2.12",

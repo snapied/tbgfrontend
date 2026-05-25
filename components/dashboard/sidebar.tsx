@@ -69,6 +69,7 @@ const navGroups: NavGroup[] = [
       { name: "Recordings", href: "/dashboard/recordings", icon: Film },
       { name: "Whiteboards", href: "/dashboard/whiteboards", icon: PenSquare },
       { name: "Quizzes", href: "/dashboard/quizzes", icon: FileQuestion },
+      { name: "Docs", href: "/dashboard/docs", icon: FileText },
       { name: "Assignments", href: "/dashboard/assignments", icon: ClipboardList },
       { name: "Storefront", href: "/dashboard/store", icon: ShoppingBag },
       { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },

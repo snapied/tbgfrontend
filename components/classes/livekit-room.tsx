@@ -42,8 +42,14 @@ import {
   useTracks,
   useParticipants,
   useRoomContext,
+  useChat,
+  useLocalParticipant,
 } from "@livekit/components-react"
 import { RoomEvent, Track, VideoPresets } from "livekit-client"
+import {
+  ComprehensionCheckHost,
+  ComprehensionCheckStudent,
+} from "@/components/classes/comprehension-check-bar"
 import "@livekit/components-styles"
 import {
   LIVEKIT_URL,
@@ -65,6 +71,19 @@ interface LiveKitRoomProps {
    *  default child reads this — custom `children` should consume
    *  it themselves if they want to honour the toggle. */
   chatEnabled?: boolean
+  /** Scheduled start (ISO) + planned duration (minutes). When both
+   *  are provided AND `isHost` is true, the in-call pill renders a
+   *  live "Time left / +N over" chip so a host running long sees
+   *  it. Ad-hoc rooms can omit. */
+  scheduledAt?: string
+  durationMinutes?: number
+  /** When set, every chat message that flows through the LiveKit
+   *  ControlBar chat is buffered to a tenant-scoped localStorage
+   *  key keyed by sessionId. The host page reads + persists this
+   *  to session.chatTranscript on End so the recording carries
+   *  the side-channel context. Omit for ad-hoc rooms with no
+   *  session entity. */
+  sessionId?: string
   onLeft?: () => void
   className?: string
   /**
@@ -81,6 +100,9 @@ export function LiveKitRoom({
   user,
   isHost,
   chatEnabled = true,
+  scheduledAt,
+  durationMinutes,
+  sessionId,
   onLeft,
   className,
   children,
@@ -180,7 +202,15 @@ export function LiveKitRoom({
         style={{ height: "100%", width: "100%", display: "flex", flexDirection: "column" }}
         onDisconnected={() => onLeft?.()}
       >
-        {children ?? <LiveKitVideoUI isHost={isHost} chatEnabled={chatEnabled} />}
+        {children ?? (
+          <LiveKitVideoUI
+            isHost={isHost}
+            chatEnabled={chatEnabled}
+            scheduledAt={scheduledAt}
+            durationMinutes={durationMinutes}
+            sessionId={sessionId}
+          />
+        )}
         <RoomAudioRenderer />
         <LiveCaptions speakerName={user.name} />
       </LKRoom>
@@ -195,12 +225,23 @@ export function LiveKitRoom({
 export function LiveKitVideoUI({
   isHost = false,
   chatEnabled = true,
+  scheduledAt,
+  durationMinutes,
+  sessionId,
 }: {
   isHost?: boolean
   /** Per-class override for the LiveKit ControlBar chat icon.
    *  Defaults to enabled. Instructors running focused / recording-
    *  only sessions can flip this off on the class detail page. */
   chatEnabled?: boolean
+  /** Optional schedule bounds, forwarded to the host-only pill
+   *  so a teacher running long sees a visible over-time chip. */
+  scheduledAt?: string
+  durationMinutes?: number
+  /** When set, the chat transcript recorder buffers every chat
+   *  message to localStorage so the host can persist it to the
+   *  session record on End. */
+  sessionId?: string
 } = {}) {
   // No placeholders. The bundled placeholder logic in @livekit/components-react
   // races the real-track swap and throws "Element not part of the array …
@@ -227,11 +268,33 @@ export function LiveKitVideoUI({
             indicator. Pinned top-right, doesn't interfere with the
             video grid below it. Students get a smaller compliance
             banner via LiveRecordingBanner instead. */}
-        {isHost && <LiveIndicatorPill />}
+        {isHost && (
+          <LiveIndicatorPill
+            scheduledAt={scheduledAt}
+            durationMinutes={durationMinutes}
+          />
+        )}
+        {/* Side-effect-only recorder. Captures every chat message
+            from the LiveKit data channel into localStorage so the
+            host page can persist them to session.chatTranscript on
+            End. Runs for every participant (host + students), each
+            writing their own view; on End the host's flush is the
+            one that lands in the session because the host page
+            owns updateLiveSession. */}
+        {sessionId && <ChatTranscriptRecorder sessionId={sessionId} />}
         {/* All-participants compliance banner — "this class is being
             recorded" must be visible whenever the room is recording.
             Renders only when recording is actually on. */}
         <LiveRecordingBanner hideForHost={isHost} />
+        {/* In-class comprehension check.
+            Host: read-only ratio in top-right of stage + amber alert
+            when >30% are lost.
+            Student: "With you / Lost" toggle pill anchored
+            bottom-left over the video. Both update via tenant-
+            scoped storage (same broadcast pattern as live polls). */}
+        {sessionId && (
+          <ComprehensionCheckMount sessionId={sessionId} isHost={isHost} />
+        )}
         {tracks.length > 0 ? (
           <GridLayout tracks={tracks} style={{ height: "100%" }}>
             <ParticipantTile />
@@ -264,6 +327,35 @@ export function LiveKitVideoUI({
   )
 }
 
+// Mounts the right comprehension check variant for the local
+// participant. Host sees the live ratio + alert; students see the
+// With-you / Lost toggle. Floats over the video stage via absolute
+// positioning so it doesn't push the GridLayout around.
+function ComprehensionCheckMount({
+  sessionId,
+  isHost,
+}: {
+  sessionId: string
+  isHost: boolean
+}) {
+  const { localParticipant } = useLocalParticipant()
+  const userId = localParticipant?.identity ?? null
+
+  if (isHost) {
+    return (
+      <div className="pointer-events-none absolute right-3 top-14 z-20 flex max-w-xs flex-col items-end gap-1.5">
+        <ComprehensionCheckHost sessionId={sessionId} />
+      </div>
+    )
+  }
+  if (!userId) return null
+  return (
+    <div className="pointer-events-none absolute bottom-20 left-1/2 z-20 -translate-x-1/2">
+      <ComprehensionCheckStudent sessionId={sessionId} userId={userId} />
+    </div>
+  )
+}
+
 // Host-only status pill. Mounts inside LiveKitVideoUI so it inherits
 // the LiveKit room context — no prop drilling. Renders:
 //   🟢 LIVE · N watching · ◉ Recording (when active)
@@ -273,13 +365,35 @@ export function LiveKitVideoUI({
 // the count rather than the SDK doing it, because the local
 // participant is identified separately and a "watching" count
 // shouldn't include the broadcaster.
-function LiveIndicatorPill() {
+function LiveIndicatorPill({
+  scheduledAt,
+  durationMinutes,
+}: {
+  /** ISO start time of the scheduled session. When provided, the
+   *  pill renders a "Time left" / "+N over" indicator so the host
+   *  notices when class is running long. Omit for ad-hoc rooms
+   *  where there's no planned end. */
+  scheduledAt?: string
+  /** Planned duration in minutes. Used together with `scheduledAt`
+   *  to compute the over-time flip points (amber at any overrun,
+   *  red after +15 min). */
+  durationMinutes?: number
+} = {}) {
   const participants = useParticipants()
   const room = useRoomContext()
   const remoteCount = Math.max(0, participants.length - 1)
   const [isRecording, setIsRecording] = useState<boolean>(
     () => room?.isRecording ?? false,
   )
+  // Live clock tick — 30s is enough for human-readable time-left
+  // copy (the eye doesn't notice second-by-second changes in a
+  // minutes-scale countdown).
+  const [now, setNow] = useState<number>(() => Date.now())
+  useEffect(() => {
+    if (!scheduledAt || !durationMinutes) return
+    const id = window.setInterval(() => setNow(Date.now()), 30_000)
+    return () => window.clearInterval(id)
+  }, [scheduledAt, durationMinutes])
   // LiveKit emits a Room event when recording status flips; subscribe
   // so the pill updates without forcing a parent re-render. Default
   // state is read above so initial paint is correct.
@@ -292,6 +406,35 @@ function LiveIndicatorPill() {
       room.off(RoomEvent.RecordingStatusChanged, sync)
     }
   }, [room])
+
+  // Compute "time left" or "+over" based on scheduled bounds.
+  // Three visual states:
+  //   • white  — class is in-window (most of the call)
+  //   • amber  — past `scheduledAt + durationMinutes` by 0–14 min
+  //   • red    — past +15 min (this is the "wrap up RIGHT now" cue)
+  // Returns null if we don't have enough info to compute (ad-hoc
+  // rooms), so the pill renders its old layout.
+  const timeChip = (() => {
+    if (!scheduledAt || !durationMinutes) return null
+    const startMs = Date.parse(scheduledAt)
+    if (!Number.isFinite(startMs)) return null
+    const endMs = startMs + durationMinutes * 60_000
+    const diffMs = endMs - now
+    const overMin = Math.floor(-diffMs / 60_000)
+    if (diffMs >= 0) {
+      // Still in window. Show "Time left: Xh Ym" (with the hours
+      // dropped under 60 min for compactness).
+      const totalMin = Math.ceil(diffMs / 60_000)
+      const label = totalMin >= 60
+        ? `${Math.floor(totalMin / 60)}h ${totalMin % 60}m`
+        : `${totalMin}m`
+      return { label: `Time left: ${label}`, color: "#ffffff" as const, bg: "rgba(255,255,255,0.08)" as const }
+    }
+    // Past the planned end.
+    const color = overMin >= 15 ? "#fca5a5" : "#fbbf24"
+    const bg = overMin >= 15 ? "rgba(239,68,68,0.18)" : "rgba(251,191,36,0.18)"
+    return { label: `+${Math.max(1, overMin)}m over`, color, bg }
+  })()
 
   return (
     <div
@@ -337,6 +480,25 @@ function LiveIndicatorPill() {
       <span style={{ textTransform: "none", fontWeight: 500 }}>
         {remoteCount} watching
       </span>
+      {timeChip && (
+        <>
+          <span style={{ opacity: 0.6 }}>·</span>
+          <span
+            style={{
+              padding: "2px 8px",
+              borderRadius: 999,
+              background: timeChip.bg,
+              color: timeChip.color,
+              textTransform: "none",
+              fontWeight: 600,
+              letterSpacing: 0,
+            }}
+            title="Class is running over its scheduled time"
+          >
+            {timeChip.label}
+          </span>
+        </>
+      )}
       {isRecording && (
         <>
           <span style={{ opacity: 0.6 }}>·</span>
@@ -437,4 +599,78 @@ function LiveRecordingBanner({ hideForHost }: { hideForHost: boolean }) {
       This class is being recorded
     </div>
   )
+}
+
+// ============================================================
+// Chat transcript recorder + reader.
+//
+// Inside the LiveKit room context, `useChat()` exposes the running
+// list of chat messages. We render this side-effect-only component
+// near the top of the video UI so messages get buffered to
+// localStorage as they arrive. The host page reads from the same
+// key on End Class and persists to session.chatTranscript.
+//
+// Storage key: `thebigclass.chatTranscript.v1.<sessionId>` —
+// tenant-namespacing isn't needed because session ids are already
+// globally unique. Buffer is replaced on every render so duplicate
+// messages from re-mounts don't accumulate.
+// ============================================================
+
+const CHAT_TRANSCRIPT_KEY = (sessionId: string) =>
+  `thebigclass.chatTranscript.v1.${sessionId}`
+
+export interface ChatTranscriptEntry {
+  id: string
+  fromId?: string
+  fromName?: string
+  text: string
+  sentAt: string
+}
+
+/** Reads the buffered chat for a session out of localStorage.
+ *  Called by the host page on End Class to persist to the
+ *  session record. Returns [] when nothing's been captured. */
+export function readChatTranscript(sessionId: string): ChatTranscriptEntry[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = window.localStorage.getItem(CHAT_TRANSCRIPT_KEY(sessionId))
+    if (!raw) return []
+    const arr = JSON.parse(raw) as ChatTranscriptEntry[]
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
+
+/** Clears the buffer after a successful persist. Keeps localStorage
+ *  from accumulating dead transcripts across many ended classes. */
+export function clearChatTranscript(sessionId: string): void {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.removeItem(CHAT_TRANSCRIPT_KEY(sessionId))
+  } catch {
+    /* private mode — nothing to clean up */
+  }
+}
+
+function ChatTranscriptRecorder({ sessionId }: { sessionId: string }) {
+  const { chatMessages } = useChat()
+  useEffect(() => {
+    if (!sessionId || typeof window === "undefined") return
+    const entries: ChatTranscriptEntry[] = chatMessages.map((m) => ({
+      // Use LiveKit's per-message id when present; fall back to a
+      // stable composite so duplicates from re-renders dedupe.
+      id: (m as { id?: string }).id ?? `${m.from?.identity ?? "anon"}-${m.timestamp}`,
+      fromId: m.from?.identity,
+      fromName: m.from?.name ?? m.from?.identity,
+      text: m.message,
+      sentAt: new Date(m.timestamp).toISOString(),
+    }))
+    try {
+      window.localStorage.setItem(CHAT_TRANSCRIPT_KEY(sessionId), JSON.stringify(entries))
+    } catch {
+      /* quota exceeded — drop silently; the recording itself is the source of truth */
+    }
+  }, [sessionId, chatMessages])
+  return null
 }

@@ -5,9 +5,10 @@
 // same PortalConfig data so switching layouts never loses content.
 
 import Link from "next/link"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import {
   ArrowRight,
+  BookOpen,
   Facebook,
   Github,
   Instagram,
@@ -24,7 +25,28 @@ import type { PortalConfig } from "@/lib/portal-store"
 import { DEFAULT_FOOTER_PRESET } from "@/lib/portal-layout-presets"
 import { usePortalDataset } from "@/components/portal/use-portal-dataset"
 import { useTenant } from "@/lib/tenant-store"
+import { useDocs } from "@/lib/docs"
 import { useT, type Dictionary } from "@/lib/i18n"
+
+// Auto-Knowledge-hub injection. When the tenant has at least one
+// published-public doc, the footer surfaces a "Knowledge hub" link
+// to /p/<tenant>/k so visitors can find it without the creator
+// manually adding the link to their footer columns. Hidden when
+// there are no public docs (avoids dead links).
+function useKnowledgeHubLink(basePath: string): { label: string; href: string } | null {
+  const { docs } = useDocs()
+  return useMemo(() => {
+    const hasPublic = docs.some(
+      (d) =>
+        d.audience.kind === "public" &&
+        d.status === "published" &&
+        !d.deletedAt &&
+        d.publicSlug,
+    )
+    if (!hasPublic) return null
+    return { label: "Knowledge hub", href: `${basePath}/k` }
+  }, [docs, basePath])
+}
 
 interface Props {
   tenant: string
@@ -75,12 +97,14 @@ interface VariantProps {
 }
 
 function MultiColumn({ siteName, tagline, config, basePath, copyright }: VariantProps) {
+  const knowledgeHub = useKnowledgeHubLink(basePath)
+  const columns = augmentColumnsWithKnowledgeHub(config.footerColumns ?? [], knowledgeHub)
   return (
     <footer className="border-t border-border bg-card/40">
       <div className="mx-auto max-w-6xl px-6 py-12 lg:px-8">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <BrandBlock siteName={siteName} tagline={tagline} config={config} basePath={basePath} />
-          {(config.footerColumns ?? [])
+          {columns
             .filter((c) => c.links.length > 0)
             .slice(0, 3)
             .map((col) => (
@@ -94,6 +118,7 @@ function MultiColumn({ siteName, tagline, config, basePath, copyright }: Variant
 }
 
 function CompactMono({ siteName, config, basePath, copyright }: VariantProps) {
+  const knowledgeHub = useKnowledgeHubLink(basePath)
   return (
     <footer className="border-t border-border bg-foreground text-background">
       <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 py-6 sm:flex-row lg:px-8">
@@ -108,7 +133,18 @@ function CompactMono({ siteName, config, basePath, copyright }: VariantProps) {
           )}
           <span className="font-semibold tracking-tight">{siteName}</span>
         </Link>
-        <p className="text-xs opacity-70">{copyright}</p>
+        <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-5">
+          {knowledgeHub && (
+            <Link
+              href={knowledgeHub.href}
+              className="inline-flex items-center gap-1.5 text-xs opacity-80 transition-opacity hover:opacity-100"
+            >
+              <BookOpen className="h-3 w-3" />
+              {knowledgeHub.label}
+            </Link>
+          )}
+          <p className="text-xs opacity-70">{copyright}</p>
+        </div>
         <SocialsRow config={config} mono />
       </div>
     </footer>
@@ -116,6 +152,8 @@ function CompactMono({ siteName, config, basePath, copyright }: VariantProps) {
 }
 
 function NewsletterCta({ siteName, tagline, config, basePath, copyright }: VariantProps) {
+  const knowledgeHub = useKnowledgeHubLink(basePath)
+  const columns = augmentColumnsWithKnowledgeHub(config.footerColumns ?? [], knowledgeHub)
   return (
     <footer className="border-t border-border bg-card/40">
       <div className="border-b border-border bg-primary/[0.04]">
@@ -132,7 +170,7 @@ function NewsletterCta({ siteName, tagline, config, basePath, copyright }: Varia
       <div className="mx-auto max-w-6xl px-6 py-10 lg:px-8">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <BrandBlock siteName={siteName} tagline={tagline} config={config} basePath={basePath} />
-          {(config.footerColumns ?? [])
+          {columns
             .filter((c) => c.links.length > 0)
             .slice(0, 3)
             .map((col) => (
@@ -147,11 +185,13 @@ function NewsletterCta({ siteName, tagline, config, basePath, copyright }: Varia
 
 function TwoColumn({ siteName, tagline, config, basePath, copyright }: VariantProps) {
   const s = config.socials ?? {}
+  const knowledgeHub = useKnowledgeHubLink(basePath)
   return (
     <footer className="border-t border-border bg-card/40">
       <div className="mx-auto grid max-w-6xl gap-10 px-6 py-12 lg:grid-cols-2 lg:px-8">
         <div>
           <BrandBlock siteName={siteName} tagline={tagline} config={config} basePath={basePath} />
+          {knowledgeHub && <KnowledgeHubInline link={knowledgeHub} />}
         </div>
         <div className="space-y-3">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground/70">
@@ -173,6 +213,7 @@ function TwoColumn({ siteName, tagline, config, basePath, copyright }: VariantPr
 }
 
 function CenteredTight({ siteName, tagline, config, basePath, copyright }: VariantProps) {
+  const knowledgeHub = useKnowledgeHubLink(basePath)
   return (
     <footer className="border-t border-border bg-card/40">
       <div className="mx-auto flex max-w-3xl flex-col items-center gap-4 px-6 py-10 text-center lg:px-8">
@@ -188,6 +229,7 @@ function CenteredTight({ siteName, tagline, config, basePath, copyright }: Varia
           <span className="font-semibold tracking-tight">{siteName}</span>
         </Link>
         {tagline && <p className="text-sm text-muted-foreground">{tagline}</p>}
+        {knowledgeHub && <KnowledgeHubInline link={knowledgeHub} />}
         <SocialsRow config={config} />
         <p className="text-xs text-muted-foreground">{copyright}</p>
       </div>
@@ -196,12 +238,14 @@ function CenteredTight({ siteName, tagline, config, basePath, copyright }: Varia
 }
 
 function CardGrid({ siteName, tagline, config, basePath, copyright }: VariantProps) {
+  const knowledgeHub = useKnowledgeHubLink(basePath)
+  const columns = augmentColumnsWithKnowledgeHub(config.footerColumns ?? [], knowledgeHub)
   return (
     <footer className="px-6 py-10 lg:px-8">
       <div className="mx-auto max-w-6xl rounded-2xl border border-border bg-card p-8 shadow-sm">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <BrandBlock siteName={siteName} tagline={tagline} config={config} basePath={basePath} />
-          {(config.footerColumns ?? [])
+          {columns
             .filter((c) => c.links.length > 0)
             .slice(0, 3)
             .map((col) => (
@@ -294,6 +338,58 @@ function FooterColumn({
         )}
       </ul>
     </div>
+  )
+}
+
+// Append (or extend) a column with the Knowledge hub link when
+// the tenant has at least one public doc. Strategy:
+//   • If any existing column is titled Resources / Links / Learn /
+//     Read (case-insensitive), append into it so we don't add a
+//     redundant new column.
+//   • Otherwise, prepend a synthetic "Resources" column with just
+//     the Knowledge hub link.
+//   • Idempotent — if the link is already in the columns (e.g. the
+//     creator manually added it), we return the original.
+function augmentColumnsWithKnowledgeHub(
+  columns: NonNullable<PortalConfig["footerColumns"]>,
+  link: { label: string; href: string } | null,
+): NonNullable<PortalConfig["footerColumns"]> {
+  if (!link) return columns
+  const alreadyExists = columns.some((c) =>
+    c.links.some((l) => l.href === link.href || l.label === link.label),
+  )
+  if (alreadyExists) return columns
+
+  const reusableIdx = columns.findIndex((c) =>
+    /^(resources|links|learn|read)$/i.test(c.heading ?? ""),
+  )
+  if (reusableIdx >= 0) {
+    const next = columns.slice()
+    const target = next[reusableIdx]
+    next[reusableIdx] = { ...target, links: [...target.links, link] }
+    return next
+  }
+
+  // Synthetic column at the front (so it's adjacent to BrandBlock
+  // and visually anchored as the lead "what to read" column).
+  return [
+    { id: "auto-resources", heading: "Resources", links: [link] },
+    ...columns,
+  ]
+}
+
+// Inline link variant — used by the compact layouts that don't
+// have a columns grid. Reads as a small "Knowledge hub" pill in
+// muted text so it doesn't shout.
+function KnowledgeHubInline({ link }: { link: { label: string; href: string } }) {
+  return (
+    <Link
+      href={link.href}
+      className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+    >
+      <BookOpen className="h-3 w-3" />
+      {link.label}
+    </Link>
   )
 }
 

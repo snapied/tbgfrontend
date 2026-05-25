@@ -121,6 +121,25 @@ export function InstantCourseBuilder() {
     }
   }, [])
 
+  // Listen for seed events dispatched by the hero's HeroInstantPrompt
+  // (CustomEvent name: tbc:instant-builder:seed). When fired, we
+  // prefill the input AND auto-start generation so the visitor sees
+  // the artifacts immediately on hand-off. The hero scrolls this
+  // section into view in the same gesture.
+  useEffect(() => {
+    function onSeed(e: Event) {
+      const ce = e as CustomEvent<{ topic?: string }>
+      const topic = ce.detail?.topic?.trim() ?? ""
+      if (!topic) return
+      setInput(topic)
+      // Defer start() one tick so the input render commits first —
+      // avoids a flash of the placeholder being replaced by the seed.
+      window.setTimeout(() => start(topic), 50)
+    }
+    window.addEventListener("tbc:instant-builder:seed", onSeed as EventListener)
+    return () => window.removeEventListener("tbc:instant-builder:seed", onSeed as EventListener)
+  }, [])
+
   const isGenerating = phaseIndex >= 0 && phaseIndex < PHASES.length
   const isDone = seed != null && phaseIndex === PHASES.length
   const currentPhase = phaseIndex >= 0 && phaseIndex < PHASES.length ? PHASES[phaseIndex] : null
@@ -182,7 +201,7 @@ export function InstantCourseBuilder() {
   }, [phaseIndex])
 
   return (
-    <section className="relative overflow-hidden border-y border-border bg-gradient-to-b from-background via-secondary/40 to-background py-24">
+    <section id="instant-course-builder" className="relative scroll-mt-16 overflow-hidden border-y border-border bg-gradient-to-b from-background via-secondary/40 to-background py-24">
       {/* Ambient blooms — same palette family as the rest of the
           page, slightly more saturated so this section reads as the
           "moment" on scroll. */}

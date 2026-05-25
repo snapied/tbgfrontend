@@ -1,10 +1,9 @@
 "use client"
 
 // Small "All systems normal" pill rendered in the landing footer.
-// Mirrors the pattern most SaaS landing pages use (Linear, Vercel,
-// Stripe, etc.) — a green dot that tells visitors the platform is up
-// before they sign up. Links to /dashboard/status for the full
-// per-service breakdown.
+// Mirrors the pattern most modern SaaS landing pages use — a green
+// dot that tells visitors the platform is up before they sign up.
+// Links to /dashboard/status for the full per-service breakdown.
 //
 // The pill probes a single signal — backend reachability — on a 60s
 // cadence. Anonymous visitors don't need to know about auth / AI /

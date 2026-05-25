@@ -42,6 +42,8 @@ import {
 import { PhoneInput } from "@/components/forms/phone-input"
 import { ThumbnailField } from "@/components/upload/thumbnail-field"
 import { RichTextEditor } from "@/components/editor/rich-text-editor"
+import { AiBioAssistDialog } from "@/components/dashboard/ai-bio-assist-dialog"
+import { Wand2 } from "lucide-react"
 import { generateId, useLMS, type User } from "@/lib/lms-store"
 import { useTenant } from "@/lib/tenant-store"
 import { lookupFaculty, recordFacultyTenant, dropFacultyTenant } from "@/lib/faculty-registry"
@@ -150,6 +152,10 @@ export function FacultyForm({ mode, initial }: Props) {
   const [youtubeUrl, setYoutubeUrl] = useState(initial?.youtubeUrl ?? "")
   const [githubUrl, setGithubUrl] = useState(initial?.githubUrl ?? "")
   const [busy, setBusy] = useState(false)
+  // AI assist dialog state — same component used on /dashboard/portal/profile,
+  // wired here to write into the long-form About field. The teacher
+  // can pick from three opinionated drafts and tweak afterwards.
+  const [aboutAiOpen, setAboutAiOpen] = useState(false)
 
   // Cross-tenant lookup. On add: prefill name / phone if we've seen
   // this email at another tenant. On edit: surface the other tenants
@@ -646,9 +652,23 @@ export function FacultyForm({ mode, initial }: Props) {
               inside the "About <name>" card on the public teacher
               detail page. Distinct from `bio` (the 55-char card
               tagline above) because the card and the profile
-              page have very different copy needs. */}
+              page have very different copy needs.
+              "Help me write" mirrors the same affordance on
+              /dashboard/portal/profile — pick from three drafts. */}
           <div className="space-y-1.5">
-            <Label>About — tell more about yourself (optional)</Label>
+            <div className="flex items-end justify-between gap-2">
+              <Label>About — tell more about yourself (optional)</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAboutAiOpen(true)}
+                className="gap-1.5"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Help me write
+              </Button>
+            </div>
             <RichTextEditor
               value={about}
               onChange={setAbout}
@@ -768,6 +788,23 @@ export function FacultyForm({ mode, initial }: Props) {
           </Button>
         </div>
       )}
+
+      {/* AI assist for the About field — three local drafts the
+          teacher can pick from. Generated entirely client-side; no
+          data leaves the browser. Seeded with name + role + any
+          keyword we can scrape from the current About content. */}
+      <AiBioAssistDialog
+        open={aboutAiOpen}
+        onOpenChange={setAboutAiOpen}
+        currentName={name}
+        currentRole={role}
+        currentBio={about}
+        onPick={(text) => {
+          setAbout(text)
+          setAboutAiOpen(false)
+          toast.success("About drafted — edit as you like.")
+        }}
+      />
     </div>
   )
 }

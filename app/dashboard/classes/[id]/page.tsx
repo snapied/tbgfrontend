@@ -49,6 +49,7 @@ import { CalendarClock, CalendarPlus } from "lucide-react"
 import { AssignmentShareDialog } from "@/components/assignments/assignment-share-dialog"
 import { ClassRecapEditor } from "@/components/classes/class-recap-editor"
 import { AgendaEditor, AgendaList } from "@/components/classes/agenda-editor"
+import { PrestagedPollsEditor } from "@/components/classes/prestaged-polls-editor"
 import { ScheduleNextClassDialog } from "@/components/classes/schedule-next-dialog"
 import { AddToCalendarMenu } from "@/components/classes/add-to-calendar-menu"
 import { RecordingPlayerDialog } from "@/components/classes/recording-player-dialog"
@@ -333,9 +334,15 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
         </div>
       </div>
 
-      {/* Recording playback — shown the moment a recording URL is on file.
-          Students bookmark this page to rewatch the class. */}
-      {session.recordingUrl && (
+      {/* Recording surface — two states stacked:
+          (a) Processing: class ended (roomEndedAt set) but recordingUrl
+              hasn't landed yet. Shows an upload-progress card so the
+              host + students see the recording is on its way instead
+              of an empty page.
+          (b) Ready: full playback card.
+          Replaces the previous "show nothing until URL exists" gap
+          where students gave up between class end and the auto-email. */}
+      {session.recordingUrl ? (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
@@ -356,7 +363,9 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
             />
           </CardContent>
         </Card>
-      )}
+      ) : session.roomEndedAt && session.roomState === "ended" ? (
+        <RecordingProcessingCard roomEndedAtIso={session.roomEndedAt} />
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
@@ -540,6 +549,23 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
             value={session.agenda ?? []}
             onChange={(next) => updateLiveSession(session.id, { agenda: next })}
           />
+
+          {/* Pre-staged polls (CL6). Composed here, fired one-tap
+              from the host's Poll panel during class — no
+              mid-lecture composer typing. */}
+          <div className="rounded-lg border border-border bg-card p-4">
+            <PrestagedPollsEditor
+              polls={(session.prestagedPolls ?? []).map((p) => ({
+                id: p.id,
+                question: p.question,
+                options: p.options,
+                launchedPollId: p.launchedPollId,
+              }))}
+              onChange={(next) =>
+                updateLiveSession(session.id, { prestagedPolls: next })
+              }
+            />
+          </div>
           {/* Chat toggle. Sits with agenda because both are
               pre-class room configuration. Default-on (the field is
               tri-state with undefined === enabled), so a teacher
@@ -782,4 +808,89 @@ function StatusBadge({ status }: { status: "upcoming" | "live" | "ended" | "canc
   }
   if (status === "cancelled") return <Badge variant="outline">Cancelled</Badge>
   return <Badge variant="outline">Ended</Badge>
+}
+
+
+// ============================================================
+// RecordingProcessingCard
+// ============================================================
+//
+// Lives in the dead time between class end and recording-URL
+// landing. The egress worker takes 30-180s to encode + upload; this
+// card is what students + the host see during that window instead
+// of an empty page. Self-updates every 5s so a refresh-not-needed
+// student sees the elapsed time tick.
+//
+// Three stages (visual only — we do not have egress-progress events
+// over the wire today, so we synthesize based on elapsed time):
+//   0-15s   → "Saving your recording…"
+//   15-60s  → "Encoding at 1080p…"
+//   60s+    → "Uploading to CDN…"
+//
+// If the URL still hasn't landed after ~5 min, we show a fallback
+// hint that something might be wrong — the host email is already
+// wired upstream so they will hear about real failures separately.
+function RecordingProcessingCard({ roomEndedAtIso }: { roomEndedAtIso: string }) {
+  const [nowMs, setNowMs] = useState(() => Date.now())
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 5_000)
+    return () => window.clearInterval(id)
+  }, [])
+  const endedMs = Date.parse(roomEndedAtIso)
+  const elapsed = Number.isFinite(endedMs) ? Math.max(0, nowMs - endedMs) : 0
+  const elapsedSec = Math.round(elapsed / 1000)
+  const stage = elapsed < 15_000
+    ? "saving"
+    : elapsed < 60_000
+      ? "encoding"
+      : elapsed < 300_000
+        ? "uploading"
+        : "slow"
+  const stageCopy =
+    stage === "saving"
+      ? "Saving your recording…"
+      : stage === "encoding"
+        ? "Encoding at 1080p…"
+        : stage === "uploading"
+          ? "Uploading to your CDN…"
+          : "Still working on it — this is taking longer than usual."
+  // Pseudo-progress that reaches ~95% by the 90s mark, capped so it
+  // never lies about being done.
+  const pct = Math.min(95, Math.round((elapsed / 90_000) * 95))
+  return (
+    <Card className="border-primary/30 bg-gradient-to-br from-primary/[0.04] to-primary/[0.02]">
+      <CardContent className="space-y-3 p-5">
+        <div className="flex items-center gap-3">
+          <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
+            <Video className="h-5 w-5" />
+            <span className="absolute -right-0.5 -top-0.5 inline-flex h-3 w-3">
+              <span className="absolute inset-0 animate-ping rounded-full bg-primary/60" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-primary" />
+            </span>
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold">📼 Recording is processing</p>
+            <p className="text-xs text-muted-foreground">
+              {stageCopy} <span className="tabular-nums">· {elapsedSec}s elapsed</span>
+            </p>
+          </div>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-primary/10">
+          <div
+            className="h-full bg-primary transition-all duration-700"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        {stage === "slow" ? (
+          <p className="text-[11px] text-muted-foreground">
+            Most recordings land in 1-2 minutes. If this card is still here in another minute, refresh — the host will also get an email when the file is ready.
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">
+            You can leave this page — we&apos;ll email you when it&apos;s ready. The recording usually lands within 2 minutes.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  )
 }

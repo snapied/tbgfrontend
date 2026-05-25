@@ -44,11 +44,27 @@ import { useWhiteboardAccess } from "@/lib/whiteboard-access"
 import { LiveStateBeacon } from "@/components/classes/live-state-beacon"
 import { PreflightChecklist } from "@/components/classes/preflight-checklist"
 import { EndClassWrapWizard, type EndClassDecision } from "@/components/classes/end-class-wrap-wizard"
+import { legacyBlocksToBlocknoteContent, useDocs, type DocBlock } from "@/lib/docs"
+import { addReferenceEdge } from "@/lib/doc-references"
 import { BreakoutRoomsPanel } from "@/components/classes/breakout-rooms-panel"
+import { HostHealthBar } from "@/components/classes/host-health-bar"
+import { PassTheMicMenu } from "@/components/classes/pass-the-mic-menu"
+import { InClassAgendaPanel } from "@/components/classes/in-class-agenda-panel"
+import { LivePollPanel } from "@/components/classes/live-poll-panel"
+import { tallyPoll as tallyLivePoll } from "@/lib/live-poll"
+import {
+  buildNotifications,
+  livePollLaunchedNotification,
+  livePollClosedNotification,
+} from "@/lib/notifications"
+import { readCurrentTenantSlug } from "@/lib/tenant-store"
+import { RaisedHandsPanel } from "@/components/classes/raised-hands-panel"
+import { readChatTranscript, clearChatTranscript } from "@/components/classes/livekit-room"
+import { useRaisedHands } from "@/lib/raised-hands"
 import { MobileTeacherControls } from "@/components/classes/mobile-teacher-controls"
 import { DashboardBreadcrumbs } from "@/components/dashboard/dashboard-breadcrumbs"
 import { ensureAuthed } from "@/lib/billing-client"
-import { AlertTriangle, Layers, Lock, Unlock } from "lucide-react"
+import { AlertTriangle, BarChart3, ClipboardList, Hand, Layers, Lock, Unlock } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 export default function HostLiveRoomPage({
@@ -74,6 +90,13 @@ export default function HostLiveRoomPage({
     // Sprint C Classes #43 — class-end → community recap. Posts a
     // structured recap into the attached community's feed.
     addBatchPost,
+    // Enrolled students for the course — used by the breakouts
+    // panel so auto-assign has real names to distribute, not the
+    // [host-only] placeholder it used to receive. Best available
+    // approximation of "people in the room" without piping
+    // LiveKit's participant list into a sibling component.
+    enrollments,
+    users,
   } = useLMS()
   const confirm = useConfirm()
   // Backend auth check — students-stuck-in-lobby was traced to silent
@@ -130,6 +153,28 @@ export default function HostLiveRoomPage({
     (session ? getUserById(session.hostId)?.name : undefined) ??
     currentUser?.name ??
     "Instructor"
+  // Roster fed to the breakouts panel. We can't read live-room
+  // participants from a sibling of LiveKitRoom (no shared context),
+  // so we fall back to the course's enrolled students — the
+  // closest "people who might be in the room" universe available
+  // outside the LiveKit subtree. Host is always pinned first so
+  // auto-assign treats them as an anchor rather than a regular
+  // participant.
+  const breakoutParticipants = (() => {
+    const out: Array<{ id: string; name: string }> = [
+      { id: `host-${session?.id ?? "x"}`, name: teacherName },
+    ]
+    if (!session?.courseId) return out
+    const enrolledIds = new Set(
+      enrollments.filter((e) => e.courseId === session.courseId).map((e) => e.studentId),
+    )
+    for (const u of users) {
+      if (!enrolledIds.has(u.id)) continue
+      if (u.id === session?.hostId) continue
+      out.push({ id: u.id, name: u.name })
+    }
+    return out
+  })()
   const teacherEmail =
     (session ? getUserById(session.hostId)?.email : undefined) ??
     currentUser?.email ??
@@ -231,6 +276,7 @@ export default function HostLiveRoomPage({
         backendAuthed={backendAuthed}
         attachedCommunityName={attachedCommunity?.name}
         hasAttachedCommunity={!!attachedCommunity}
+        breakoutParticipants={breakoutParticipants}
         onEnd={(rec, decision) => {
           const startedAt = rec?.startedAt ?? session.roomStartedAt ?? session.roomOpenedAt ?? new Date().toISOString()
           const endedAt = rec?.endedAt ?? new Date().toISOString()
@@ -250,10 +296,19 @@ export default function HostLiveRoomPage({
           // recap email, recording-ready notification) can read them
           // back. `wasHeld === false` cancels the recording auto-
           // publish chain by clearing recordingUrl too.
+          // Flush the buffered LiveKit chat into the session record
+          // so the recording detail page can render the side-channel
+          // conversation alongside the video. Empty arrays are fine —
+          // students might not have used chat at all. Clear the
+          // buffer after persist so the localStorage entry doesn't
+          // outlive the class.
+          const chatTranscript = readChatTranscript(session.id)
           updateLiveSession(session.id, {
             wasHeld: decision.wasHeld,
             summary: decision.summary,
+            chatTranscript: chatTranscript.length > 0 ? chatTranscript : undefined,
           })
+          if (chatTranscript.length > 0) clearChatTranscript(session.id)
           // Sprint C Classes #43 — class-end → community recap.
           // When the teacher said "share to community" AND the
           // class was actually held AND a community is attached,
@@ -301,7 +356,12 @@ export default function HostLiveRoomPage({
           } else if (decision.followUp === "doubts") {
             window.location.href = `/dashboard/doubts?from=class:${session.id}`
           } else if (decision.followUp === "next-class") {
-            window.location.href = `/dashboard/classes/new?courseId=${course?.id ?? ""}`
+            // Carry `fromSessionId` so the new-class form can pre-fill
+            // from the just-ended class — title (incremented Week N),
+            // scheduledAt (+7d at same time), duration, agenda, host,
+            // provider. Saves the 5-field re-fill weekly-series
+            // teachers used to do by hand.
+            window.location.href = `/dashboard/classes/new?courseId=${course?.id ?? ""}&fromSessionId=${session.id}`
           }
           toast.success(
             decision.wasHeld
@@ -455,6 +515,7 @@ function PreOpenScreen({
       <PreflightChecklist
         backendAuthed={backendAuthed}
         enrolledCount={enrolledCount}
+        sessionId={session.id}
       />
     </div>
   )
@@ -478,6 +539,7 @@ function LiveHostShellWithWrap({
   onEnd,
   attachedCommunityName,
   hasAttachedCommunity,
+  breakoutParticipants,
 }: {
   session: LiveSession
   courseTitle?: string
@@ -490,8 +552,11 @@ function LiveHostShellWithWrap({
   ) => void
   attachedCommunityName?: string
   hasAttachedCommunity: boolean
+  breakoutParticipants: Array<{ id: string; name: string }>
 }) {
   const [wrapOpen, setWrapOpen] = useState(false)
+  const { currentUser } = useLMS()
+  const { createDoc } = useDocs()
   // Hold the recording artifact between "shell asked to end" and
   // "wizard confirmed". Without this we'd lose the recording payload
   // because the shell's onEnd fires once and we need both moments.
@@ -508,6 +573,7 @@ function LiveHostShellWithWrap({
         teacherName={teacherName}
         teacherEmail={teacherEmail}
         backendAuthed={backendAuthed}
+        breakoutParticipants={breakoutParticipants}
         onEnd={(rec) => {
           setPendingRecording(rec)
           setWrapOpen(true)
@@ -519,8 +585,62 @@ function LiveHostShellWithWrap({
         sessionTitle={session.title}
         hasAttachedCommunity={hasAttachedCommunity}
         attachedCommunityName={attachedCommunityName}
+        // Feed the AI-draft button on the summary step with the
+        // course name + pre-class agenda items so the generated
+        // recap is concrete instead of generic.
+        courseTitle={courseTitle}
+        agendaTitles={session.agenda?.map((a) => a.title).filter((t): t is string => !!t)}
         onConfirm={(decision) => {
           onEnd(pendingRecording, decision)
+        }}
+        // Generate a study guide Doc from the class — uses the
+        // agenda + summary as scaffolding and adds a
+        // `generated-from` ReferenceEdge so the recording page
+        // surfaces it as a related artifact.
+        onGenerateStudyGuide={({ summary, agendaTitles }) => {
+          if (!currentUser) return
+          const nowTitle = `Study guide — ${session.title}`
+          const blocks: DocBlock[] = []
+          if (summary.trim()) {
+            blocks.push({ id: `blk-${Date.now()}-s`, type: "callout", data: { tone: "info", html: `<p>${summary.trim()}</p>` } })
+          }
+          if (agendaTitles.length > 0) {
+            blocks.push({ id: `blk-${Date.now()}-h`, type: "heading", data: { level: 2, text: "What we covered" } })
+            blocks.push({
+              id: `blk-${Date.now()}-l`,
+              type: "rich-text",
+              data: { html: `<ul>${agendaTitles.map((t) => `<li>${t}</li>`).join("")}</ul>` },
+            })
+          }
+          blocks.push({ id: `blk-${Date.now()}-rh`, type: "heading", data: { level: 2, text: "Recording" } })
+          blocks.push({ id: `blk-${Date.now()}-r`, type: "embed-recording", data: { refId: session.id } })
+          blocks.push({ id: `blk-${Date.now()}-qh`, type: "heading", data: { level: 2, text: "Questions raised" } })
+          blocks.push({ id: `blk-${Date.now()}-q`, type: "rich-text", data: { html: "<p>(Add top questions from class chat.)</p>" } })
+          blocks.push({ id: `blk-${Date.now()}-ah`, type: "heading", data: { level: 2, text: "Action items before next class" } })
+          blocks.push({ id: `blk-${Date.now()}-a`, type: "rich-text", data: { html: "<ul><li>(Add an action item)</li></ul>" } })
+          const doc = createDoc({
+            ownerId: currentUser.id,
+            title: nowTitle,
+            icon: "🎬",
+            blocks,
+            // Seed BlockNote content so the new editor opens with the
+            // study-guide scaffold visible — without this, opening the
+            // doc shows a blank page because the editor only reads
+            // from `content`, not legacy `blocks`.
+            content: legacyBlocksToBlocknoteContent(blocks),
+            audience: { kind: "private" },
+            status: "draft",
+          })
+          addReferenceEdge({
+            fromKind: "doc",
+            fromId: doc.id,
+            toKind: "recording",
+            toId: session.id,
+            kind: "generated-from",
+            createdBy: currentUser.id,
+          })
+          window.open(`/dashboard/docs/${doc.id}`, "_blank")
+          toast.success("Study guide created — open it in the new tab to edit.")
         }}
       />
     </>
@@ -534,6 +654,7 @@ function LiveHostShell({
   teacherEmail,
   backendAuthed,
   onEnd,
+  breakoutParticipants,
 }: {
   session: LiveSession
   courseTitle?: string
@@ -541,8 +662,20 @@ function LiveHostShell({
   teacherEmail: string
   backendAuthed: boolean | null
   onEnd: (recording?: { url: string; startedAt: string; endedAt: string; durationSec: number }) => void
+  breakoutParticipants: Array<{ id: string; name: string }>
 }) {
   void courseTitle
+  // Re-read updateLiveSession + the notification fan-out in this
+  // scope — the outer page already calls useLMS but doesn't pass
+  // them down. Cheap to re-subscribe; React de-dupes the context.
+  const {
+    updateLiveSession: updateLiveSessionLocal,
+    addNotifications,
+    enrollments: enrollmentsLocal,
+    users: usersLocal,
+    courses: coursesLocal,
+    currentUser,
+  } = useLMS()
 
   // Captured recording, kept in local state. Set by useHostRecording.onFinal
   // when the upload completes. End-Class reads from here when the host clicks
@@ -571,6 +704,64 @@ function LiveHostShell({
   // stageTab so the teacher can open breakouts while keeping the
   // whiteboard up on screen.
   const [breakoutsOpen, setBreakoutsOpen] = useState(false)
+  // Side-rail toggles. We allow only one rail at a time so the
+  // stage doesn't get squeezed twice — opening one closes the
+  // others.
+  const [agendaOpen, setAgendaOpen] = useState(false)
+  const [pollOpen, setPollOpen] = useState(false)
+  const [handsOpen, setHandsOpen] = useState(false)
+  const openBreakouts = () => { setBreakoutsOpen(true); setAgendaOpen(false); setPollOpen(false); setHandsOpen(false) }
+  const openAgenda = () => { setAgendaOpen(true); setBreakoutsOpen(false); setPollOpen(false); setHandsOpen(false) }
+  const openPoll = () => { setPollOpen(true); setBreakoutsOpen(false); setAgendaOpen(false); setHandsOpen(false) }
+  const openHands = () => { setHandsOpen(true); setBreakoutsOpen(false); setAgendaOpen(false); setPollOpen(false) }
+  // Live count for the Hands button badge. Drives the visual
+  // urgency cue — the button flips primary and pulses when at
+  // least one hand is up.
+  const raisedHands = useRaisedHands(session.id)
+
+  // Auto-preview the Hands panel when a hand goes up. We snapshot
+  // whichever panel was previously expanded (if any), pop Hands open
+  // for ~4s, then restore. The host keeps the visual signal without
+  // losing the panel they were actively reading.
+  //
+  // Skipped when the host already has Hands open (don't restart a
+  // restore timer on top of itself) or when no panel was open (then
+  // we let the auto-open stick — nothing to restore).
+  const prevHandsCountRef = useRef(0)
+  const restorePanelTimerRef = useRef<number | null>(null)
+  useEffect(() => {
+    const before = prevHandsCountRef.current
+    const after = raisedHands.length
+    prevHandsCountRef.current = after
+    if (after <= before) return // no new hand
+    if (handsOpen) return // already viewing — no-op
+    // Snapshot which panel (if any) was open before the auto-switch.
+    const wasOpen: "agenda" | "poll" | "breakouts" | null = agendaOpen
+      ? "agenda"
+      : pollOpen
+        ? "poll"
+        : breakoutsOpen
+          ? "breakouts"
+          : null
+    openHands()
+    if (wasOpen == null) return // nothing to restore to
+    if (restorePanelTimerRef.current != null) {
+      window.clearTimeout(restorePanelTimerRef.current)
+    }
+    restorePanelTimerRef.current = window.setTimeout(() => {
+      if (wasOpen === "agenda") openAgenda()
+      else if (wasOpen === "poll") openPoll()
+      else if (wasOpen === "breakouts") openBreakouts()
+      restorePanelTimerRef.current = null
+    }, 4000)
+    return () => {
+      if (restorePanelTimerRef.current != null) {
+        window.clearTimeout(restorePanelTimerRef.current)
+        restorePanelTimerRef.current = null
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raisedHands.length])
 
   // Sprint C Classes #46 — mobile tab state. Drives which surface
   // the mobile bottom-bar focuses. Defaults to "stage" so the
@@ -610,6 +801,22 @@ function LiveHostShell({
             Live
           </Badge>
           <span className="truncate font-medium">{session.title}</span>
+          {/* Pass-the-mic menu (CL9). Lets the active host transfer
+              hosting controls to a co-instructor mid-class. Hides
+              itself when there's no co-instructor to hand off to
+              and the viewer isn't holding a passed token. */}
+          {currentUser && (
+            <PassTheMicMenu
+              sessionId={session.id}
+              originalHostId={session.hostId}
+              viewerId={currentUser.id}
+              coInstructors={(coursesLocal.find((c) => c.id === session.courseId)?.coInstructorIds ?? [])
+                .map((uid) => usersLocal.find((u) => u.id === uid))
+                .filter((u): u is NonNullable<typeof u> => !!u)
+                .filter((u) => u.id !== session.hostId)
+                .map((u) => ({ id: u.id, name: u.name }))}
+            />
+          )}
           <div className="ml-2 flex rounded-md border border-border/60 bg-muted/40 p-0.5">
             <button
               type="button"
@@ -643,13 +850,82 @@ function LiveHostShell({
           <Button
             size="sm"
             variant={breakoutsOpen ? "default" : "outline"}
-            onClick={() => setBreakoutsOpen((v) => !v)}
+            onClick={() => breakoutsOpen ? setBreakoutsOpen(false) : openBreakouts()}
             className="hidden gap-1 sm:inline-flex"
             aria-pressed={breakoutsOpen}
             aria-label="Toggle breakout rooms panel"
           >
             <Layers className="h-3.5 w-3.5" />
             Breakouts
+          </Button>
+          {/* Agenda toggle — mirrors the breakouts pattern. Shows
+              a per-item ✓ / ⏭ checklist the host marks during class.
+              Pre-filled from session.agenda (set on the class
+              detail page before class). The done count surfaces in
+              the LateJoinerRecap so new joiners see actual covered
+              items, not items inferred from elapsed time. */}
+          {(session.agenda?.length ?? 0) > 0 && (
+            <Button
+              size="sm"
+              variant={agendaOpen ? "default" : "outline"}
+              onClick={() => agendaOpen ? setAgendaOpen(false) : openAgenda()}
+              className="hidden gap-1 sm:inline-flex"
+              aria-pressed={agendaOpen}
+              aria-label="Toggle agenda checklist"
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              Agenda
+              {(() => {
+                const done = (session.agenda ?? []).filter((a) => a.done || a.skipped).length
+                const total = session.agenda?.length ?? 0
+                if (total === 0) return null
+                return (
+                  <span className="ml-0.5 text-[10px] tabular-nums opacity-80">
+                    {done}/{total}
+                  </span>
+                )
+              })()}
+            </Button>
+          )}
+          {/* Poll toggle — opens the LivePollPanel rail. Host
+              launches 2-4 option polls, students vote inside their
+              own panel; results update live across both surfaces
+              via the shared-storage channel. */}
+          <Button
+            size="sm"
+            variant={pollOpen ? "default" : "outline"}
+            onClick={() => pollOpen ? setPollOpen(false) : openPoll()}
+            className="hidden gap-1 sm:inline-flex"
+            aria-pressed={pollOpen}
+            aria-label="Toggle live poll panel"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Poll
+          </Button>
+          {/* Hands toggle — flips to primary + pulse the moment
+              any student raises. The button is always visible
+              (not gated on count > 0) so a host who wants to
+              proactively check sees a calm baseline; the urgency
+              styling only kicks in when there's actually someone
+              waiting. */}
+          <Button
+            size="sm"
+            variant={raisedHands.length > 0 ? "default" : handsOpen ? "default" : "outline"}
+            onClick={() => handsOpen ? setHandsOpen(false) : openHands()}
+            className={cn(
+              "hidden gap-1 sm:inline-flex",
+              raisedHands.length > 0 && !handsOpen && "animate-pulse",
+            )}
+            aria-pressed={handsOpen}
+            aria-label={`Toggle raised hands panel${raisedHands.length > 0 ? ` (${raisedHands.length} waiting)` : ""}`}
+          >
+            <Hand className="h-3.5 w-3.5" />
+            Hands
+            {raisedHands.length > 0 && (
+              <span className="ml-0.5 text-[10px] tabular-nums opacity-80">
+                {raisedHands.length}
+              </span>
+            )}
           </Button>
           {recording.status === "recording" && (
             <>
@@ -698,13 +974,22 @@ function LiveHostShell({
               Recording error
             </span>
           )}
-          {/* <Button
+          {/* End class — was previously commented out, which meant
+              the desktop host could only end the class by hitting
+              the LiveKit Leave button (bypassing the wrap wizard +
+              recap flow). Restored so the wrap wizard always fires
+              and the post-class follow-ups (assignment / next-class
+              / community recap) are reachable from one obvious
+              button instead of buried behind a 3rd-party Leave. */}
+          <Button
             variant="destructive"
             size="sm"
             onClick={() => {
-              // End-Class is independent from Stop-Recording. If a recording
-              // is in-flight, stop it first; then close out the class with
-              // whatever was captured. The host only confirms once — here.
+              // End-Class is independent from Stop-Recording. If a
+              // recording is in-flight, stop it first; then close
+              // out the class with whatever was captured. The wrap
+              // wizard handles the confirmation — no extra
+              // double-confirm needed here.
               if (recording.status === "recording") {
                 recording.stop()
               }
@@ -713,7 +998,7 @@ function LiveHostShell({
           >
             <PhoneOff className="mr-1.5 h-3.5 w-3.5" />
             End class
-          </Button> */}
+          </Button>
         </div>
       </div>
 
@@ -733,6 +1018,16 @@ function LiveHostShell({
           roomCode={canonicalRoomCode(session)}
           user={{ id: `host-${session.id}`, name: teacherName }}
           isHost
+          // Feeds the host-only over-time pill inside LiveIndicatorPill
+          // so a teacher running long sees "+7m over" (amber) /
+          // "+22m over" (red) without having to glance at the clock.
+          scheduledAt={session.scheduledAt}
+          durationMinutes={session.durationMinutes ?? 60}
+          // ChatTranscriptRecorder buffers chat into localStorage
+          // keyed by this id; End Class flushes it into the
+          // session record so the recording carries the chat
+          // history alongside the video.
+          sessionId={session.id}
           onLeft={() => {
             if (recording.status === "recording") {
               recording.stop()
@@ -754,6 +1049,17 @@ function LiveHostShell({
             title={session.title}
             hostName={teacherName}
           />
+          {/* Host connection health bar — floats at the top-left of
+              the video stage. Switches between 🟢 connected →
+              ⚠️ reconnecting → 🔴 lost states based on LiveKit's
+              ConnectionStateChanged events. On reconnect, auto-mutes
+              the host so garbled audio doesn't blast into the room.
+              Lives inside the LiveKit room context (uses useRoomContext). */}
+          <div className="pointer-events-none absolute left-3 top-3 z-20">
+            <div className="pointer-events-auto">
+              <HostHealthBar />
+            </div>
+          </div>
           {/* Tabs must use flex layout when visible so the LiveKit
               video grid + control bar stack vertically. The earlier
               `block`+`flex flex-col` combo silently broke because
@@ -779,8 +1085,120 @@ function LiveHostShell({
           <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
             <BreakoutRoomsPanel
               sessionId={session.id}
-              participants={[{ id: `host-${session.id}`, name: teacherName }]}
+              participants={breakoutParticipants}
               onClose={() => setBreakoutsOpen(false)}
+            />
+          </aside>
+        )}
+        {agendaOpen && (
+          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
+            <InClassAgendaPanel
+              items={session.agenda ?? []}
+              onChange={(next) => updateLiveSessionLocal(session.id, { agenda: next })}
+              onClose={() => setAgendaOpen(false)}
+            />
+          </aside>
+        )}
+        {pollOpen && (
+          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
+            <LivePollPanel
+              sessionId={session.id}
+              isHost
+              viewerId={`host-${session.id}`}
+              onClose={() => setPollOpen(false)}
+              prestagedPolls={session.prestagedPolls ?? []}
+              onPrestagedLaunched={(prestagedId, launchedPollId) => {
+                // Mark the pre-staged entry as "launched" so it
+                // disappears from the launcher rail and can't be
+                // double-fired in the same session.
+                updateLiveSessionLocal(session.id, {
+                  prestagedPolls: (session.prestagedPolls ?? []).map((p) =>
+                    p.id === prestagedId ? { ...p, launchedPollId } : p,
+                  ),
+                })
+              }}
+              onLaunched={(poll) => {
+                // Fan-out: notify everyone invited to the call.
+                // Recipients = enrolled students + the course's
+                // co-instructors, minus the host themselves
+                // (no point pinging the person who launched it).
+                const courseForFanout = coursesLocal.find((c) => c.id === session.courseId)
+                const enrolledIds = new Set(
+                  enrollmentsLocal
+                    .filter((e) => e.courseId === session.courseId)
+                    .map((e) => e.studentId),
+                )
+                const coInstructorIds = new Set(courseForFanout?.coInstructorIds ?? [])
+                const recipientIds = new Set<string>()
+                enrolledIds.forEach((id) => recipientIds.add(id))
+                coInstructorIds.forEach((id) => recipientIds.add(id))
+                recipientIds.delete(session.hostId)
+                const recipients = usersLocal.filter((u) => recipientIds.has(u.id))
+                if (recipients.length === 0) return
+                const tenantSlug = readCurrentTenantSlug()
+                const joinUrl = tenantSlug
+                  ? `/p/${tenantSlug}/live/${canonicalRoomCode(session)}`
+                  : `/dashboard/classes/${session.id}`
+                const entries = buildNotifications(
+                  recipients,
+                  livePollLaunchedNotification({
+                    sessionId: session.id,
+                    sessionTitle: session.title,
+                    question: poll.question,
+                    optionCount: poll.options.length,
+                    joinUrl,
+                  }),
+                )
+                addNotifications(entries)
+              }}
+              onClosed={(poll) => {
+                // Recompute the tally at close time. Same
+                // recipient set as launch — students who weren't
+                // in the call still get the result delivered so
+                // they can read the outcome of "what the class
+                // decided" without having attended.
+                const tally = tallyLivePoll(poll)
+                const total = Object.keys(poll.votes).length
+                const winner = (() => {
+                  if (total === 0) return null
+                  const best = [...tally].sort((a, b) => b.count - a.count)[0]
+                  if (!best || best.count === 0) return null
+                  return { label: best.label, count: best.count, pct: best.pct }
+                })()
+                const courseForFanout = coursesLocal.find((c) => c.id === session.courseId)
+                const enrolledIds = new Set(
+                  enrollmentsLocal
+                    .filter((e) => e.courseId === session.courseId)
+                    .map((e) => e.studentId),
+                )
+                const coInstructorIds = new Set(courseForFanout?.coInstructorIds ?? [])
+                const recipientIds = new Set<string>()
+                enrolledIds.forEach((id) => recipientIds.add(id))
+                coInstructorIds.forEach((id) => recipientIds.add(id))
+                recipientIds.delete(session.hostId)
+                const recipients = usersLocal.filter((u) => recipientIds.has(u.id))
+                if (recipients.length === 0) return
+                const entries = buildNotifications(
+                  recipients,
+                  livePollClosedNotification({
+                    sessionId: session.id,
+                    sessionTitle: session.title,
+                    question: poll.question,
+                    winner,
+                    totalVotes: total,
+                    resultsUrl: `/dashboard/classes/${session.id}`,
+                  }),
+                )
+                addNotifications(entries)
+              }}
+            />
+          </aside>
+        )}
+        {handsOpen && (
+          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
+            <RaisedHandsPanel
+              sessionId={session.id}
+              onClose={() => setHandsOpen(false)}
             />
           </aside>
         )}
@@ -793,9 +1211,66 @@ function LiveHostShell({
           <div className="fixed inset-x-0 bottom-24 top-12 z-20 overflow-y-auto border-t border-border bg-card p-3 sm:hidden">
             <BreakoutRoomsPanel
               sessionId={session.id}
-              participants={[{ id: `host-${session.id}`, name: teacherName }]}
+              participants={breakoutParticipants}
               onClose={() => setMobileTab("stage")}
             />
+          </div>
+        )}
+        {/* Mobile Roster slide-out — replaces the previous
+            TODO placeholder. Lists the enrolled-student roster
+            (best-available source outside the LiveKit subtree
+            since we can't read useParticipants here). Host can
+            tap a row to scroll its details, useful for tracking
+            who's expected. */}
+        {mobileTab === "roster" && (
+          <div className="fixed inset-x-0 bottom-24 top-12 z-20 overflow-y-auto border-t border-border bg-card p-3 sm:hidden">
+            <div className="flex items-center justify-between gap-2 border-b border-border pb-2">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Roster</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {breakoutParticipants.length - 1} {breakoutParticipants.length - 1 === 1 ? "student" : "students"} expected · plus you
+                </p>
+              </div>
+              <button
+                type="button"
+                className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+                onClick={() => setMobileTab("stage")}
+                aria-label="Close roster"
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="mt-3 space-y-1.5">
+              {breakoutParticipants.map((p, i) => {
+                const initials = p.name
+                  .split(/\s+/)
+                  .map((w) => w[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()
+                const isHost = i === 0
+                return (
+                  <li
+                    key={p.id}
+                    className="flex items-center gap-2.5 rounded-md border border-border bg-background p-2"
+                  >
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+                      {initials}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{p.name}</p>
+                      <p className="text-[10.5px] text-muted-foreground">
+                        {isHost ? "Host · you" : "Enrolled student"}
+                      </p>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+            <p className="mt-3 text-[10.5px] text-muted-foreground">
+              Live in-call presence (who's actually here right now) ships next.
+              This list is the course&apos;s enrolled roster.
+            </p>
           </div>
         )}
       </div>

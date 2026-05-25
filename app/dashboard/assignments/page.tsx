@@ -53,6 +53,7 @@ import { useLMS, type AssignmentKind } from "@/lib/lms-store"
 import { fuzzySearch } from "@/lib/fuzzy-search"
 import { SearchInput } from "@/components/ui/search-input"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
+import { ModuleTrashButton } from "@/components/dashboard/module-trash-button"
 
 // Tour for the assignments index. Walks through the three kinds
 // (assignment / project / test), the search + filters, and how
@@ -199,6 +200,7 @@ function AssignmentsPageInner() {
         </div>
         <div className="flex items-center gap-2">
           <TakeATourButton tourId="assignments-v1" />
+          <ModuleTrashButton kinds={["assignment"]} noun="assignment" />
           <Button asChild data-tour="assignments-new">
             <Link href="/dashboard/assignments/new">
               <Plus className="mr-2 h-4 w-4" />

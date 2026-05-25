@@ -21,42 +21,42 @@ interface Testimonial {
 
 const TESTIMONIALS_ROW_1: Testimonial[] = [
   {
-    photo: "/people/teacher-1.jpg",
+    photo: "/people/teacher-1.png",
     name: "Priya Sharma",
     role: "Yoga & Wellness Coach, Mumbai",
     quote: "Moved 200 students from WhatsApp groups to a real academy in one weekend. The CSV import is a genuine superpower.",
     stars: 5,
   },
   {
-    photo: "/people/student-1.jpg",
+    photo: "/people/student-1.png",
     name: "Aanya Rao",
     role: "UX Design Student, Bangalore",
     quote: "My teacher's portal feels completely custom-branded. I forget I'm on a platform at all — it's just her academy.",
     stars: 5,
   },
   {
-    photo: "/people/teacher-2.jpg",
+    photo: "/people/teacher-2.png",
     name: "Vikram Mehta",
     role: "Product Management Trainer, Delhi",
     quote: "Zero commission means I actually keep what I earn. That alone saved me ₹80,000 vs my last platform in the first 3 months.",
     stars: 5,
   },
   {
-    photo: "/people/student-3.jpg",
+    photo: "/people/student-3.png",
     name: "Sara Thomas",
     role: "IELTS Prep Student, Kochi",
     quote: "The WhatsApp reminders actually got me to show up for live classes. I haven't missed a session since joining.",
     stars: 5,
   },
   {
-    photo: "/people/teacher-3.jpg",
+    photo: "/people/teacher-3.png",
     name: "Arjun Krishnan",
     role: "Illustration & Design Educator, Chennai",
     quote: "The certificate designer let me make something my students were excited to share on LinkedIn. That drove me 14 new signups organically.",
     stars: 5,
   },
   {
-    photo: "/people/student-2.jpg",
+    photo: "/people/student-2.png",
     name: "Karan Bhatia",
     role: "Python Bootcamp Graduate, Pune",
     quote: "The leaderboard made the whole cohort more engaged. We were actually competing to finish assignments first.",

@@ -70,13 +70,17 @@ export default function OrderNextStepPage({
     return p && p.status === "published" ? p : null
   }, [course, products])
 
-  // Community to auto-route into. We resolve a couple of ways:
-  //   • Course.defaultBatchId — shipped in Phase 3 once batches gain
-  //     start dates + a default community pointer.
-  //   • Course.courseId matching StudentGroup.courseId — the batch
-  //     someone set up "around" this course. Useful right now for
-  //     tenants that already pair batches with courses.
+  // Community to auto-route into. Three resolution paths, in order:
+  //   1. Direct — the purchased product itself is a community kind.
+  //      Link straight to its linkedCommunityId.
+  //   2. Course.defaultBatchId — Phase 3 default-community pointer.
+  //   3. Course.courseId matching StudentGroup.courseId — the batch
+  //      someone set up "around" this course.
   const community = useMemo(() => {
+    if (product && product.delivery.kind === "community") {
+      const cid = product.delivery.linkedCommunityId
+      return studentGroups.find((g) => g.id === cid) ?? null
+    }
     if (!course) return null
     const explicit =
       (course as { defaultBatchId?: string }).defaultBatchId
@@ -84,7 +88,7 @@ export default function OrderNextStepPage({
         : undefined
     if (explicit) return explicit
     return studentGroups.find((g) => g.courseId === course.id) ?? null
-  }, [course, studentGroups])
+  }, [product, course, studentGroups])
 
   const hasCourseEntitlement = useMemo(() => {
     if (!order || !course) return false

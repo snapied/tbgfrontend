@@ -53,7 +53,7 @@ const SELL_KINDS: SellKind[] = [
     Icon: Radio,
     label: "Webinars",
     tagline: "Free or paid.",
-    body: "Schedule a one-time event, take signups, send reminders across in-app + email + WhatsApp. Hosts run them on Meet / Zoom / Teams — we handle registration and follow-up.",
+    body: "Schedule a one-time event, take signups, send reminders across in-app + email + WhatsApp. Hosts run them in the built-in cloud room or any common video-conferencing tool — we handle registration and follow-up.",
     grad: "from-sky-400 to-indigo-700",
   },
   {
@@ -74,7 +74,7 @@ const SELL_KINDS: SellKind[] = [
     Icon: MessageSquare,
     label: "Coaching",
     tagline: "1:1 or group.",
-    body: "Sell time. Buyers pick a slot, you get a calendar entry + Meet link. Recurring slots work too — pair with a Membership for \"2 calls a month\" packages.",
+    body: "Sell time. Buyers pick a slot, you get a calendar entry + video-call URL. Recurring slots work too — pair with a Membership for \"2 calls a month\" packages.",
     grad: "from-orange-400 to-rose-700",
   },
   {

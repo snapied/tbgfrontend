@@ -31,7 +31,7 @@
 // Confirm-once at the bottom of step 3 actually ends the class.
 // Any step can "End class now" — the wizard isn't a gate.
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   AlertCircle,
   Check,
@@ -40,6 +40,7 @@ import {
   Mic,
   Sparkles,
   Users2,
+  Wand2,
   X,
 } from "lucide-react"
 import {
@@ -75,6 +76,11 @@ interface Props {
    *  shutdown still happens inside the parent — this wizard just
    *  collects intent. */
   onConfirm: (decision: EndClassDecision) => void
+  /** Optional — when provided, renders a "Generate study guide"
+   *  button that calls this with the current summary + agenda. The
+   *  parent host page is responsible for creating the Doc + adding
+   *  the generated-from ReferenceEdge. */
+  onGenerateStudyGuide?: (args: { summary: string; agendaTitles: string[] }) => void
   /** Title of the class we're ending — shown for context so the
    *  teacher knows the modal is about the right session. */
   sessionTitle: string
@@ -84,8 +90,26 @@ interface Props {
   hasAttachedCommunity: boolean
   /** Optional community name — shown in the checkbox label. */
   attachedCommunityName?: string
+  /** Optional course title — feeds the AI draft button on the
+   *  summary step so the draft mentions the course. Falls back to
+   *  a generic "today's class" line when missing. */
+  courseTitle?: string
+  /** Optional list of pre-class agenda item titles — used by the
+   *  AI draft to enumerate what was covered. */
+  agendaTitles?: string[]
 }
 
+// Single-screen recap card.
+//
+// Replaced a 3-step wizard (Outcome → Summary → Follow-up) that
+// hit the host at the worst moment — they just finished an hour of
+// teaching and the last thing they want is a multi-screen form.
+//
+// Now: all three sections stacked on one screen, defaults pre-filled
+// (held = true, summary auto-drafted from agenda titles, follow-up
+// null/skipped). The host's only required action is one click to
+// publish — every section is editable inline if they want to tweak,
+// but the default path is "looks good → publish & sign off."
 export function EndClassWrapWizard({
   open,
   onOpenChange,
@@ -93,12 +117,34 @@ export function EndClassWrapWizard({
   sessionTitle,
   hasAttachedCommunity,
   attachedCommunityName,
+  courseTitle,
+  agendaTitles,
+  onGenerateStudyGuide,
 }: Props) {
-  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [wasHeld, setWasHeld] = useState(true)
   const [summary, setSummary] = useState("")
   const [shareToCommunity, setShareToCommunity] = useState(hasAttachedCommunity)
   const [followUp, setFollowUp] = useState<EndClassDecision["followUp"]>(null)
+
+  // Auto-draft the summary the first time the dialog opens so the
+  // host doesn't face an empty textarea. They can edit, blank it,
+  // or accept as-is. Re-draft skipped on subsequent opens of the
+  // same session (the host's edit wins).
+  const autoDrafted = useRef(false)
+  useEffect(() => {
+    if (!open) return
+    if (autoDrafted.current) return
+    if (summary.trim().length > 0) return
+    const items = (agendaTitles ?? []).filter(Boolean).slice(0, 3)
+    const context = courseTitle
+      ? `Today's ${courseTitle} session covered`
+      : `Today we covered`
+    const draft = items.length > 0
+      ? `${context}: ${items.join(", ")}. Recording + notes are linked below.`
+      : `${context} ${sessionTitle}. Recording + key takeaways are linked below.`
+    setSummary(draft.slice(0, 280))
+    autoDrafted.current = true
+  }, [open, agendaTitles, courseTitle, sessionTitle, summary])
 
   const close = (commit: boolean) => {
     if (commit) {
@@ -110,15 +156,14 @@ export function EndClassWrapWizard({
       })
     }
     onOpenChange(false)
-    // Reset for next time. We do this on close (not on submit) so
-    // a teacher who cancels mid-flow doesn't lose their progress on
-    // a misclick — but every fresh open starts clean.
+    // Reset for next time. Done after the close animation so a
+    // teacher who reopens immediately doesn't see a state flash.
     setTimeout(() => {
-      setStep(1)
       setWasHeld(true)
       setSummary("")
       setShareToCommunity(hasAttachedCommunity)
       setFollowUp(null)
+      autoDrafted.current = false
     }, 200)
   }
 
@@ -128,37 +173,18 @@ export function EndClassWrapWizard({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            Wrap up — {sessionTitle}
+            Class wrapped — {sessionTitle}
           </DialogTitle>
+          <p className="pt-1 text-[12.5px] text-muted-foreground">
+            Here&apos;s the recap that&apos;ll go out. Edit anything you want, then publish.
+          </p>
         </DialogHeader>
 
-        {/* Step pill strip. Clickable so a teacher mid-wizard can
-            jump back to revisit a decision without restarting. */}
-        <div className="mt-1 flex items-center gap-1.5 text-[11.5px]">
-          {[1, 2, 3].map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => setStep(n as 1 | 2 | 3)}
-              className={cn(
-                "rounded-full px-2 py-0.5 font-semibold transition-colors",
-                step === n
-                  ? "bg-primary text-primary-foreground"
-                  : step > n
-                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80",
-              )}
-            >
-              {step > n ? <Check className="inline h-3 w-3" /> : n}
-              <span className="ml-1">
-                {n === 1 ? "Outcome" : n === 2 ? "Summary" : "Follow-up"}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* Step 1 — Outcome */}
-        {step === 1 && (
+        {/* All three sections stacked. No step state — defaults are
+            sensible (held + auto-drafted summary + no follow-up) so
+            the host's required path is one click to publish. */}
+        {/* Outcome */}
+        {true && (
           <div className="space-y-3 pt-2">
             <p className="text-[12.5px] text-muted-foreground">
               Was the class actually held? This drives attendance, recording publishing,
@@ -215,13 +241,71 @@ export function EndClassWrapWizard({
           </div>
         )}
 
-        {/* Step 2 — Summary */}
-        {step === 2 && (
+        {/* Summary */}
+        {true && (
           <div className="space-y-3 pt-2">
-            <p className="text-[12.5px] text-muted-foreground">
-              One line on what you covered. Lands in the recording post + the recap email so
-              students who missed it know what they missed.
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <p className="flex-1 text-[12.5px] text-muted-foreground">
+                One line on what you covered. Lands in the recording post + the recap email so
+                students who missed it know what they missed.
+              </p>
+              {/* Help me draft — fills the textarea from session
+                  title + course + (when present) the pre-class
+                  agenda. Template-driven, runs locally, no API
+                  round-trip. Teacher edits afterwards. */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const items = (agendaTitles ?? []).filter(Boolean).slice(0, 3)
+                  const context = courseTitle
+                    ? `Today's ${courseTitle} session covered`
+                    : `Today we covered`
+                  const draft = items.length > 0
+                    ? `${context}: ${items.join(", ")}. Recording + notes are linked below.`
+                    : `${context} ${sessionTitle}. Recording + key takeaways are linked below.`
+                  setSummary(draft.slice(0, 280))
+                }}
+                className="gap-1.5"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                Help me draft
+              </Button>
+            </div>
+
+            {/* Generate study guide — creates a new Doc using the
+                agenda + summary as scaffolding and opens it in a new
+                tab. The Doc gets a `generated-from` ReferenceEdge
+                back to this session so the recording page surfaces it
+                as a related artifact. */}
+            {onGenerateStudyGuide && (
+              <button
+                type="button"
+                onClick={() =>
+                  onGenerateStudyGuide({
+                    summary,
+                    agendaTitles: agendaTitles ?? [],
+                  })
+                }
+                className="group flex w-full items-start gap-3 rounded-lg border border-primary/30 bg-primary/[0.04] p-3 text-left transition-colors hover:border-primary hover:bg-primary/[0.08]"
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                  <Wand2 className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[12.5px] font-bold text-primary">
+                    Generate a study guide doc
+                  </span>
+                  <span className="block text-[11px] leading-snug text-muted-foreground">
+                    Auto-creates a Doc with the agenda items, your summary, and a recording embed. Edit, then publish to your cohort or the public.
+                  </span>
+                </span>
+                <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground">
+                  Open in new tab →
+                </span>
+              </button>
+            )}
             <Textarea
               value={summary}
               onChange={(e) => setSummary(e.target.value.slice(0, 280))}
@@ -254,8 +338,8 @@ export function EndClassWrapWizard({
           </div>
         )}
 
-        {/* Step 3 — Follow-up */}
-        {step === 3 && (
+        {/* Follow-up (optional) */}
+        {true && (
           <div className="space-y-3 pt-2">
             <p className="text-[12.5px] text-muted-foreground">
               One last thing — what&apos;s the natural next step? Pick one and we&apos;ll route
@@ -327,20 +411,10 @@ export function EndClassWrapWizard({
             <X className="mr-1 h-3.5 w-3.5" />
             Cancel
           </Button>
-          {step > 1 && (
-            <Button variant="outline" onClick={() => setStep((s) => (s - 1) as 1 | 2 | 3)}>
-              Back
-            </Button>
-          )}
-          {step < 3 ? (
-            <Button onClick={() => setStep((s) => (s + 1) as 1 | 2 | 3)}>
-              Next
-            </Button>
-          ) : (
-            <Button onClick={() => close(true)}>
-              End class
-            </Button>
-          )}
+          <Button onClick={() => close(true)} className="gap-1.5">
+            <Check className="h-3.5 w-3.5" />
+            {wasHeld ? "Looks good — send to students" : "End class without recap"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

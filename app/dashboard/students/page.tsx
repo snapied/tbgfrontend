@@ -72,6 +72,7 @@ import {
 import { useTenant } from "@/lib/tenant-store"
 import { tenantPublicUrl } from "@/lib/tenant-resolver"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
+import { ModuleTrashButton } from "@/components/dashboard/module-trash-button"
 
 const STUDENTS_TOUR: TourStep[] = [
   {
@@ -582,6 +583,7 @@ export default function StudentsPage() {
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
           <TakeATourButton tourId="students-v1" label="Tour" />
+          <ModuleTrashButton kinds={["user"]} noun="student" />
           {/* <Button variant="outline" size="sm" asChild title="Bucket students into named segments for targeted messaging" data-tour="students-groups">
             <Link href="/dashboard/students/groups">
               <Users className="mr-1 h-4 w-4" /> Groups

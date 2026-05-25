@@ -38,11 +38,11 @@ export default function CoursesFeaturePage() {
 
         <FeatureSplit
           title="A curriculum builder that respects your time."
-          body="Drag a module. Drag a lesson into it. Set the type — video, text, PDF, quiz. That's the loop. Resources (Canva, Gamma, Slides, Notion, Figma) embed inline so students don't tab-hop to consume your content."
+          body="Drag a module. Drag a lesson into it. Set the type — video, text, PDF, quiz. That's the loop. Common design files, slide decks, and doc embeds drop inline so students don't tab-hop to consume your content."
           bullets={[
             "Drag-and-drop modules + lessons",
             "Video, text, PDF, and quiz lesson types",
-            "Inline embeds for Canva / Gamma / Slides / Notion / Figma",
+            "Inline embeds for common design tools, slide decks, and doc files",
             "Preview lessons that show before purchase",
           ]}
           mockup={<CurriculumBuilderMockup />}
