@@ -38,6 +38,7 @@ import {
   dueReminders,
   reminderEmailHtml,
   reminderEmailSubject,
+  reminderTemplateParams,
   reminderWhatsappText,
 } from "@/lib/reminder-windows"
 import type {
@@ -221,25 +222,39 @@ export async function POST(_req: NextRequest) {
             }
           }
 
-          // WhatsApp — same pattern as email. We rely on the
-          // dispatcher's `ok` flag (Meta API responded 2xx OR the
-          // stub returned ok) to decide whether to log a row.
+          // WhatsApp — use the pre-approved `the_big_class_reminder`
+          // template. Free-form text would fail with Meta error 131047
+          // ("re-engagement required") because reminders fire BEFORE
+          // the recipient has messaged us — outside the 24h customer
+          // service window. Templates work any time, and the variables
+          // are mapped by reminderTemplateParams() to match the
+          // approved template's {{1}}, {{2}}, {{3}} slots.
           if (channelEnabled(user, "whatsapp") && user.phone) {
             let whatsappOk = false
             try {
               const res = await sendWhatsApp({
                 to: user.phone,
+                template: reminderTemplateParams(copy, user.name),
+                // Preserve the free-form text in case the call site
+                // ever falls back to text mode (e.g. a different
+                // transport). Logged-only when stubbed.
                 text: reminderWhatsappText(copy),
                 kind: `class-reminder.${reminder.key}`,
               })
               if (res.ok) {
                 whatsappCount++
                 whatsappOk = true
+              } else {
+                // eslint-disable-next-line no-console
+                console.warn(
+                  `[class-reminders] whatsapp not ok for ${user.phone}:`,
+                  "error" in res ? res.error : "unknown",
+                )
               }
             } catch (err) {
               // eslint-disable-next-line no-console
               console.warn(
-                `[class-reminders] whatsapp failed for ${user.phone}`,
+                `[class-reminders] whatsapp threw for ${user.phone}`,
                 (err as Error).message,
               )
             }

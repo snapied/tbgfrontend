@@ -112,6 +112,45 @@ export function reminderEmailHtml(args: ReminderCopyInput): string {
   </body></html>`
 }
 
+/**
+ * Variable mapping for the Meta-approved `the_big_class_reminder`
+ * template. The template body reads:
+ *
+ *   Header: "Reminder: Session starting in {{1}}"
+ *   Body:   "Dear {{1}},
+ *            The session is starting in {{3}} .
+ *            Please join the class 5 minutes early.
+ *            Copy the link below and paste it in Chrome to join the class.
+ *            {{2}}
+ *            Team The Big Class."
+ *
+ * Body params therefore map as:
+ *   {{1}} → recipient name
+ *   {{2}} → join URL
+ *   {{3}} → time-until label (e.g. "30 minutes")
+ *
+ * Header param:
+ *   {{1}} → time-until label
+ *
+ * `recipientName` is required; everything else is derived from the
+ * shared ReminderCopyInput. The returned object is the exact shape
+ * `sendWhatsApp({ template: ... })` consumes.
+ */
+export function reminderTemplateParams(
+  args: ReminderCopyInput,
+  recipientName: string,
+): { name: string; language: string; headerParams: string[]; bodyParams: string[] } {
+  // Strip the leading "in " from "in 3 hours" so the slot reads
+  // "Session starting in 3 hours" rather than "in in 3 hours".
+  const timeLabel = args.inLabel.replace(/^in\s+/i, "")
+  return {
+    name: "the_big_class_reminder",
+    language: "en",
+    headerParams: [timeLabel],
+    bodyParams: [recipientName, args.joinUrl, timeLabel],
+  }
+}
+
 export function reminderWhatsappText(args: ReminderCopyInput): string {
   const opener =
     args.role === "instructor"
