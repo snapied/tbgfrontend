@@ -489,14 +489,12 @@ function TrackingPanel({
             label="Email"
             count={sentByChannel.email}
             total={enrolledCount}
-            stub
           />
           <ChannelLine
             icon={<MessageSquare className="h-3.5 w-3.5" />}
             label="WhatsApp"
             count={sentByChannel.whatsapp}
             total={enrolledCount}
-            stub
           />
         </div>
         <p className="text-[11px] text-muted-foreground">
@@ -545,13 +543,11 @@ function ChannelLine({
   label,
   count,
   total,
-  stub,
 }: {
   icon: React.ReactNode
   label: string
   count: number
   total: number
-  stub?: boolean
 }) {
   const pct = total > 0 ? Math.round((count / total) * 100) : 0
   return (
@@ -560,7 +556,6 @@ function ChannelLine({
         <span className="inline-flex items-center gap-1.5">
           <span className="text-primary">{icon}</span>
           {label}
-          {stub && <span className="text-[10px] text-muted-foreground">(stub)</span>}
         </span>
         <span className="tabular-nums text-muted-foreground">
           {count}/{total}

@@ -302,17 +302,35 @@ export default function LiveClassPage({
   // silently fails (stale token + dead refresh cookie), the server
   // never flips to "open"/"live" and students stay stuck in the
   // waiting room past their scheduled time. To survive that failure
-  // mode, once the scheduled time has arrived AND the room row
-  // exists on the backend (anyone has touched it), promote the
-  // student into the LiveKit shell. LiveKit itself becomes the
-  // ground truth — if the host is in the call, the student meets
-  // them; if not, both wait inside the call instead of in our lobby.
+  // mode we promote students into the LiveKit shell — BUT only when
+  // there's a credible signal the host is actually trying to run the
+  // class right now. Otherwise, every abandoned past-scheduled room
+  // would auto-admit students into an empty LiveKit shell with no
+  // waiting-room context.
+  //
+  // Constraints stack so the fallback only fires when:
+  //   • the scheduled time has passed (no early entry), AND
+  //   • we're still inside the class window — past `scheduledAt +
+  //     durationMinutes + 10min grace` means the host no-showed and
+  //     the waiting room should remain the safe answer, AND
+  //   • the room row was touched in the last 90 seconds (host page
+  //     is alive and writing /state, even if state push failed to
+  //     flip the flag).
   const scheduledMs = new Date(session.scheduledAt).getTime()
-  const shouldAutoAdmitByTime =
-    state === "scheduled" &&
+  const durationMs = (session.durationMinutes ?? 60) * 60 * 1000
+  const GRACE_MS = 10 * 60 * 1000   // 10 minutes after scheduled end
+  const STALE_MS = 90 * 1000        // server `updatedAt` must be this fresh
+  const updatedMs = serverState?.updatedAt
+    ? new Date(serverState.updatedAt).getTime()
+    : NaN
+  const inWindow =
     Number.isFinite(scheduledMs) &&
     Date.now() >= scheduledMs &&
-    serverState != null
+    Date.now() <= scheduledMs + durationMs + GRACE_MS
+  const hostActive =
+    Number.isFinite(updatedMs) && Date.now() - updatedMs <= STALE_MS
+  const shouldAutoAdmitByTime =
+    state === "scheduled" && serverState != null && inWindow && hostActive
 
   if (state === "scheduled" && !shouldAutoAdmitByTime) {
     // Punctuality stat — last 5 sessions this instructor opened,

@@ -463,8 +463,8 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <ChannelPill icon={<Bell className="h-3.5 w-3.5" />} label="In-app" />
-            <ChannelPill icon={<Mail className="h-3.5 w-3.5" />} label="Email (stub)" />
-            <ChannelPill icon={<MessageSquare className="h-3.5 w-3.5" />} label="WhatsApp (stub)" />
+            <ChannelPill icon={<Mail className="h-3.5 w-3.5" />} label="Email" />
+            <ChannelPill icon={<MessageSquare className="h-3.5 w-3.5" />} label="WhatsApp" />
             <Button onClick={resendInvites} className="w-full" variant="outline">
               <Send className="mr-2 h-4 w-4" />
               {resent ? "Reminder queued!" : "Resend reminder"}
