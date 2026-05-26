@@ -137,7 +137,7 @@ const RESOURCES: MegaSection[] = [
       { href: "/founder-bill-of-rights", icon: ShieldCheck,    label: "Founder Bill of Rights", body: "Six commitments. In writing.",     color: "bg-primary/10 text-primary" },
       { href: "/about",                  icon: Building2,      label: "About",                   body: "Made by creators in India",        color: "bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300" },
       { href: "/verify",                 icon: Award,          label: "Verify a certificate",    body: "Public lookup, no account",        color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300" },
-      { href: "mailto:hello@thebigclass.com", icon: Mail, label: "Talk to us",                   body: "Same-day reply from a human",      color: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" },
+      { href: "mailto:welcome@thebigclass.com", icon: Mail, label: "Talk to us", body: "Same-day reply from a human", color: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" },
     ],
   },
 ]
@@ -418,8 +418,8 @@ function ResourcesPanel({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between border-t border-border/60 bg-muted/20 px-6 py-3 text-[11px] text-muted-foreground">
         <p>
           Questions?{" "}
-          <Link href="mailto:hello@thebigclass.com" onClick={onClose} className="font-semibold text-primary hover:underline">
-            hello@thebigclass.com
+          <Link href="mailto:welcome@thebigclass.com" onClick={onClose} className="font-semibold text-primary hover:underline">
+            welcome@thebigclass.com
           </Link>
           {" "}— we reply same day.
         </p>

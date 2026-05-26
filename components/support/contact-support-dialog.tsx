@@ -46,7 +46,7 @@ import {
 // for a proper queue / Zendesk-style mailbox; for now plain inboxes
 // keep the surface honest. Kept here (not in env) so the stub-y-ness
 // is auditable from one file.
-const SUPPORT_EMAIL = "hello@thebigclass.com"
+const SUPPORT_EMAIL = "welcome@thebigclass.com"
 const SALES_EMAIL = "sales@thebigclass.com"
 
 const RATE_KEY = "support:contact"

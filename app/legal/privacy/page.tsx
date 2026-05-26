@@ -83,7 +83,7 @@ export default function PrivacyPage() {
         <li>Lodge a complaint with a data protection authority.</li>
       </ul>
       <p>
-        Email <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a> to exercise any of these rights. We respond within 30 days.
+        Email <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a> to exercise any of these rights. We respond within 30 days.
       </p>
 
       <h2>8. Data retention</h2>

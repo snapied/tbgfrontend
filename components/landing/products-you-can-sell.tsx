@@ -133,7 +133,7 @@ export function ProductsYouCanSell({
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-3 text-sm text-muted-foreground">
           <span>Have a one-off thing not in the list?</span>
-          <Link href="mailto:hello@thebigclass.com" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+          <Link href="mailto:welcome@thebigclass.com" className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
             Tell us — we ship fast <ArrowRight className="h-3.5 w-3.5" />
           </Link>
         </div>

@@ -888,7 +888,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "Do you offer education / non-profit pricing?",
-    a: "Yes. Email hello@thebigclass.com from your institution address — we discount Institute by 40% for accredited schools and registered non-profits.",
+    a: "Yes. Email welcome@thebigclass.com from your institution address — we discount Institute by 40% for accredited schools and registered non-profits.",
   },
   {
     q: "Where is my data hosted?",
@@ -904,8 +904,8 @@ function Faq() {
           <h2 className="text-3xl font-bold tracking-tight">Common questions.</h2>
           <p className="mt-3 text-muted-foreground">
             If yours isn&apos;t here, email{" "}
-            <a href="mailto:hello@thebigclass.com" className="text-primary hover:underline">
-              hello@thebigclass.com
+            <a href="mailto:welcome@thebigclass.com" className="text-primary hover:underline">
+              welcome@thebigclass.com
             </a>{" "}
             — we reply same business day.
           </p>

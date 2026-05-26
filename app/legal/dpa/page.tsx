@@ -69,7 +69,7 @@ export default function DpaPage() {
 
       <h2>Annex B — Signing this DPA</h2>
       <p>
-        For Starter and Growth plans this DPA is accepted automatically when you create a workspace and form part of our Terms of Service. For Scale customers we can co-sign a counter-signed copy on request — email <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a>.
+        For Starter and Growth plans this DPA is accepted automatically when you create a workspace and form part of our Terms of Service. For Scale customers we can co-sign a counter-signed copy on request — email <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a>.
       </p>
     </LegalShell>
   )

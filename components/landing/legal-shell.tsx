@@ -57,7 +57,7 @@ export function LegalShell({
                 <br />
                 7-B Race Course Road, Dehradun, Uttarakhand 248001, India
                 <br />
-                Email: <a href="mailto:hello@thebigclass.com" className="text-primary hover:underline">hello@thebigclass.com</a>
+                Email: <a href="mailto:welcome@thebigclass.com" className="text-primary hover:underline">welcome@thebigclass.com</a>
               </span>
             </p>
           </div>

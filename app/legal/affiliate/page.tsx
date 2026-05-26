@@ -52,7 +52,7 @@ export default function AffiliateTermsPage() {
 
       <h2>8. Contact</h2>
       <p>
-        Questions about the programme? Email <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a>.
+        Questions about the programme? Email <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a>.
       </p>
     </LegalShell>
   )

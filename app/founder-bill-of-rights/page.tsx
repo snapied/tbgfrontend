@@ -361,10 +361,10 @@ export default function FounderBillOfRightsPage() {
               <Mail className="h-3 w-3" />
               Found a gap or an unkept promise? Email{" "}
               <a
-                href="mailto:hello@thebigclass.com"
+                href="mailto:welcome@thebigclass.com"
                 className="font-medium text-primary hover:underline"
               >
-                hello@thebigclass.com
+                welcome@thebigclass.com
               </a>{" "}
               — we&apos;ll fix it within 7 days or publish why we can&apos;t.
             </p>

@@ -533,8 +533,8 @@ function UpgradeLadder({
       <Card>
         <CardContent className="p-6 text-sm text-muted-foreground">
           You&apos;re on the highest plan. Need something custom? Email{" "}
-          <a href="mailto:hello@thebigclass.com" className="text-primary hover:underline">
-            hello@thebigclass.com
+          <a href="mailto:welcome@thebigclass.com" className="text-primary hover:underline">
+            welcome@thebigclass.com
           </a>
           .
         </CardContent>

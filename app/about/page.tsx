@@ -440,7 +440,7 @@ export default function AboutPage() {
             </h2>
             <p className="mt-3 text-muted-foreground">
               Spin up a workspace in three minutes. Drop us a line at{" "}
-              <a href="mailto:hello@thebigclass.com" className="text-primary hover:underline">hello@thebigclass.com</a> if you&apos;d like to talk first.
+              <a href="mailto:welcome@thebigclass.com" className="text-primary hover:underline">welcome@thebigclass.com</a> if you&apos;d like to talk first.
             </p>
             <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Button asChild size="lg" className="gap-2">

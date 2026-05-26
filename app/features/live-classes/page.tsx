@@ -382,7 +382,7 @@ function MultiChannelRemindersMockup() {
         <DeviceLaptop>
           <div className="border-b border-border/60 pb-1.5">
             <p className="text-[8px] font-bold leading-tight">Reminder: Hooks Deep-Dive · 7:00 pm IST</p>
-            <p className="text-[7px] text-muted-foreground">from Maya R. · hello@thebigclass.com</p>
+            <p className="text-[7px] text-muted-foreground">from Maya R. · welcome@thebigclass.com</p>
           </div>
           <div className="mt-1.5 space-y-1 text-[8px] leading-tight">
             <p>Hi Aanya,</p>

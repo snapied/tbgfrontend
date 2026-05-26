@@ -82,7 +82,7 @@ export default function TermsPage() {
 
       <h2>11. Contact</h2>
       <p>
-        Questions? Email <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a> or write to us at the registered office below.
+        Questions? Email <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a> or write to us at the registered office below.
       </p>
     </LegalShell>
   )

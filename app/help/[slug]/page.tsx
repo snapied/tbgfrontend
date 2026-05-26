@@ -1320,7 +1320,7 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
 
       { kind: "h2", text: "How to verify our 0% commitment" },
       { kind: "p", body: "Every settlement shows the gross / Razorpay-fee / net breakdown on the dashboard. Cross-check any row against your Razorpay merchant dashboard at dashboard.razorpay.com — the numbers will match to the paisa. Razorpay can't show a platform-fee column for us because we don't take one." },
-      { kind: "callout", tone: "info", body: "If you ever see a discrepancy between The Big Class's reported numbers and Razorpay's, email hello@thebigclass.com — that's an Article 1 escalation and we treat it as a hair-on-fire bug." },
+      { kind: "callout", tone: "info", body: "If you ever see a discrepancy between The Big Class's reported numbers and Razorpay's, email welcome@thebigclass.com — that's an Article 1 escalation and we treat it as a hair-on-fire bug." },
 
       { kind: "h2", text: "BYO Razorpay (power users)" },
       { kind: "p", body: "If you already run a Razorpay merchant account with negotiated rates (1.6–1.8% instead of the public 2%), you can connect those credentials directly under /dashboard/payouts → Bring your own Razorpay. Checkouts will use your keys, money lands in your merchant balance, and you get whatever rate you negotiated. Our cut is still 0%." },
@@ -1411,7 +1411,7 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
       ] },
       { kind: "h2", text: "What happens after you confirm" },
       { kind: "p", body: "If you only cancelled the subscription, you keep paid access until the end of the current billing cycle, then auto-downgrade to the free Starter plan. If you also asked to deactivate the account, every user in your workspace is signed out and our login route refuses further sessions. We keep a soft-deleted copy of your data for the refund window in case you change your mind — see the Refund Policy and Privacy pages linked inside the dialog." },
-      { kind: "callout", tone: "warn", body: "Deactivating the account is reversible only by emailing hello@thebigclass.com within the retention window. After that, data is permanently removed." },
+      { kind: "callout", tone: "warn", body: "Deactivating the account is reversible only by emailing welcome@thebigclass.com within the retention window. After that, data is permanently removed." },
     ],
     related: [
       { slug: "trial-and-plan-badge", label: "Your trial, your plan, your time left" },

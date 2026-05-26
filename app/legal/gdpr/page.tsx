@@ -35,7 +35,7 @@ export default function GdprPage() {
 
       <h2>5. EU representative</h2>
       <p>
-        Where required under Article 27 of the GDPR, we have appointed an EU-based representative. To request the representative&apos;s details for data-subject communications, contact <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a> with the subject line &quot;EU Representative&quot;.
+        Where required under Article 27 of the GDPR, we have appointed an EU-based representative. To request the representative&apos;s details for data-subject communications, contact <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a> with the subject line &quot;EU Representative&quot;.
       </p>
 
       <h2>6. International transfers</h2>
@@ -50,7 +50,7 @@ export default function GdprPage() {
 
       <h2>8. Contact</h2>
       <p>
-        For any data-subject request or GDPR-related question, email <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a>. We respond within 30 days.
+        For any data-subject request or GDPR-related question, email <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a>. We respond within 30 days.
       </p>
     </LegalShell>
   )

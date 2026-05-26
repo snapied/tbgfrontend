@@ -15,7 +15,7 @@ export default function RefundPolicyPage() {
         quarterly, half-yearly, or yearly) — is eligible for a full refund
         within 30 days of the initial purchase, no questions asked. This is
         the same guarantee we show on the homepage and on every pricing
-        surface. Email <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a>&nbsp;from the workspace owner&apos;s email address; refunds are processed within 7 business days to the original payment method.
+        surface. Email <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a>&nbsp;from the workspace owner&apos;s email address; refunds are processed within 7 business days to the original payment method.
       </p>
 
       <h2>2. Free tier</h2>
@@ -52,7 +52,7 @@ export default function RefundPolicyPage() {
 
       <h2>7. How to request a refund</h2>
       <ol>
-        <li>Email <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a>&nbsp;from the workspace owner&apos;s email.</li>
+        <li>Email <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a>&nbsp;from the workspace owner&apos;s email.</li>
         <li>Subject line: <em>Refund request — &lt;your workspace slug&gt;</em>.</li>
         <li>Tell us when you signed up and why you&apos;d like to refund.</li>
       </ol>

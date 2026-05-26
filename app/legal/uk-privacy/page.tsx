@@ -35,7 +35,7 @@ export default function UkPrivacyPage() {
 
       <h2>5. UK representative</h2>
       <p>
-        Where required under Article 27 of the UK GDPR, we appoint a UK-based representative. To request representative details, write to <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a> with the subject line &quot;UK Representative&quot; and we will share current representative information.
+        Where required under Article 27 of the UK GDPR, we appoint a UK-based representative. To request representative details, write to <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a> with the subject line &quot;UK Representative&quot; and we will share current representative information.
       </p>
 
       <h2>6. International transfers</h2>
@@ -45,7 +45,7 @@ export default function UkPrivacyPage() {
 
       <h2>7. Complaints</h2>
       <p>
-        If you believe your data has been mishandled, please contact us first at <a href="mailto:hello@thebigclass.com">hello@thebigclass.com</a>. You also have the right to lodge a complaint with the Information Commissioner&apos;s Office (ICO) at <a href="https://ico.org.uk" target="_blank" rel="noreferrer">ico.org.uk</a>.
+        If you believe your data has been mishandled, please contact us first at <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a>. You also have the right to lodge a complaint with the Information Commissioner&apos;s Office (ICO) at <a href="https://ico.org.uk" target="_blank" rel="noreferrer">ico.org.uk</a>.
       </p>
     </LegalShell>
   )

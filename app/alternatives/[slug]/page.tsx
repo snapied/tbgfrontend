@@ -810,7 +810,7 @@ function MigrationTimelineBlock({
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
             Stuck mid-migration?{" "}
-            <Link href="mailto:hello@thebigclass.com" className="font-semibold text-primary hover:underline">
+            <Link href="mailto:welcome@thebigclass.com" className="font-semibold text-primary hover:underline">
               Email us
             </Link>{" "}
             — we&apos;ll walk through the CSV mapping or migration scripts with you on a call. No upsell.
