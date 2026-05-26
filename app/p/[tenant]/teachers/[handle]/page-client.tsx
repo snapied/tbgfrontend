@@ -362,7 +362,7 @@ export default function PortalTeacherDetailsClient({
                 className="h-32 w-32 rounded-2xl object-cover shadow-lg ring-4 ring-card sm:h-40 sm:w-40 p-relative"
               />
             ) : (
-                <div className="flex h-32 w-32 items-center justify-center rounded-2xl bg-primary text-3xl font-bold text-primary-foreground shadow-lg ring-4 ring-card sm:h-40 sm:w-40">
+                <div className="flex h-32 w-32 items-center justify-center rounded-2xl bg-primary text-3xl font-bold text-primary-foreground shadow-lg ring-4 ring-card sm:h-40 sm:w-40 position-relative">
                 {member.name.split(" ").map((p) => p[0]).join("").slice(0, 2)}
               </div>
             )}

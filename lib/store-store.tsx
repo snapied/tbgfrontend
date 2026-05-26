@@ -938,25 +938,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })
       }
 
-      // WhatsApp enrollment confirmation — fire-and-forget via the
-      // server-side send endpoint. Only fires when a phone number is
-      // available on the input (storefront checkout form collects it).
-      if (input.customerPhone) {
-        void fetch("/api/whatsapp/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            to: input.customerPhone,
-            text: [
-              `Hi ${input.customerName || "there"}! 🎉`,
-              ``,
-              `You're enrolled! Your access to *${product.name}* is now active.`,
-              ``,
-              `Head to your dashboard to start learning.`,
-            ].join("\n"),
-          }),
-        }).catch(() => { /* non-fatal */ })
-      }
+      // WhatsApp enrollment confirmation is handled by:
+      //   • Paid enrollments → payment.captured webhook (sends WhatsApp with receipt)
+      //   • Manual invites   → /api/auth/invite-request (already sends WhatsApp)
+      // No additional send needed here — the store doesn't have access
+      // to the buyer's phone number (it lives in the LMS store).
     }
 
     return { ok: true, order, entitlements: ents }

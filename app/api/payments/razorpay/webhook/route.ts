@@ -158,6 +158,7 @@ interface LMSUser {
   id: string
   email: string
   name?: string
+  phone?: string
   notificationChannels?: { inApp?: boolean }
 }
 interface LMSNotification {

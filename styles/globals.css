@@ -135,3 +135,6 @@
 .hover\:bg-accent {
   background-color: var(--accent) !important;
 }
+.position-relative {
+  position: relative !important;
+}
