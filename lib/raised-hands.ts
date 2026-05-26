@@ -57,6 +57,13 @@ function writeMap(sessionId: string, next: Record<string, RaisedHand>): void {
   }
 }
 
+function emitLocalChange(sessionId: string, action: any) {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new CustomEvent("tbc-raised-hands-local-change", {
+    detail: { sessionId, ...action }
+  }))
+}
+
 /** Student action: raise hand. Idempotent — re-raising bumps the
  *  timestamp which would push them to the back; we keep the
  *  original raisedAt when already in the queue so cheating by
@@ -73,6 +80,7 @@ export function raiseHand(
     if (map[user.id].visibility !== visibility) {
       map[user.id] = { ...map[user.id], visibility }
       writeMap(sessionId, map)
+      emitLocalChange(sessionId, { type: "RAISE", user, visibility })
     }
     return
   }
@@ -83,6 +91,7 @@ export function raiseHand(
     visibility,
   }
   writeMap(sessionId, map)
+  emitLocalChange(sessionId, { type: "RAISE", user, visibility })
 }
 
 /** Student action: lower hand. No-op if not raised. */
@@ -91,6 +100,7 @@ export function lowerHand(sessionId: string, userId: string): void {
   if (!map[userId]) return
   delete map[userId]
   writeMap(sessionId, map)
+  emitLocalChange(sessionId, { type: "LOWER", userId })
 }
 
 /** Host action: mark a hand answered. Removes from the queue the
@@ -99,6 +109,7 @@ export function lowerHand(sessionId: string, userId: string): void {
  *  ("Your question was answered"). */
 export function answerHand(sessionId: string, userId: string): void {
   lowerHand(sessionId, userId)
+  emitLocalChange(sessionId, { type: "ANSWER", userId })
 }
 
 /** Host action: clear ALL hands. Useful when the queue is stale
@@ -107,9 +118,31 @@ export function clearAllHands(sessionId: string): void {
   if (typeof window === "undefined") return
   try {
     window.localStorage.removeItem(KEY(sessionId))
+    emitLocalChange(sessionId, { type: "CLEAR" })
   } catch {
     /* ignore */
   }
+}
+
+/** Internal: apply an update received from LiveKit DataChannel.
+ *  Modifies local storage directly so `useRaisedHands` picks it up,
+ *  but deliberately skips `emitLocalChange` to avoid a broadcast loop. */
+export function _applyNetworkSync(sessionId: string, action: any): void {
+  const map = readMap(sessionId)
+  if (action.type === "RAISE") {
+    map[action.user.id] = {
+      userId: action.user.id,
+      name: action.user.name,
+      raisedAt: action.raisedAt || new Date().toISOString(),
+      visibility: action.visibility,
+    }
+  } else if (action.type === "LOWER" || action.type === "ANSWER") {
+    delete map[action.userId]
+  } else if (action.type === "CLEAR") {
+    if (typeof window !== "undefined") window.localStorage.removeItem(KEY(sessionId))
+    return
+  }
+  writeMap(sessionId, map)
 }
 
 /** Read-only snapshot, sorted oldest-first (first hand-up wins). */

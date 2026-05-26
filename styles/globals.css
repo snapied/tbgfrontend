@@ -132,3 +132,6 @@
   max-height: 400px;
   overflow: auto;
 }
+.hover\:bg-accent {
+  background-color: var(--accent) !important;
+}

@@ -695,6 +695,9 @@ function LiveHostShell({
       // Show a quick toast so the host knows the recording is safe.
       toast.success("Recording saved")
     },
+    onError: (err) => {
+      toast.error(err.message)
+    },
   })
 
   // Stage tab: video call vs whiteboard. Both stay mounted (CSS hide/show)
@@ -1019,8 +1022,7 @@ function LiveHostShell({
           desktop we split the flex container into stage + 320px rail.
           Mobile keeps the stage full-width and surfaces breakouts via
           the Tools tab (#46). */}
-      <div className="relative flex flex-1 overflow-hidden p-2">
-        <div className="min-w-0 flex-1">
+      <div className="relative flex flex-1 overflow-hidden bg-black">
         <LiveKitRoom
           roomCode={canonicalRoomCode(session)}
           user={{ id: `host-${session.id}`, name: teacherName }}
@@ -1041,250 +1043,253 @@ function LiveHostShell({
             }
             onEnd(recordedRef.current ?? undefined)
           }}
-          className="h-full w-full rounded-xl overflow-hidden border border-border/60"
+          className="flex h-full w-full flex-row overflow-hidden bg-black text-white"
         >
-          {/* Beacon: pushes state="live" to the backend the moment
-              this host's LiveKit room actually connects, then again
-              every 30s while connected. Defends against the silent-
-              401 / forgot-to-click-Open-the-room class of bugs that
-              left students stuck in the lobby even though the host
-              was in the call. Renders nothing visible. */}
-          <LiveStateBeacon
-            roomCode={canonicalRoomCode(session)}
-            scheduledAt={session.scheduledAt}
-            durationMinutes={session.durationMinutes}
-            title={session.title}
-            hostName={teacherName}
-          />
-          {/* Host connection health bar — floats at the top-left of
-              the video stage. Switches between 🟢 connected →
-              ⚠️ reconnecting → 🔴 lost states based on LiveKit's
-              ConnectionStateChanged events. On reconnect, auto-mutes
-              the host so garbled audio doesn't blast into the room.
-              Lives inside the LiveKit room context (uses useRoomContext). */}
-          <div className="pointer-events-none absolute left-3 top-3 z-20">
-            <div className="pointer-events-auto">
-              <HostHealthBar />
+          <div className="flex h-full w-full flex-row">
+            <div className="min-w-0 flex-1 relative flex flex-col">
+              {/* Beacon: pushes state="live" to the backend the moment
+                  this host's LiveKit room actually connects, then again
+                  every 30s while connected. Defends against the silent-
+                  401 / forgot-to-click-Open-the-room class of bugs that
+                  left students stuck in the lobby even though the host
+                  was in the call. Renders nothing visible. */}
+              <LiveStateBeacon
+                roomCode={canonicalRoomCode(session)}
+                scheduledAt={session.scheduledAt}
+                durationMinutes={session.durationMinutes}
+                title={session.title}
+                hostName={teacherName}
+              />
+              {/* Host connection health bar — floats at the top-left of
+                  the video stage. Switches between 🟢 connected →
+                  ⚠️ reconnecting → 🔴 lost states based on LiveKit's
+                  ConnectionStateChanged events. On reconnect, auto-mutes
+                  the host so garbled audio doesn't blast into the room.
+                  Lives inside the LiveKit room context (uses useRoomContext). */}
+              <div className="pointer-events-none absolute left-3 top-3 z-20">
+                <div className="pointer-events-auto">
+                  <HostHealthBar />
+                </div>
+              </div>
+              {/* Tabs must use flex layout when visible so the LiveKit
+                  video grid + control bar stack vertically. The earlier
+                  `block`+`flex flex-col` combo silently broke because
+                  `block` won the CSS display fight — and the control bar
+                  disappeared off-screen as a result. */}
+              <div className={cn("h-full w-full flex-col", stageTab === "video" ? "flex" : "hidden")}>
+                <LiveKitVideoUI isHost chatEnabled={session.chatEnabled !== false} />
+              </div>
+              <div className={cn("h-full w-full", stageTab === "whiteboard" ? "block" : "hidden")}>
+                <HostWhiteboardStage
+                  persistenceKey={session.id}
+                  participantName={teacherName}
+                />
+              </div>
             </div>
-          </div>
-          {/* Tabs must use flex layout when visible so the LiveKit
-              video grid + control bar stack vertically. The earlier
-              `block`+`flex flex-col` combo silently broke because
-              `block` won the CSS display fight — and the control bar
-              disappeared off-screen as a result. */}
-          <div className={cn("h-full w-full flex-col", stageTab === "video" ? "flex" : "hidden")}>
-            <LiveKitVideoUI isHost chatEnabled={session.chatEnabled !== false} />
-          </div>
-          <div className={cn("h-full w-full", stageTab === "whiteboard" ? "block" : "hidden")}>
-            <HostWhiteboardStage
-              persistenceKey={session.id}
-              participantName={teacherName}
-            />
-          </div>
-        </LiveKitRoom>
-        </div>
 
-        {/* Sprint C Classes #17 — desktop side rail. Hidden on
-            mobile (the bottom-bar's Tools tab handles it there).
-            We render the panel only when open + on sm+ so the
-            LiveKit grid keeps its full width during normal flow. */}
-        {rosterOpen && (
-          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-0 sm:block">
-            <RosterPanel onClose={() => setRosterOpen(false)} />
-          </aside>
-        )}
-        {breakoutsOpen && (
-          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
-            <BreakoutRoomsPanel
-              sessionId={session.id}
-              participants={breakoutParticipants}
-              onClose={() => setBreakoutsOpen(false)}
-            />
-          </aside>
-        )}
-        {agendaOpen && (
-          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
-            <InClassAgendaPanel
-              items={session.agenda ?? []}
-              onChange={(next) => updateLiveSessionLocal(session.id, { agenda: next })}
-              onClose={() => setAgendaOpen(false)}
-            />
-          </aside>
-        )}
-        {pollOpen && (
-          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
-            <LivePollPanel
-              sessionId={session.id}
-              isHost
-              viewerId={`host-${session.id}`}
-              onClose={() => setPollOpen(false)}
-              prestagedPolls={session.prestagedPolls ?? []}
-              onPrestagedLaunched={(prestagedId, launchedPollId) => {
-                // Mark the pre-staged entry as "launched" so it
-                // disappears from the launcher rail and can't be
-                // double-fired in the same session.
-                updateLiveSessionLocal(session.id, {
-                  prestagedPolls: (session.prestagedPolls ?? []).map((p) =>
-                    p.id === prestagedId ? { ...p, launchedPollId } : p,
-                  ),
-                })
-              }}
-              onLaunched={(poll) => {
-                // Fan-out: notify everyone invited to the call.
-                // Recipients = enrolled students + the course's
-                // co-instructors, minus the host themselves
-                // (no point pinging the person who launched it).
-                const courseForFanout = coursesLocal.find((c) => c.id === session.courseId)
-                const enrolledIds = new Set(
-                  enrollmentsLocal
-                    .filter((e) => e.courseId === session.courseId)
-                    .map((e) => e.studentId),
-                )
-                const coInstructorIds = new Set(courseForFanout?.coInstructorIds ?? [])
-                const recipientIds = new Set<string>()
-                enrolledIds.forEach((id) => recipientIds.add(id))
-                coInstructorIds.forEach((id) => recipientIds.add(id))
-                recipientIds.delete(session.hostId)
-                const recipients = usersLocal.filter((u) => recipientIds.has(u.id))
-                if (recipients.length === 0) return
-                const tenantSlug = readCurrentTenantSlug()
-                const joinUrl = tenantSlug
-                  ? `/p/${tenantSlug}/live/${canonicalRoomCode(session)}`
-                  : `/dashboard/classes/${session.id}`
-                const entries = buildNotifications(
-                  recipients,
-                  livePollLaunchedNotification({
-                    sessionId: session.id,
-                    sessionTitle: session.title,
-                    question: poll.question,
-                    optionCount: poll.options.length,
-                    joinUrl,
-                  }),
-                )
-                addNotifications(entries)
-              }}
-              onClosed={(poll) => {
-                // Recompute the tally at close time. Same
-                // recipient set as launch — students who weren't
-                // in the call still get the result delivered so
-                // they can read the outcome of "what the class
-                // decided" without having attended.
-                const tally = tallyLivePoll(poll)
-                const total = Object.keys(poll.votes).length
-                const winner = (() => {
-                  if (total === 0) return null
-                  const best = [...tally].sort((a, b) => b.count - a.count)[0]
-                  if (!best || best.count === 0) return null
-                  return { label: best.label, count: best.count, pct: best.pct }
-                })()
-                const courseForFanout = coursesLocal.find((c) => c.id === session.courseId)
-                const enrolledIds = new Set(
-                  enrollmentsLocal
-                    .filter((e) => e.courseId === session.courseId)
-                    .map((e) => e.studentId),
-                )
-                const coInstructorIds = new Set(courseForFanout?.coInstructorIds ?? [])
-                const recipientIds = new Set<string>()
-                enrolledIds.forEach((id) => recipientIds.add(id))
-                coInstructorIds.forEach((id) => recipientIds.add(id))
-                recipientIds.delete(session.hostId)
-                const recipients = usersLocal.filter((u) => recipientIds.has(u.id))
-                if (recipients.length === 0) return
-                const entries = buildNotifications(
-                  recipients,
-                  livePollClosedNotification({
-                    sessionId: session.id,
-                    sessionTitle: session.title,
-                    question: poll.question,
-                    winner,
-                    totalVotes: total,
-                    resultsUrl: `/dashboard/classes/${session.id}`,
-                  }),
-                )
-                addNotifications(entries)
-              }}
-            />
-          </aside>
-        )}
-        {handsOpen && (
-          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
-            <RaisedHandsPanel
-              sessionId={session.id}
-              onClose={() => setHandsOpen(false)}
-            />
-          </aside>
-        )}
+            {/* Sprint C Classes #17 — desktop side rail. Hidden on
+                mobile (the bottom-bar's Tools tab handles it there).
+                We render the panel only when open + on sm+ so the
+                LiveKit grid keeps its full width during normal flow. */}
+            {rosterOpen && (
+              <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-0 sm:block">
+                <RosterPanel onClose={() => setRosterOpen(false)} />
+              </aside>
+            )}
+            {breakoutsOpen && (
+              <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
+                <BreakoutRoomsPanel
+                  sessionId={session.id}
+                  participants={breakoutParticipants}
+                  onClose={() => setBreakoutsOpen(false)}
+                />
+              </aside>
+            )}
+            {agendaOpen && (
+              <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
+                <InClassAgendaPanel
+                  items={session.agenda ?? []}
+                  onChange={(next) => updateLiveSessionLocal(session.id, { agenda: next })}
+                  onClose={() => setAgendaOpen(false)}
+                />
+              </aside>
+            )}
+            {pollOpen && (
+              <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
+                <LivePollPanel
+                  sessionId={session.id}
+                  isHost
+                  viewerId={`host-${session.id}`}
+                  onClose={() => setPollOpen(false)}
+                  prestagedPolls={session.prestagedPolls ?? []}
+                  onPrestagedLaunched={(prestagedId, launchedPollId) => {
+                    // Mark the pre-staged entry as "launched" so it
+                    // disappears from the launcher rail and can't be
+                    // double-fired in the same session.
+                    updateLiveSessionLocal(session.id, {
+                      prestagedPolls: (session.prestagedPolls ?? []).map((p) =>
+                        p.id === prestagedId ? { ...p, launchedPollId } : p,
+                      ),
+                    })
+                  }}
+                  onLaunched={(poll) => {
+                    // Fan-out: notify everyone invited to the call.
+                    // Recipients = enrolled students + the course's
+                    // co-instructors, minus the host themselves
+                    // (no point pinging the person who launched it).
+                    const courseForFanout = coursesLocal.find((c) => c.id === session.courseId)
+                    const enrolledIds = new Set(
+                      enrollmentsLocal
+                        .filter((e) => e.courseId === session.courseId)
+                        .map((e) => e.studentId),
+                    )
+                    const coInstructorIds = new Set(courseForFanout?.coInstructorIds ?? [])
+                    const recipientIds = new Set<string>()
+                    enrolledIds.forEach((id) => recipientIds.add(id))
+                    coInstructorIds.forEach((id) => recipientIds.add(id))
+                    recipientIds.delete(session.hostId)
+                    const recipients = usersLocal.filter((u) => recipientIds.has(u.id))
+                    if (recipients.length === 0) return
+                    const tenantSlug = readCurrentTenantSlug()
+                    const joinUrl = tenantSlug
+                      ? `/p/${tenantSlug}/live/${canonicalRoomCode(session)}`
+                      : `/dashboard/classes/${session.id}`
+                    const entries = buildNotifications(
+                      recipients,
+                      livePollLaunchedNotification({
+                        sessionId: session.id,
+                        sessionTitle: session.title,
+                        question: poll.question,
+                        optionCount: poll.options.length,
+                        joinUrl,
+                      }),
+                    )
+                    addNotifications(entries)
+                  }}
+                  onClosed={(poll) => {
+                    // Recompute the tally at close time. Same
+                    // recipient set as launch — students who weren't
+                    // in the call still get the result delivered so
+                    // they can read the outcome of "what the class
+                    // decided" without having attended.
+                    const tally = tallyLivePoll(poll)
+                    const total = Object.keys(poll.votes).length
+                    const winner = (() => {
+                      if (total === 0) return null
+                      const best = [...tally].sort((a, b) => b.count - a.count)[0]
+                      if (!best || best.count === 0) return null
+                      return { label: best.label, count: best.count, pct: best.pct }
+                    })()
+                    const courseForFanout = coursesLocal.find((c) => c.id === session.courseId)
+                    const enrolledIds = new Set(
+                      enrollmentsLocal
+                        .filter((e) => e.courseId === session.courseId)
+                        .map((e) => e.studentId),
+                    )
+                    const coInstructorIds = new Set(courseForFanout?.coInstructorIds ?? [])
+                    const recipientIds = new Set<string>()
+                    enrolledIds.forEach((id) => recipientIds.add(id))
+                    coInstructorIds.forEach((id) => recipientIds.add(id))
+                    recipientIds.delete(session.hostId)
+                    const recipients = usersLocal.filter((u) => recipientIds.has(u.id))
+                    if (recipients.length === 0) return
+                    const entries = buildNotifications(
+                      recipients,
+                      livePollClosedNotification({
+                        sessionId: session.id,
+                        sessionTitle: session.title,
+                        question: poll.question,
+                        winner,
+                        totalVotes: total,
+                        resultsUrl: `/dashboard/classes/${session.id}`,
+                      }),
+                    )
+                    addNotifications(entries)
+                  }}
+                />
+              </aside>
+            )}
+            {handsOpen && (
+              <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
+                <RaisedHandsPanel
+                  sessionId={session.id}
+                  onClose={() => setHandsOpen(false)}
+                />
+              </aside>
+            )}
 
-        {/* Sprint C Classes #46 — mobile Tools surface. Slides
-            up over the stage when the Tools tab is active. We
-            don't render this on sm+ because the side rail above
-            already handles it. */}
-        {mobileTab === "tools" && (
-          <div className="fixed inset-x-0 bottom-24 top-12 z-20 overflow-y-auto border-t border-border bg-card p-3 sm:hidden">
-            <BreakoutRoomsPanel
-              sessionId={session.id}
-              participants={breakoutParticipants}
-              onClose={() => setMobileTab("stage")}
-            />
-          </div>
-        )}
-        {/* Mobile Roster slide-out — replaces the previous
-            TODO placeholder. Lists the enrolled-student roster
-            (best-available source outside the LiveKit subtree
-            since we can't read useParticipants here). Host can
-            tap a row to scroll its details, useful for tracking
-            who's expected. */}
-        {mobileTab === "roster" && (
-          <div className="fixed inset-x-0 bottom-24 top-12 z-20 overflow-y-auto border-t border-border bg-card p-3 sm:hidden">
-            <div className="flex items-center justify-between gap-2 border-b border-border pb-2">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold">Roster</p>
-                <p className="text-[11px] text-muted-foreground">
-                  {breakoutParticipants.length - 1} {breakoutParticipants.length - 1 === 1 ? "student" : "students"} expected · plus you
+            {/* Sprint C Classes #46 — mobile Tools surface. Slides
+                up over the stage when the Tools tab is active. We
+                don't render this on sm+ because the side rail above
+                already handles it. */}
+            {mobileTab === "tools" && (
+              <div className="fixed inset-x-0 bottom-24 top-12 z-20 overflow-y-auto border-t border-border bg-card p-3 sm:hidden">
+                <BreakoutRoomsPanel
+                  sessionId={session.id}
+                  participants={breakoutParticipants}
+                  onClose={() => setMobileTab("stage")}
+                />
+              </div>
+            )}
+            {/* Mobile Roster slide-out — replaces the previous
+                TODO placeholder. Lists the enrolled-student roster
+                (best-available source outside the LiveKit subtree
+                since we can't read useParticipants here). Host can
+                tap a row to scroll its details, useful for tracking
+                who's expected. */}
+            {mobileTab === "roster" && (
+              <div className="fixed inset-x-0 bottom-24 top-12 z-20 overflow-y-auto border-t border-border bg-card p-3 sm:hidden">
+                <div className="flex items-center justify-between gap-2 border-b border-border pb-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">Roster</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {breakoutParticipants.length - 1} {breakoutParticipants.length - 1 === 1 ? "student" : "students"} expected · plus you
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-md p-1 text-muted-foreground hover:bg-muted"
+                    onClick={() => setMobileTab("stage")}
+                    aria-label="Close roster"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <ul className="mt-3 space-y-1.5">
+                  {breakoutParticipants.map((p, i) => {
+                    const initials = p.name
+                      .split(/\s+/)
+                      .map((w) => w[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()
+                    const isHost = i === 0
+                    return (
+                      <li
+                        key={p.id}
+                        className="flex items-center gap-2.5 rounded-md border border-border bg-background p-2"
+                      >
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+                          {initials}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{p.name}</p>
+                          <p className="text-[10.5px] text-muted-foreground">
+                            {isHost ? "Host · you" : "Enrolled student"}
+                          </p>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+                <p className="mt-3 text-[10.5px] text-muted-foreground">
+                  Live in-call presence (who's actually here right now) ships next.
+                  This list is the course&apos;s enrolled roster.
                 </p>
               </div>
-              <button
-                type="button"
-                className="rounded-md p-1 text-muted-foreground hover:bg-muted"
-                onClick={() => setMobileTab("stage")}
-                aria-label="Close roster"
-              >
-                ✕
-              </button>
-            </div>
-            <ul className="mt-3 space-y-1.5">
-              {breakoutParticipants.map((p, i) => {
-                const initials = p.name
-                  .split(/\s+/)
-                  .map((w) => w[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()
-                const isHost = i === 0
-                return (
-                  <li
-                    key={p.id}
-                    className="flex items-center gap-2.5 rounded-md border border-border bg-background p-2"
-                  >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
-                      {initials}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{p.name}</p>
-                      <p className="text-[10.5px] text-muted-foreground">
-                        {isHost ? "Host · you" : "Enrolled student"}
-                      </p>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-            <p className="mt-3 text-[10.5px] text-muted-foreground">
-              Live in-call presence (who's actually here right now) ships next.
-              This list is the course&apos;s enrolled roster.
-            </p>
+            )}
           </div>
-        )}
+        </LiveKitRoom>
       </div>
 
       {/* Sprint C Classes #46 — mobile teacher controls. Bottom-

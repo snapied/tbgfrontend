@@ -274,17 +274,18 @@ function StudentPanel({
   poll: ReturnType<typeof useLivePoll>
   viewerId: string
 }) {
-  if (!poll) {
-    return (
-      <div className="rounded-md border border-dashed border-border bg-muted/30 p-3 text-center text-[12px] text-muted-foreground">
-        No poll right now.
-      </div>
-    )
-  }
+  if (!poll) return null
+
   const myVote = poll.votes[viewerId]
+  const locked = !!poll.closedAt
+
+  // Once submitted, remove from student UI to keep it clean (unless it's closed and showing final results)
+  if (myVote && !locked) {
+    return null
+  }
+
   const tally = tallyPoll(poll)
   const total = Object.keys(poll.votes).length
-  const locked = !!poll.closedAt
   return (
     <div className="space-y-3 rounded-md border border-primary/20 bg-primary/[0.04] p-3">
       <div>
@@ -417,6 +418,7 @@ function Composer({
           <Button
             variant="outline"
             size="sm"
+            className="custom_accent_button"
             onClick={() => setOptions([...options, ""])}
           >
             <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> Add option
@@ -424,7 +426,7 @@ function Composer({
         )}
       </div>
       <div className="flex items-center justify-end gap-2 pt-1">
-        <Button variant="ghost" size="sm" onClick={onCancel}>
+        <Button variant="ghost" size="sm" className="custom_accent_button" onClick={onCancel}>
           Cancel
         </Button>
         <Button size="sm" disabled={!launchable} onClick={onLaunch}>

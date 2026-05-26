@@ -20,7 +20,6 @@ import { ExternalLink, Monitor, RefreshCw, Smartphone, Tablet } from "lucide-rea
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { usePortal } from "@/lib/portal-store"
-import { useOrgSettings } from "@/lib/org-settings"
 
 type Device = "desktop" | "tablet" | "mobile"
 
@@ -76,13 +75,13 @@ export function PortalLivePreview({
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const firstChangeSkip = useRef(true)
 
-  // Auto-refresh: subscribe to the parent's portal config + org
-  // settings. When ANY brand-shaped field changes, debounce 500 ms and
-  // bump the iframe key so the preview re-mounts. Same-window writers
-  // don't fire the `storage` event, so without this the iframe would
-  // only update after a manual refresh or cross-window edit.
-  const { config } = usePortal()
-  const { settings } = useOrgSettings()
+  // Auto-refresh: reload the iframe ONLY when the PUBLISHED state
+  // changes (i.e. after the user clicks "Publish changes" or restores
+  // a version). Draft edits must NOT trigger a reload — if they did,
+  // every keystroke would cause the iframe to refresh and the user
+  // would see draft content in the "Real site preview", making it look
+  // like changes go live immediately without publishing.
+  const { lastPublishedAt } = usePortal()
   useEffect(() => {
     if (!autoRefresh) return
     if (firstChangeSkip.current) {
@@ -93,14 +92,14 @@ export function PortalLivePreview({
     }
     const t = window.setTimeout(() => setReloadKey((k) => k + 1), 500)
     return () => window.clearTimeout(t)
-  }, [autoRefresh, config, settings])
+  }, [autoRefresh, lastPublishedAt])
 
   const fullUrl = `/p/${tenant}${path === "/" ? "" : path}`
-  // Cache-busting: append a unique timestamp so the browser never
-  // serves a stale copy of the portal page when the iframe reloads.
-  // The param changes every time reloadKey bumps (manual refresh or
-  // auto-refresh from config change).
-  const iframeSrc = `${fullUrl}${fullUrl.includes("?") ? "&" : "?"}_t=${reloadKey}-${Date.now()}`
+  // Cache-busting: only changes when reloadKey bumps (publish or
+  // manual refresh). MUST NOT include Date.now() — that changes on
+  // every render, causing the browser to navigate the iframe on
+  // every parent re-render → infinite reload loop.
+  const iframeSrc = `${fullUrl}${fullUrl.includes("?") ? "&" : "?"}_t=${reloadKey}`
 
   // Measure the visible width of the iframe container BEFORE first
   // paint. Using useLayoutEffect (not useEffect) ensures the

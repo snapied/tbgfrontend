@@ -39,7 +39,7 @@ import { FileUploadField } from "@/components/upload/file-upload-field"
 import type { PortalBrand } from "@/lib/portal-store"
 import { usePortal } from "@/lib/portal-store"
 import { useOrgSettings } from "@/lib/org-settings"
-import { suggestSlug, useTenant, validateSlug } from "@/lib/tenant-store"
+import { suggestSlug, useTenant, validateSlug, type Tenant } from "@/lib/tenant-store"
 import { cn } from "@/lib/utils"
 import { ThemePresetPicker } from "@/components/portal/theme-preset-picker"
 import { GoogleFontLoader } from "@/components/portal/font-loader"
@@ -322,10 +322,40 @@ function PortalBrandPageInner() {
     // dispatcher all read `currentTenant.name`. Without this mirror
     // the Brand form would update the portal display but the
     // chrome around the dashboard kept showing the old name.
-    if ("siteName" in norm && currentTenant && typeof norm.siteName === "string") {
-      const trimmed = norm.siteName.trim()
-      if (trimmed && trimmed !== currentTenant.name) {
-        updateTenant(currentTenant.id, { name: trimmed })
+    if (currentTenant) {
+      const tenantPatch: Partial<Tenant> = {}
+      if ("siteName" in norm && typeof norm.siteName === "string") {
+        const trimmed = norm.siteName.trim()
+        if (trimmed && trimmed !== currentTenant.name) {
+          tenantPatch.name = trimmed
+        }
+      }
+      
+      const newBranding = { ...currentTenant.branding }
+      let brandingChanged = false
+      if ("logoUrl" in norm && norm.logoUrl !== newBranding.logoUrl) {
+        newBranding.logoUrl = norm.logoUrl
+        brandingChanged = true
+      }
+      if ("tagline" in norm && norm.tagline !== newBranding.tagline) {
+        newBranding.tagline = norm.tagline
+        brandingChanged = true
+      }
+      if ("primaryColor" in norm && norm.primaryColor !== newBranding.primaryColor) {
+        newBranding.primaryColor = norm.primaryColor
+        brandingChanged = true
+      }
+      if ("accentColor" in norm && norm.accentColor !== newBranding.accentColor) {
+        newBranding.accentColor = norm.accentColor
+        brandingChanged = true
+      }
+
+      if (brandingChanged) {
+        tenantPatch.branding = newBranding
+      }
+
+      if (Object.keys(tenantPatch).length > 0) {
+        updateTenant(currentTenant.id, tenantPatch)
       }
     }
     markSaved()
@@ -1241,9 +1271,9 @@ function PortalBrandPageInner() {
         <div className="lg:sticky lg:top-6 lg:self-start">
           <Card>
             <CardHeader>
-              <CardTitle>Live preview</CardTitle>
+              <CardTitle>Draft preview</CardTitle>
               <CardDescription>
-                Hero, button, course card &mdash; all painted with your current brand.
+                Hero, button, course card painted with your <strong>unsaved draft</strong>. Hit <strong>Publish changes</strong> below to make this live on your public site.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -1751,12 +1781,10 @@ function firstNonEmpty(...candidates: (string | undefined)[]): string {
 //
 // This component fixes that by:
 //   1. Initialising local state from the fallback once.
-//   2. From then on, every keystroke goes into local state AND
-//      propagates upward as-is (no trim-to-undefined coercion).
-//   3. If the parent's stored value changes externally (publish
-//      restore, a different field re-seeded), we resync only when
-//      the input has lost focus — so an in-progress edit can never
-//      be clobbered.
+//   2. From then on, every keystroke stays in local state; the parent
+//      only hears about it on blur (no mid-type API calls).
+//   3. After blur, store syncs are suppressed for BLUR_LOCK_MS so the
+//      async save cannot clobber the value the user just committed.
 function LocalSyncInput({
   id,
   fallbackValue,
@@ -1764,46 +1792,55 @@ function LocalSyncInput({
   onChange,
   placeholder,
 }: {
-  id?: string
+  id?: string;
   /** Best display value when no draft exists (e.g. tenant default). */
-  fallbackValue: string
+  fallbackValue: string;
   /** Currently-saved value on the brand config, or undefined when
-   *  the user hasn't touched it. */
-  storedValue: string | undefined
-  /** Push a new value upward. Pass the raw string — do NOT coerce
-   *  empty / whitespace into undefined; the parent decides whether
-   *  to clear or store the empty string. */
-  onChange: (value: string) => void
-  placeholder?: string
+   * the user hasn't touched it. */
+  storedValue: string | undefined;
+  /** Called on blur with the latest value. */
+  onChange: (value: string) => void;
+  placeholder?: string;
 }) {
   const [value, setValue] = useState<string>(storedValue ?? fallbackValue)
   const focusedRef = useRef(false)
-  // External-resync gate: if the parent swaps the stored value while
-  // the input isn't focused, take the new value. While focused, the
-  // user owns the field — never overwrite mid-typing.
+  // Timestamp (ms) of the last blur. We ignore store updates for
+  // BLUR_LOCK_MS after a blur so the async save can't clobber the
+  // value the user just typed.
+  const blurredAtRef = useRef<number>(0)
+  const BLUR_LOCK_MS = 1500
+
+  // Sync external store changes into local state — but only when:
+  //  1. The field is not focused, and
+  //  2. It has been more than BLUR_LOCK_MS since the last blur.
   useEffect(() => {
     if (focusedRef.current) return
+    if (Date.now() - blurredAtRef.current < BLUR_LOCK_MS) return
     const next = storedValue ?? fallbackValue
-    if (next !== value) setValue(next)
+    if (next !== value) {
+      setValue(next)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storedValue, fallbackValue])
+
+  const handleFocus = () => {
+    focusedRef.current = true
+  }
+
+  const handleBlur = () => {
+    focusedRef.current = false
+    blurredAtRef.current = Date.now()
+    onChange(value)
+  }
 
   return (
     <Input
       id={id}
       value={value}
       placeholder={placeholder}
-      onFocus={() => {
-        focusedRef.current = true
-      }}
-      onBlur={() => {
-        focusedRef.current = false
-      }}
-      onChange={(e) => {
-        const v = e.target.value
-        setValue(v)
-        onChange(v)
-      }}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      onChange={(e) => setValue(e.target.value)}
     />
   )
 }

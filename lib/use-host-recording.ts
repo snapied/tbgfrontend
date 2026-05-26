@@ -74,9 +74,13 @@ export function useHostRecording({
     stopPolling()
     pollTimerRef.current = setInterval(async () => {
       try {
+        const token = window.localStorage.getItem("thebigclass.accessToken")
+        const headers: HeadersInit = {}
+        if (token) headers["Authorization"] = `Bearer ${token}`
+
         const res = await fetch(
           `${apiBase()}/api/live-sessions/${encodeURIComponent(roomId)}/state`,
-          { credentials: "include" },
+          { credentials: "include", headers },
         )
         if (!res.ok) return
         const j = await res.json()
@@ -114,12 +118,16 @@ export function useHostRecording({
     setStatus("recording")
     startedAtRef.current = Date.now()
     try {
+      const token = window.localStorage.getItem("thebigclass.accessToken")
+      const headers: HeadersInit = { "Content-Type": "application/json" }
+      if (token) headers["Authorization"] = `Bearer ${token}`
+
       const res = await fetch(
         `${apiBase()}/api/live-sessions/${encodeURIComponent(roomId)}/recording/start`,
         {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
+          headers,
           body: JSON.stringify({ notifyEmails, title }),
         },
       )
@@ -138,9 +146,13 @@ export function useHostRecording({
   const stop = useCallback(async () => {
     setStatus("uploading")
     try {
+      const token = window.localStorage.getItem("thebigclass.accessToken")
+      const headers: HeadersInit = {}
+      if (token) headers["Authorization"] = `Bearer ${token}`
+
       const res = await fetch(
         `${apiBase()}/api/live-sessions/${encodeURIComponent(roomId)}/recording/stop`,
-        { method: "POST", credentials: "include" },
+        { method: "POST", credentials: "include", headers },
       )
       if (!res.ok) {
         const body = await res.text().catch(() => "")

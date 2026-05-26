@@ -51,7 +51,14 @@ function read(sessionId: string): LivePoll | null {
   }
 }
 
-function write(sessionId: string, poll: LivePoll | null): void {
+function emitLocalChange(sessionId: string, poll: LivePoll | null) {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new CustomEvent("tbc-poll-local-change", {
+    detail: { sessionId, poll }
+  }))
+}
+
+function write(sessionId: string, poll: LivePoll | null, skipEmit = false): void {
   if (typeof window === "undefined") return
   try {
     if (poll === null) {
@@ -59,9 +66,15 @@ function write(sessionId: string, poll: LivePoll | null): void {
     } else {
       window.localStorage.setItem(POLL_KEY(sessionId), JSON.stringify(poll))
     }
+    if (!skipEmit) emitLocalChange(sessionId, poll)
   } catch {
     /* private mode — best-effort */
   }
+}
+
+export function _applyPollNetworkSync(sessionId: string, poll: LivePoll | null): void {
+  // Same as write, but skips the emit to prevent broadcast loops
+  write(sessionId, poll, true)
 }
 
 /** Host action: launch a new poll. Replaces any existing one. */

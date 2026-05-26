@@ -21,6 +21,7 @@
 
 const pullPromises = new Map<string, Promise<void>>()
 const mirrorTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const pendingWrites = new Map<string, Map<string, unknown>>()
 
 const LS_PREFIX = "thebigclass.t."
 
@@ -77,8 +78,8 @@ export function resetTenantBlobPull(slug?: string): void {
 }
 
 // Debounced server mirror. Coalesces rapid writes (e.g. a color
-// picker firing on every drag) into a single POST after 600ms of
-// quiet. The localStorage write that accompanies this is immediate
+// picker firing on every drag) into a single bulk POST after 600ms
+// of quiet. The localStorage write that accompanies this is immediate
 // either way, so the same-tab editor never feels laggy.
 export function mirrorSliceToServer(
   slug: string,
@@ -86,17 +87,30 @@ export function mirrorSliceToServer(
   value: unknown,
 ): void {
   if (typeof window === "undefined" || !slug) return
-  const bucket = `${slug}::${suffix}`
-  const existing = mirrorTimers.get(bucket)
+  
+  let tenantWrites = pendingWrites.get(slug)
+  if (!tenantWrites) {
+    tenantWrites = new Map()
+    pendingWrites.set(slug, tenantWrites)
+  }
+  tenantWrites.set(suffix, value)
+
+  const existing = mirrorTimers.get(slug)
   if (existing) clearTimeout(existing)
+  
   mirrorTimers.set(
-    bucket,
+    slug,
     setTimeout(() => {
-      mirrorTimers.delete(bucket)
-      void fetch(endpoint(slug), {
+      mirrorTimers.delete(slug)
+      const writesToFlush = pendingWrites.get(slug)
+      if (!writesToFlush) return
+      pendingWrites.delete(slug)
+      
+      const entries = Array.from(writesToFlush.entries()).map(([k, v]) => ({ key: k, value: v }))
+      void fetch(`${endpoint(slug)}/bulk`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: suffix, value }),
+        body: JSON.stringify({ entries }),
         keepalive: true,
       }).catch(() => {
         /* tolerable — local cache still has truth, next save retries */
@@ -123,3 +137,30 @@ export function persistTenantSlice(
   }
   mirrorSliceToServer(slug, suffix, value)
 }
+
+export async function flushTenantStateSync(slug: string): Promise<void> {
+  if (typeof window === "undefined" || !slug) return
+  
+  const existing = mirrorTimers.get(slug)
+  if (existing) {
+    clearTimeout(existing)
+    mirrorTimers.delete(slug)
+  }
+  
+  const writesToFlush = pendingWrites.get(slug)
+  if (!writesToFlush || writesToFlush.size === 0) return
+  pendingWrites.delete(slug)
+  
+  const entries = Array.from(writesToFlush.entries()).map(([k, v]) => ({ key: k, value: v }))
+  try {
+    await fetch(`${endpoint(slug)}/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries }),
+      keepalive: true,
+    })
+  } catch {
+    /* tolerable — offline or network failure; state is still in local storage */
+  }
+}
+

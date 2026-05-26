@@ -50,15 +50,20 @@ import { usePortal } from "@/lib/portal-store"
 import { usePlan } from "@/lib/use-plan"
 import { useConfirm } from "@/lib/use-confirm"
 import { toast } from "sonner"
+import { flushTenantStateSync } from "@/lib/tenant-state-sync"
+import { uploadDataUrl } from "@/lib/upload-asset"
 
 export function PublishBar() {
   const {
+    slug,
+    config,
     hasUnpublishedChanges,
     lastPublishedAt,
     versions,
     publishDraft,
     restoreVersion,
     deleteVersion,
+    updateConfig,
   } = usePortal()
   const { isAllowed } = usePlan()
   const confirm = useConfirm()
@@ -70,7 +75,24 @@ export function PublishBar() {
   const onPublish = async () => {
     setBusy(true)
     try {
+      // If the share card is still a base64 data URL (generated before
+      // the CDN upload flow existed), push it to R2 first so the
+      // public site serves a real CDN URL, not a bloated data string.
+      const ogImg = config.brand?.ogImage
+      if (ogImg && ogImg.startsWith("data:")) {
+        try {
+          const ogSlug = (config.brand?.siteName || "share")
+            .toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)
+          const cdnUrl = await uploadDataUrl(ogImg, `${ogSlug}-og`, "workspace")
+          updateConfig({ brand: { ...config.brand, ogImage: cdnUrl } })
+          // Give React one tick so publishDraft captures the updated config.
+          await new Promise((r) => setTimeout(r, 0))
+        } catch {
+          // Non-fatal — publish proceeds with the data URL.
+        }
+      }
       const version = publishDraft(label || undefined)
+      await flushTenantStateSync(slug)
       toast.success("Changes published.", {
         description: version.label,
       })
@@ -90,6 +112,7 @@ export function PublishBar() {
     })
     if (!ok) return
     restoreVersion(id)
+    await flushTenantStateSync(slug)
     toast.success("Restored.")
   }
 
@@ -103,6 +126,7 @@ export function PublishBar() {
     })
     if (!ok) return
     deleteVersion(id)
+    await flushTenantStateSync(slug)
     toast.success("Version removed.")
   }
 

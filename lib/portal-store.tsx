@@ -21,12 +21,14 @@ import {
   useEffect,
   useMemo,
   useState,
+  useRef,
   type ReactNode,
 } from "react"
 import { usePathname } from "next/navigation"
 import { readCurrentTenantSlug, useTenant } from "./tenant-store"
 import { reportStorageError } from "./storage-error"
 import { pushToTrash, registerRestoreHandler } from "./trash"
+import { mirrorSliceToServer } from "./tenant-state-sync"
 
 // ============================================================
 // Types
@@ -804,38 +806,11 @@ function saveJSON(slug: string, name: KeyName, value: unknown): void {
     reportStorageError(`portal.${name}`, err)
   }
   // Mirror to the server so a different browser / incognito session
-  // visiting the same tenant sees the same brand + pages. Debounced so
-  // a long editor session doesn't hammer the API per-keystroke.
-  scheduleServerMirror(slug, name, value)
+  // visiting the same tenant sees the same brand + pages. Coalesced/debounced
+  // in a single transactional bulk save to prevent database lockups.
+  mirrorSliceToServer(slug, KEY_SUFFIXES[name], value)
 }
 
-// Per-(slug,key) debounce buckets. We coalesce rapid writes (e.g. the
-// brand color picker firing on every drag) into one network call after
-// 600ms of quiet. The localStorage write above is immediate either way
-// so the same-tab UI never feels laggy.
-const mirrorTimers = new Map<string, ReturnType<typeof setTimeout>>()
-function scheduleServerMirror(slug: string, name: KeyName, value: unknown) {
-  const bucket = `${slug}::${KEY_SUFFIXES[name]}`
-  const existing = mirrorTimers.get(bucket)
-  if (existing) clearTimeout(existing)
-  mirrorTimers.set(
-    bucket,
-    setTimeout(() => {
-      mirrorTimers.delete(bucket)
-      // Fire-and-forget — server eventually catches up; if the call
-      // fails the localStorage cache still has the truth for the
-      // editing browser, and a next save retries the mirror.
-      void fetch(`/api/portal-state/${encodeURIComponent(slug)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: KEY_SUFFIXES[name], value }),
-        keepalive: true,
-      }).catch(() => {
-        /* tolerable — see comment */
-      })
-    }, 600),
-  )
-}
 
 // Pull the server-stored portal blob for this tenant and write each
 // key into localStorage. Called once on hydrate so a fresh browser /
@@ -844,6 +819,16 @@ function scheduleServerMirror(slug: string, name: KeyName, value: unknown) {
 // this browser if the server is behind.
 async function pullServerBlob(slug: string): Promise<void> {
   if (typeof window === "undefined") return
+
+  // Snapshot localStorage BEFORE the async fetch so we can detect whether
+  // the user edited a key while the network round-trip was in flight. If
+  // they did, we must not overwrite their fresh value with stale server data.
+  const preSnapshot = new Map<string, string | null>()
+  for (const name of Object.keys(KEY_SUFFIXES) as KeyName[]) {
+    const k = `thebigclass.t.${slug}.${KEY_SUFFIXES[name]}`
+    preSnapshot.set(k, window.localStorage.getItem(k))
+  }
+
   let serverState: Record<string, unknown> = {}
   let serverOk = false
   try {
@@ -875,7 +860,9 @@ async function pullServerBlob(slug: string): Promise<void> {
   //   localStorage-only → upload to server (one-shot bootstrap for the
   //                      teacher whose data lived only locally before
   //                      the server store existed)
-  //   both present     → server wins (canonical source of truth)
+  //   both present     → server wins UNLESS the local value changed
+  //                      during the fetch (user was editing while the
+  //                      server was slow — keep the fresh local edit)
   //   neither          → leave defaults
   for (const name of Object.keys(KEY_SUFFIXES) as KeyName[]) {
     const suffix = KEY_SUFFIXES[name]
@@ -883,6 +870,11 @@ async function pullServerBlob(slug: string): Promise<void> {
     const inServer = Object.prototype.hasOwnProperty.call(serverState, suffix)
     const lsRaw = window.localStorage.getItem(lsKey)
     if (inServer) {
+      // Skip overwriting if the local value changed while we were fetching
+      // (e.g. the user edited the Display Name while the server GET was in
+      // flight). Their write is fresher than anything the server can return
+      // from this request — the next autosave/publish will push it up.
+      if (lsRaw !== preSnapshot.get(lsKey)) continue
       try {
         window.localStorage.setItem(lsKey, JSON.stringify(serverState[suffix]))
       } catch {
@@ -950,6 +942,7 @@ export interface PortalVersion {
 }
 
 interface PortalContextValue {
+  slug: string
   config: PortalConfig
   updateConfig: (patch: Partial<PortalConfig>) => void
   resetConfig: () => void
@@ -1035,6 +1028,22 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // `storage` event fires from another window/iframe on the same
   // origin — so the dashboard editing the brand and the public-portal
   // iframe showing the preview stay in sync without a page reload.
+  // We must not trigger saveJSON immediately on hydrate, because that
+  // would echo the server's snapshot straight back over the wire
+  // (and overwrite the DB if it happened in Incognito). We skip
+  // saving during the hydration window.
+  const isHydrating = useRef(true)
+  useEffect(() => {
+    if (hydrated) {
+      // Small timeout ensures the synchronous React render cycle
+      // that flips hydrated=true completes without triggering effects.
+      const timer = setTimeout(() => {
+        isHydrating.current = false
+      }, 50)
+      return () => clearTimeout(timer)
+    }
+  }, [hydrated])
+
   const hydrate = useCallback(() => {
     const loaded = loadJSON<PortalConfig>(slug, "config", DEFAULT_PORTAL_CONFIG)
     // One-time language reset. Earlier dev iterations let users set
@@ -1096,18 +1105,21 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     setPosts(draftPosts)
     setLeads(loadJSON<PortalLead[]>(slug, "leads", []))
 
-    // Live snapshot — fall back to draft on first hydrate so existing
-    // tenants keep serving their current content until the next publish.
+    // Live snapshot — only the explicitly published version is used here.
+    // We no longer fall back to draft so that edits in the dashboard do
+    // NOT appear on the public site until the user clicks "Publish changes".
+    // Before a first publish the public site shows the default template;
+    // after publish it shows the saved live snapshot.
     const liveCfgRaw = loadJSON<PortalConfig | null>(slug, "liveConfig", null)
-    setLiveConfig(liveCfgRaw ?? draftCfg)
+    setLiveConfig(liveCfgRaw ?? { ...DEFAULT_PORTAL_CONFIG })
     const livePagesRaw = loadJSON<PortalPage[] | null>(slug, "livePages", null)
-    setLivePages(livePagesRaw ?? draftPages)
+    setLivePages(livePagesRaw ?? defaultPages())
     const liveFacRaw = loadJSON<PortalFacultyMember[] | null>(slug, "liveFaculty", null)
-    setLiveFaculty(liveFacRaw ?? draftFaculty)
+    setLiveFaculty(liveFacRaw ?? [])
     const liveTestRaw = loadJSON<PortalTestimonial[] | null>(slug, "liveTestimonials", null)
-    setLiveTestimonials(liveTestRaw ?? draftTestimonials)
+    setLiveTestimonials(liveTestRaw ?? [])
     const livePostsRaw = loadJSON<PortalBlogPost[] | null>(slug, "livePosts", null)
-    setLivePosts(livePostsRaw ?? draftPosts)
+    setLivePosts(livePostsRaw ?? [])
 
     // Versions, trimmed to the last 90 days. Anything older is dropped
     // here so a tenant returning after a long absence doesn't carry
@@ -1195,27 +1207,50 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // mutation method (not from the save effects) so that the initial
   // hydrate flush doesn't falsely mark the workspace as dirty.
   const stampEdited = useCallback(() => {
+    console.log("[PortalStore] stampEdited CALLED. hydrated:", hydrated, "slug:", slug)
     if (!hydrated) return
     const now = new Date().toISOString()
+    console.log("[PortalStore] stampEdited setting lastEditedAt to:", now)
     setLastEditedAt(now)
     saveJSON(slug, "lastEditedAt", now)
   }, [hydrated, slug])
 
-  useEffect(() => { if (hydrated) saveJSON(slug, "config", config) }, [slug, config, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "pages", pages) }, [slug, pages, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "faculty", faculty) }, [slug, faculty, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "testimonials", testimonials) }, [slug, testimonials, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "posts", posts) }, [slug, posts, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "leads", leads) }, [slug, leads, hydrated])
-
-  // Persist live snapshot when publish/restore mutates it.
-  useEffect(() => { if (hydrated) saveJSON(slug, "liveConfig", liveConfig) }, [slug, liveConfig, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "livePages", livePages) }, [slug, livePages, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "liveFaculty", liveFaculty) }, [slug, liveFaculty, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "liveTestimonials", liveTestimonials) }, [slug, liveTestimonials, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "livePosts", livePosts) }, [slug, livePosts, hydrated])
-  useEffect(() => { if (hydrated) saveJSON(slug, "versions", versions) }, [slug, versions, hydrated])
-  useEffect(() => { if (hydrated && lastPublishedAt) saveJSON(slug, "lastPublishedAt", lastPublishedAt) }, [slug, lastPublishedAt, hydrated])
+  // Persist draft state to localStorage + queue a debounced server mirror.
+  // Guard: skip the write when the serialized value already matches what's
+  // in localStorage — this prevents hydrate() from triggering redundant
+  // saveJSON calls and server POSTs. (The isHydrating.current guard was
+  // unreliable because React 18 batches state updates asynchronously, so
+  // effects always ran after isHydrating was reset to false.)
+  useEffect(() => {
+    if (typeof window === "undefined" || !slug) return
+    const next = JSON.stringify(config)
+    if (window.localStorage.getItem(tk(slug, "config")) !== next) saveJSON(slug, "config", config)
+  }, [slug, config])
+  useEffect(() => {
+    if (typeof window === "undefined" || !slug) return
+    const next = JSON.stringify(pages)
+    if (window.localStorage.getItem(tk(slug, "pages")) !== next) saveJSON(slug, "pages", pages)
+  }, [slug, pages])
+  useEffect(() => {
+    if (typeof window === "undefined" || !slug) return
+    const next = JSON.stringify(faculty)
+    if (window.localStorage.getItem(tk(slug, "faculty")) !== next) saveJSON(slug, "faculty", faculty)
+  }, [slug, faculty])
+  useEffect(() => {
+    if (typeof window === "undefined" || !slug) return
+    const next = JSON.stringify(testimonials)
+    if (window.localStorage.getItem(tk(slug, "testimonials")) !== next) saveJSON(slug, "testimonials", testimonials)
+  }, [slug, testimonials])
+  useEffect(() => {
+    if (typeof window === "undefined" || !slug) return
+    const next = JSON.stringify(posts)
+    if (window.localStorage.getItem(tk(slug, "posts")) !== next) saveJSON(slug, "posts", posts)
+  }, [slug, posts])
+  useEffect(() => {
+    if (typeof window === "undefined" || !slug) return
+    const next = JSON.stringify(leads)
+    if (window.localStorage.getItem(tk(slug, "leads")) !== next) saveJSON(slug, "leads", leads)
+  }, [slug, leads])
 
   // ────────────────────────────────────────────────────────────────
   // Publishing.
@@ -1245,53 +1280,87 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       takenAt: now,
       snapshot,
     }
+
+    // Synchronously write live configurations to local storage & queue them for immediate bulk sync
+    saveJSON(slug, "liveConfig", snapshot.config)
+    saveJSON(slug, "livePages", snapshot.pages)
+    saveJSON(slug, "liveFaculty", snapshot.faculty)
+    saveJSON(slug, "liveTestimonials", snapshot.testimonials)
+    saveJSON(slug, "livePosts", snapshot.posts)
+
+    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000
+    const nextVersions = [version, ...versions].filter((v) => new Date(v.takenAt).getTime() >= cutoff)
+    saveJSON(slug, "versions", nextVersions)
+    saveJSON(slug, "lastPublishedAt", now)
+
+    // Update React states for reactive UI rendering
     setLiveConfig(snapshot.config)
     setLivePages(snapshot.pages)
     setLiveFaculty(snapshot.faculty)
     setLiveTestimonials(snapshot.testimonials)
     setLivePosts(snapshot.posts)
-    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000
-    setVersions((prev) =>
-      [version, ...prev].filter((v) => new Date(v.takenAt).getTime() >= cutoff),
-    )
+    setVersions(nextVersions)
     setLastPublishedAt(now)
+
     return version
-  }, [config, pages, faculty, testimonials, posts])
+  }, [slug, config, pages, faculty, testimonials, posts, versions])
 
   const restoreVersion = useCallback((id: string) => {
-    setVersions((prev) => {
-      const v = prev.find((x) => x.id === id)
-      if (!v) return prev
-      // Apply to BOTH draft and live so the public site updates
-      // immediately and the editor opens on the same state.
-      setConfig(v.snapshot.config)
-      setPages(v.snapshot.pages)
-      setFaculty(v.snapshot.faculty)
-      setTestimonials(v.snapshot.testimonials)
-      setPosts(v.snapshot.posts)
-      setLiveConfig(v.snapshot.config)
-      setLivePages(v.snapshot.pages)
-      setLiveFaculty(v.snapshot.faculty)
-      setLiveTestimonials(v.snapshot.testimonials)
-      setLivePosts(v.snapshot.posts)
-      const now = new Date().toISOString()
-      setLastPublishedAt(now)
-      setLastEditedAt(now)
-      return prev
-    })
-  }, [])
+    const v = versions.find((x) => x.id === id)
+    if (!v) return
+
+    const now = new Date().toISOString()
+
+    // Synchronously write draft configurations to local storage & queue them for sync
+    saveJSON(slug, "config", v.snapshot.config)
+    saveJSON(slug, "pages", v.snapshot.pages)
+    saveJSON(slug, "faculty", v.snapshot.faculty)
+    saveJSON(slug, "testimonials", v.snapshot.testimonials)
+    saveJSON(slug, "posts", v.snapshot.posts)
+    saveJSON(slug, "lastEditedAt", now)
+
+    // Synchronously write live configurations to local storage & queue them for sync
+    saveJSON(slug, "liveConfig", v.snapshot.config)
+    saveJSON(slug, "livePages", v.snapshot.pages)
+    saveJSON(slug, "liveFaculty", v.snapshot.faculty)
+    saveJSON(slug, "liveTestimonials", v.snapshot.testimonials)
+    saveJSON(slug, "livePosts", v.snapshot.posts)
+    saveJSON(slug, "lastPublishedAt", now)
+
+    // Update React states for reactive UI rendering
+    setConfig(v.snapshot.config)
+    setPages(v.snapshot.pages)
+    setFaculty(v.snapshot.faculty)
+    setTestimonials(v.snapshot.testimonials)
+    setPosts(v.snapshot.posts)
+    setLiveConfig(v.snapshot.config)
+    setLivePages(v.snapshot.pages)
+    setLiveFaculty(v.snapshot.faculty)
+    setLiveTestimonials(v.snapshot.testimonials)
+    setLivePosts(v.snapshot.posts)
+    setLastPublishedAt(now)
+    setLastEditedAt(now)
+  }, [slug, versions])
 
   const deleteVersion = useCallback((id: string) => {
-    setVersions((prev) => prev.filter((v) => v.id !== id))
-  }, [])
+    const nextVersions = versions.filter((v) => v.id !== id)
+    saveJSON(slug, "versions", nextVersions)
+    setVersions(nextVersions)
+  }, [slug, versions])
 
-  // True when the editor has unsaved changes the public site hasn't
-  // seen yet. No deep compare — just a timestamp race.
   const hasUnpublishedChanges = useMemo(() => {
-    if (!lastEditedAt) return false
-    if (!lastPublishedAt) return true
-    return new Date(lastEditedAt).getTime() > new Date(lastPublishedAt).getTime()
-  }, [lastEditedAt, lastPublishedAt])
+    // Compare draft and live snapshots to determine if there are unpublished changes.
+    // Simple shallow checks for config and pages length; deep compare can be added if needed.
+    if (!liveConfig || !livePages) return false;
+    const configChanged = JSON.stringify(config) !== JSON.stringify(liveConfig);
+    const pagesChanged = JSON.stringify(pages) !== JSON.stringify(livePages);
+    const facultyChanged = JSON.stringify(faculty) !== JSON.stringify(liveFaculty);
+    const testimonialsChanged = JSON.stringify(testimonials) !== JSON.stringify(liveTestimonials);
+    const postsChanged = JSON.stringify(posts) !== JSON.stringify(livePosts);
+    const anyChanged = configChanged || pagesChanged || facultyChanged || testimonialsChanged || postsChanged;
+    console.log("[PortalStore] hasUnpublishedChanges computed:", anyChanged);
+    return anyChanged;
+  }, [config, pages, faculty, testimonials, posts, liveConfig, livePages, liveFaculty, liveTestimonials, livePosts]);
 
   const updateConfig = useCallback((patch: Partial<PortalConfig>) => {
     setConfig((prev) => ({ ...prev, ...patch }))
@@ -1556,6 +1625,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<PortalContextValue>(
     () => ({
+      slug,
       config: viewConfig, updateConfig, resetConfig,
       pages: viewPages, getPage: getPageView, upsertPage, deletePage,
       faculty: viewFaculty, getFacultyByHandle: getFacultyByHandleView, upsertFaculty, deleteFaculty,
@@ -1568,6 +1638,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       publishDraft, restoreVersion, deleteVersion,
     }),
     [
+      slug,
       viewConfig, updateConfig, resetConfig,
       viewPages, getPageView, upsertPage, deletePage,
       viewFaculty, getFacultyByHandleView, upsertFaculty, deleteFaculty,

@@ -51,10 +51,12 @@ import {
   usePinnedTracks,
   useLayoutContext,
   isTrackReference,
+  useDataChannel,
 } from "@livekit/components-react"
 import { RoomEvent, Track, VideoPresets, AudioPresets } from "livekit-client"
-import { useRaisedHands } from "@/lib/raised-hands"
-import { Hand } from "lucide-react"
+import { useRaisedHands, readRaisedHands, _applyNetworkSync } from "@/lib/raised-hands"
+import { useLivePoll, _applyPollNetworkSync } from "@/lib/live-poll"
+import { Hand, Monitor } from "lucide-react"
 import {
   ComprehensionCheckHost,
   ComprehensionCheckStudent,
@@ -238,6 +240,8 @@ export function LiveKitRoom({
         )}
         <RoomAudioRenderer />
         <LiveCaptions speakerName={user.name} />
+        {sessionId && <RaisedHandsNetworkSync sessionId={sessionId} />}
+        {sessionId && <LivePollNetworkSync sessionId={sessionId} />}
       </LKRoom>
     </div>
   )
@@ -383,6 +387,8 @@ function VideoStage({
   sessionId?: string
   tracks: ReturnType<typeof useTracks>
 }) {
+  const { localParticipant } = useLocalParticipant()
+
   // Separate screen-share tracks from camera tracks.
   const screenShareTracks = tracks.filter(
     (t) => t.source === Track.Source.ScreenShare,
@@ -395,21 +401,35 @@ function VideoStage({
   const focusTrack = screenShareTracks[0]
 
   if (focusTrack && isTrackReference(focusTrack)) {
+    const isLocalScreenShare = focusTrack.participant.identity === localParticipant.identity
     // ── Focus mode: screen share centered, cameras in sidebar ──
     return (
       <div
         className="lk-focus-layout-wrapper"
         style={{
           display: "flex",
+          width: "100%",
           height: "100%",
           gap: 4,
         }}
       >
         {/* Screen share — fills the remaining space */}
-        <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
-          <FocusLayoutContainer style={{ height: "100%" }}>
-            <FocusLayout trackRef={focusTrack} />
-          </FocusLayoutContainer>
+        <div style={{ flex: 1, minWidth: 0, position: "relative", width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          {isLocalScreenShare ? (
+            <div className="flex h-full w-full flex-col items-center justify-center gap-4 rounded-lg bg-black/60 border border-white/5 text-white/80">
+              <div className="rounded-full bg-white/10 p-4">
+                <Monitor className="h-8 w-8 text-blue-400" />
+              </div>
+              <div className="text-center">
+                <h3 className="text-lg font-medium text-white">You are sharing your screen</h3>
+                <p className="mt-1 text-sm">To avoid the infinite mirror effect, your screen is hidden from you.</p>
+              </div>
+            </div>
+          ) : (
+            <FocusLayoutContainer style={{ height: "100%", width: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <FocusLayout trackRef={focusTrack} />
+            </FocusLayoutContainer>
+          )}
         </div>
 
         {/* Camera sidebar — vertical strip on the right */}
@@ -468,18 +488,26 @@ function VideoStage({
   )
 }
 
-// Wrapper rendered inside GridLayout. GridLayout provides the
-// TrackRefContext for each cell automatically, so
-// `useParticipantContext()` is valid here. We use it to overlay
-// the raised-hand badge and the active-speaker glow.
-function ParticipantTileWithSpeaker({ sessionId }: { sessionId?: string }) {
-  const participant = useParticipantContext()
+// Wrapper rendered inside GridLayout. GridLayout provides a
+// `trackRef` prop to each child automatically. We use this to read
+// `isSpeaking` for the active-speaker glow, and pass it down to
+// ParticipantTile so it can establish the ParticipantContext for
+// the raised-hand badge.
+function ParticipantTileWithSpeaker({
+  sessionId,
+  trackRef,
+}: {
+  sessionId?: string
+  trackRef?: ReturnType<typeof useTracks>[0]
+}) {
+  const isSpeaking = trackRef?.participant?.isSpeaking ?? false
+
   return (
     <div
       style={{ position: "relative", height: "100%" }}
-      className={participant.isSpeaking ? "lk-speaking" : ""}
+      className={isSpeaking ? "lk-speaking" : ""}
     >
-      <ParticipantTile>
+      <ParticipantTile trackRef={trackRef}>
         {sessionId && <RaisedHandBadge sessionId={sessionId} />}
       </ParticipantTile>
     </div>
@@ -844,5 +872,110 @@ function ChatTranscriptRecorder({ sessionId }: { sessionId: string }) {
       /* quota exceeded — drop silently; the recording itself is the source of truth */
     }
   }, [sessionId, chatMessages])
+  return null
+}
+
+function RaisedHandsNetworkSync({ sessionId }: { sessionId: string }) {
+  const { localParticipant } = useLocalParticipant()
+
+  const { send } = useDataChannel("raised-hands", (msg) => {
+    try {
+      const data = JSON.parse(new TextDecoder().decode(msg.payload))
+      // Ignore our own broadcast unless it's a SYNC_REQUEST from someone else
+      if (data.userId === localParticipant.identity && data.type !== "SYNC_REQUEST") return
+      
+      if (data.type === "SYNC_REQUEST") {
+        // Someone joined late and asked for current hands.
+        // If our hand is currently raised, we broadcast it so they know.
+        const currentHands = readRaisedHands(sessionId)
+        const mine = currentHands.find((h) => h.userId === localParticipant.identity)
+        if (mine) {
+          send(new TextEncoder().encode(JSON.stringify({
+            type: "RAISE",
+            user: { id: mine.userId, name: mine.name },
+            visibility: mine.visibility,
+            raisedAt: mine.raisedAt,
+            userId: mine.userId,
+            sessionId
+          })), { reliable: true })
+        }
+      } else {
+        // Someone else's hand changed. Apply to local storage without loop.
+        _applyNetworkSync(sessionId, data)
+      }
+    } catch {}
+  })
+
+  // Listen for local changes triggered by OUR actions, and broadcast them
+  useEffect(() => {
+    if (!sessionId || !localParticipant) return
+    const onLocalChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail.sessionId !== sessionId) return
+      // Add the caller's ID so receivers can ignore echo
+      detail.senderId = localParticipant.identity
+      send(new TextEncoder().encode(JSON.stringify(detail)), { reliable: true })
+    }
+    window.addEventListener("tbc-raised-hands-local-change", onLocalChange)
+    return () => window.removeEventListener("tbc-raised-hands-local-change", onLocalChange)
+  }, [sessionId, send, localParticipant])
+
+  // On mount, broadcast a SYNC_REQUEST so others tell us their hands
+  useEffect(() => {
+    if (!sessionId || !localParticipant) return
+    const timer = setTimeout(() => {
+      send(new TextEncoder().encode(JSON.stringify({ type: "SYNC_REQUEST", sessionId, userId: localParticipant.identity })), { reliable: true })
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [sessionId, send, localParticipant])
+
+  return null
+}
+
+function LivePollNetworkSync({ sessionId }: { sessionId: string }) {
+  const { localParticipant } = useLocalParticipant()
+  const currentPoll = useLivePoll(sessionId)
+
+  const { send } = useDataChannel("live-poll", (msg) => {
+    try {
+      const data = JSON.parse(new TextDecoder().decode(msg.payload))
+      if (data.senderId === localParticipant.identity && data.type !== "POLL_SYNC_REQUEST") return
+      
+      if (data.type === "POLL_SYNC_REQUEST") {
+        if (currentPoll) {
+          send(new TextEncoder().encode(JSON.stringify({
+            sessionId,
+            poll: currentPoll,
+            senderId: localParticipant.identity
+          })), { reliable: true })
+        }
+      } else {
+        _applyPollNetworkSync(sessionId, data.poll)
+      }
+    } catch {}
+  })
+
+  // Listen for local changes
+  useEffect(() => {
+    if (!sessionId || !localParticipant) return
+    const onLocalChange = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail.sessionId !== sessionId) return
+      detail.senderId = localParticipant.identity
+      send(new TextEncoder().encode(JSON.stringify(detail)), { reliable: true })
+    }
+    window.addEventListener("tbc-poll-local-change", onLocalChange)
+    return () => window.removeEventListener("tbc-poll-local-change", onLocalChange)
+  }, [sessionId, send, localParticipant])
+
+  // Sync request on mount
+  useEffect(() => {
+    if (!sessionId || !localParticipant) return
+    const timer = setTimeout(() => {
+      send(new TextEncoder().encode(JSON.stringify({ type: "POLL_SYNC_REQUEST", sessionId, senderId: localParticipant.identity })), { reliable: true })
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [sessionId, send, localParticipant])
+
   return null
 }

@@ -494,6 +494,9 @@ div[role="dialog"] {
   max-height: 600px !important;
   overflow: auto !important;
 }
+.custom_accent_button {
+  background-color: var(--accent) !important;
+}
 .p-relative {
   position: relative !important;
 }
@@ -531,4 +534,37 @@ p.truncate[title] {
 .lk-focus-layout-wrapper .lk-focus-layout {
   border-radius: 8px;
   overflow: hidden;
+  width: 100% !important;
+    height: 100% !important;
+    display: flex !important;
+  }
+  
+  .lk-focus-layout-wrapper .lk-focus-layout>* {
+    width: 100% !important;
+    height: 100% !important;
+    flex: 1 !important;
+  }
+  
+  /* Force the screen share video element to expand fully. 
+       LiveKit adaptive streaming requests resolution based on element 
+       size, so making this 100% forces it to load in HD. */
+  .lk-focus-layout-wrapper .lk-participant-media-video {
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: contain !important;
+  }
+  
+  /* Strict Full Screen rules for LiveKit video */
+  :fullscreen,
+  :fullscreen .lk-participant-tile,
+  :fullscreen .lk-focus-layout,
+  :fullscreen video.lk-participant-media-video {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: contain !important;
+    background-color: black !important;
 }

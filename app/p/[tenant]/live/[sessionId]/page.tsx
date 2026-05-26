@@ -1122,6 +1122,7 @@ function InClassShell({
               name: nameState.displayName || "Student",
             }}
             isHost={false}
+            sessionId={session.id}
             onLeft={() => setHasLeft(true)}
             className="h-full w-full rounded-xl overflow-hidden border border-border/60"
           >
