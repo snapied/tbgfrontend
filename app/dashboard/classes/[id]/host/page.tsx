@@ -28,6 +28,7 @@ import {
   Circle,
   Square,
   StopCircle,
+  Users,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ import { useLMS, type LiveSession } from "@/lib/lms-store"
 import { useConfirm } from "@/lib/use-confirm"
 import { toast } from "sonner"
 import { LiveKitRoom, LiveKitVideoUI } from "@/components/classes/livekit-room"
+import { RosterPanel } from "@/components/classes/roster-panel"
 import { RecordingPlayerDialog } from "@/components/classes/recording-player-dialog"
 import { apiBase, canonicalRoomCode } from "@/lib/jitsi"
 import { WhiteboardCanvas } from "@/components/whiteboard/whiteboard-canvas"
@@ -710,10 +712,12 @@ function LiveHostShell({
   const [agendaOpen, setAgendaOpen] = useState(false)
   const [pollOpen, setPollOpen] = useState(false)
   const [handsOpen, setHandsOpen] = useState(false)
-  const openBreakouts = () => { setBreakoutsOpen(true); setAgendaOpen(false); setPollOpen(false); setHandsOpen(false) }
-  const openAgenda = () => { setAgendaOpen(true); setBreakoutsOpen(false); setPollOpen(false); setHandsOpen(false) }
-  const openPoll = () => { setPollOpen(true); setBreakoutsOpen(false); setAgendaOpen(false); setHandsOpen(false) }
-  const openHands = () => { setHandsOpen(true); setBreakoutsOpen(false); setAgendaOpen(false); setPollOpen(false) }
+  const [rosterOpen, setRosterOpen] = useState(false)
+  const openBreakouts = () => { setBreakoutsOpen(true); setAgendaOpen(false); setPollOpen(false); setHandsOpen(false); setRosterOpen(false) }
+  const openAgenda = () => { setAgendaOpen(true); setBreakoutsOpen(false); setPollOpen(false); setHandsOpen(false); setRosterOpen(false) }
+  const openPoll = () => { setPollOpen(true); setBreakoutsOpen(false); setAgendaOpen(false); setHandsOpen(false); setRosterOpen(false) }
+  const openHands = () => { setHandsOpen(true); setBreakoutsOpen(false); setAgendaOpen(false); setPollOpen(false); setRosterOpen(false) }
+  const openRoster = () => { setRosterOpen(true); setBreakoutsOpen(false); setAgendaOpen(false); setPollOpen(false); setHandsOpen(false) }
   // Live count for the Hands button badge. Drives the visual
   // urgency cue — the button flips primary and pulses when at
   // least one hand is up.
@@ -736,13 +740,15 @@ function LiveHostShell({
     if (after <= before) return // no new hand
     if (handsOpen) return // already viewing — no-op
     // Snapshot which panel (if any) was open before the auto-switch.
-    const wasOpen: "agenda" | "poll" | "breakouts" | null = agendaOpen
+    const wasOpen: "agenda" | "poll" | "breakouts" | "roster" | null = agendaOpen
       ? "agenda"
       : pollOpen
         ? "poll"
         : breakoutsOpen
           ? "breakouts"
-          : null
+          : rosterOpen
+            ? "roster"
+            : null
     openHands()
     if (wasOpen == null) return // nothing to restore to
     if (restorePanelTimerRef.current != null) {
@@ -752,6 +758,7 @@ function LiveHostShell({
       if (wasOpen === "agenda") openAgenda()
       else if (wasOpen === "poll") openPoll()
       else if (wasOpen === "breakouts") openBreakouts()
+      else if (wasOpen === "roster") openRoster()
       restorePanelTimerRef.current = null
     }, 4000)
     return () => {
@@ -857,6 +864,17 @@ function LiveHostShell({
           >
             <Layers className="h-3.5 w-3.5" />
             Breakouts
+          </Button>
+          <Button
+            size="sm"
+            variant={rosterOpen ? "default" : "outline"}
+            onClick={() => rosterOpen ? setRosterOpen(false) : openRoster()}
+            className="hidden gap-1 sm:inline-flex"
+            aria-pressed={rosterOpen}
+            aria-label="Toggle roster panel"
+          >
+            <Users className="h-3.5 w-3.5" />
+            Roster
           </Button>
           {/* Agenda toggle — mirrors the breakouts pattern. Shows
               a per-item ✓ / ⏭ checklist the host marks during class.
@@ -1081,6 +1099,11 @@ function LiveHostShell({
             mobile (the bottom-bar's Tools tab handles it there).
             We render the panel only when open + on sm+ so the
             LiveKit grid keeps its full width during normal flow. */}
+        {rosterOpen && (
+          <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-0 sm:block">
+            <RosterPanel onClose={() => setRosterOpen(false)} />
+          </aside>
+        )}
         {breakoutsOpen && (
           <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-border bg-card p-3 sm:block">
             <BreakoutRoomsPanel

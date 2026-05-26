@@ -5,8 +5,9 @@
 // announcement bar, popups, and footer. Each child page focuses on its
 // section content — chrome lives here.
 
-import { use, useMemo } from "react"
+import { use, useEffect, useMemo, useState } from "react"
 import { usePathname } from "next/navigation"
+import { fetchOrgBySlug, type PublicOrg } from "@/lib/org-public-client"
 import { PortalThemeProvider } from "@/components/portal/portal-theme-provider"
 import { PortalSiteHeader } from "@/components/portal/site-header"
 import { PortalSiteFooter } from "@/components/portal/site-footer"
@@ -65,8 +66,40 @@ export default function PortalLayoutClient({
   // persists "" when a field is cleared, and ?? would let that win
   // over the onboarding values.
   const tenantBranding = currentTenant?.branding ?? {}
-  const firstNonEmpty = (...xs: (string | undefined)[]) =>
-    xs.find((x) => x && x.trim())
+
+  // Server-side org fallback. For visitors with no tenant data in
+  // localStorage (incognito, fresh device, share-link clicks), the
+  // tenant store has `currentTenant = null` and the fallback chain
+  // would dead-end at "Customer portal" — visibly wrong against
+  // what the logged-in teacher sees. Fetch the workspace's actual
+  // name/logo from the backend once on mount so the public portal
+  // matches the dashboard's branding even on a never-visited browser.
+  const [publicOrg, setPublicOrg] = useState<PublicOrg | null>(null)
+  useEffect(() => {
+    if (currentTenant?.name) return // already have a name source
+    let cancelled = false
+    void fetchOrgBySlug(tenant).then((org) => {
+      if (!cancelled) setPublicOrg(org)
+    })
+    return () => { cancelled = true }
+  }, [tenant, currentTenant?.name])
+
+  // Title-case the URL slug as the absolute-last brand fallback. Even
+  // if the backend is unreachable, "gaurav" → "Gaurav" reads better
+  // than the platform default "Customer portal" string. Capitalises
+  // each hyphen-separated word so "renu-rawat" → "Renu Rawat".
+  const slugDerivedName = useMemo(
+    () =>
+      tenant
+        .split("-")
+        .filter(Boolean)
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" "),
+    [tenant],
+  )
+
+  const firstNonEmpty = (...xs: (string | undefined | null)[]) =>
+    xs.find((x) => typeof x === "string" && x.trim()) ?? undefined
   // Important: spread `config.brand` FIRST so fields not in the
   // fallback chain (headerLayout, footerLayout, customFonts, …) survive.
   // The earlier version rebuilt the object key-by-key and silently
@@ -94,29 +127,46 @@ export default function PortalLayoutClient({
       ...config,
       brand: {
         ...liveBrand,
+        // Fallback chain for the brand identity on the PUBLIC portal:
+        //   1. liveBrand.<field>     — set in the portal brand editor
+        //   2. tenantBranding.<field> — set at signup, only in local
+        //      tenant store (won't exist in incognito)
+        //   3. currentTenant.name    — local tenant store
+        //   4. publicOrg.name        — server-fetched org by slug,
+        //      bridges the gap for fresh-browser visitors
+        //   5. slugDerivedName       — last-ditch title-cased slug
+        // TenantBranding has no `siteName` — the workspace's name
+        // lives directly on `currentTenant.name`. publicOrg fills the
+        // gap for incognito visitors who don't have `currentTenant`.
         siteName: firstNonEmpty(
           liveBrand.siteName,
           currentTenant?.name,
+          publicOrg?.name,
+          slugDerivedName,
         ),
         tagline: firstNonEmpty(
           liveBrand.tagline,
           tenantBranding.tagline,
+          publicOrg?.brand?.tagline,
         ),
         logoUrl: firstNonEmpty(
           liveBrand.logoUrl,
           tenantBranding.logoUrl,
+          publicOrg?.logoUrl,
         ),
         primaryColor: firstNonEmpty(
           liveBrand.primaryColor,
           tenantBranding.primaryColor,
+          publicOrg?.brand?.primaryColor,
         ),
         accentColor: firstNonEmpty(
           liveBrand.accentColor,
           tenantBranding.accentColor,
+          publicOrg?.brand?.accentColor,
         ),
       },
     }
-  }, [config, tenantBranding, currentTenant?.name])
+  }, [config, tenantBranding, currentTenant?.name, publicOrg, slugDerivedName])
 
   // Default tenant-level SEO. Every tenant page inherits these values
   // so the browser tab / share preview reads as the tenant's site,
@@ -124,7 +174,12 @@ export default function PortalLayoutClient({
   // details, etc.) mount their own <DynamicMeta /> with a more
   // specific title/description and the most-recently-mounted instance
   // wins — without losing the tenant defaults on cleanup.
-  const brandName = effectiveConfig.brand.siteName || currentTenant?.name || "Customer portal"
+  // `effectiveConfig.brand.siteName` already walks the full fallback
+  // chain (liveBrand → tenantBranding → currentTenant → publicOrg →
+  // slugDerivedName), so it is always a non-empty string. Keep the
+  // "Customer portal" tail only as a safety net for any future
+  // refactor that drops siteName from the chain.
+  const brandName = effectiveConfig.brand.siteName || slugDerivedName || "Customer portal"
   const brandTagline = effectiveConfig.brand.tagline
   const brandLogo = effectiveConfig.brand.logoUrl
   // Share image preference order: explicit ogImage (auto-generated

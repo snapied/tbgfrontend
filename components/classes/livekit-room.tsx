@@ -44,8 +44,12 @@ import {
   useRoomContext,
   useChat,
   useLocalParticipant,
+  FocusLayoutContainer,
+  useParticipantContext,
 } from "@livekit/components-react"
 import { RoomEvent, Track, VideoPresets } from "livekit-client"
+import { useRaisedHands } from "@/lib/raised-hands"
+import { Hand } from "lucide-react"
 import {
   ComprehensionCheckHost,
   ComprehensionCheckStudent,
@@ -256,6 +260,31 @@ export function LiveKitVideoUI({
     { onlySubscribed: false },
   )
 
+  const room = useRoomContext()
+  const { localParticipant } = useLocalParticipant()
+
+  // Listen for MUTE commands from the host via DataChannel
+  useEffect(() => {
+    if (!room) return
+    const handleData = (payload: Uint8Array) => {
+      try {
+        const data = JSON.parse(new TextDecoder().decode(payload))
+        const isMuteCommand = data.type === "MUTE_ALL" || (data.type === "MUTE_USER" && data.userId === localParticipant?.identity)
+        
+        // If we are a student and a mute command targets us, turn off the mic
+        if (!isHost && isMuteCommand && room.localParticipant) {
+          room.localParticipant.setMicrophoneEnabled(false)
+        }
+      } catch (err) {
+        // ignore JSON parse errors from other data messages
+      }
+    }
+    room.on(RoomEvent.DataReceived, handleData)
+    return () => {
+      room.off(RoomEvent.DataReceived, handleData)
+    }
+  }, [room, isHost, localParticipant?.identity])
+
   return (
     // Wrap the whole UI subtree in LayoutContextProvider so the
     // ControlBar (and chat sub-panel) can read pinned/focused-tile
@@ -296,9 +325,11 @@ export function LiveKitVideoUI({
           <ComprehensionCheckMount sessionId={sessionId} isHost={isHost} />
         )}
         {tracks.length > 0 ? (
-          <GridLayout tracks={tracks} style={{ height: "100%" }}>
-            <ParticipantTile />
-          </GridLayout>
+          <FocusLayoutContainer style={{ height: "100%" }}>
+            <ParticipantTile>
+              {sessionId && <RaisedHandBadge sessionId={sessionId} />}
+            </ParticipantTile>
+          </FocusLayoutContainer>
         ) : (
           <div
             style={{
@@ -324,6 +355,19 @@ export function LiveKitVideoUI({
         variation="minimal"
       />
     </LayoutContextProvider>
+  )
+}
+
+function RaisedHandBadge({ sessionId }: { sessionId: string }) {
+  const participant = useParticipantContext()
+  const raisedHands = useRaisedHands(sessionId)
+  const isRaised = raisedHands.some((h) => h.userId === participant.identity)
+
+  if (!isRaised) return null
+  return (
+    <div className="absolute left-2 top-2 z-10 rounded-full bg-blue-500 p-1.5 text-white shadow-md animate-bounce">
+      <Hand className="h-4 w-4" />
+    </div>
   )
 }
 

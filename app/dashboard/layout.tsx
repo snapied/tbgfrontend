@@ -6,6 +6,7 @@ import { StudentRoleGuard } from "@/components/dashboard/student-role-guard"
 import { DashboardAuthGate } from "@/components/dashboard/dashboard-auth-gate"
 import { ReminderPoller } from "@/components/dashboard/reminder-poller"
 import { TokenRefresher } from "@/components/dashboard/token-refresher"
+import { TenantBrandSyncer } from "@/components/dashboard/tenant-brand-syncer"
 import { TeacherWelcomeModal } from "@/components/dashboard/welcome-modal"
 import { SkipToContent } from "@/components/accessibility/skip-to-content"
 
@@ -42,6 +43,12 @@ export default function DashboardLayout({
           return so a user who steps away doesn't come back to a
           "Session expired" toast on their next click. */}
         <TokenRefresher />
+      {/* Brand sync — pushes the local workspace brand identity
+          (name, logo, primary/accent color, tagline) to the backend
+          so the PUBLIC portal (/p/<slug>/* on a fresh browser or
+          incognito) renders the same theme as the logged-in teacher.
+          No-op for signed-out sessions. */}
+      <TenantBrandSyncer />
       {/* Class-reminder pinger. Pings /api/cron/class-reminders every
           60s so the server-side scanner can fire T-3h / T-1h / T-15m
           reminders during the POC (no external cron yet). Idempotent
