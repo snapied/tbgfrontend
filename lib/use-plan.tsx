@@ -159,7 +159,26 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
     const planId = (result.subscription.plan as PlanId) || "starter"
     const subStatus = (result.subscription.status as SubscriptionStatus) || "active"
     setPlan(planId)
-    setLimits(result.limits)
+    // Limits resolution, in priority order:
+    //   1. Deserialise the backend response — flips UNLIMITED_SENTINEL
+    //      back into Infinity.
+    //   2. For any limit field where the backend sent null (older
+    //      backend that didn't serialise — Infinity → null on the
+    //      wire), fall back to the local PLANS catalog. The catalog
+    //      is the same data the backend reads from, so this is a
+    //      safe shadow source. Without it, Institute customers
+    //      stranded on a stale backend would see "limit hit" on
+    //      everything because null reads as 0 in cap checks.
+    const fromWire = deserializeLimits(result.limits)
+    const fromCatalog = PLANS[planId]?.limits ?? PLANS.starter.limits
+    const merged: PlanLimits = { ...fromCatalog, ...fromWire }
+    ;(Object.keys(merged) as Array<keyof PlanLimits>).forEach((k) => {
+      if (merged[k] === null || merged[k] === undefined) {
+        ;(merged as unknown as Record<string, unknown>)[k as string] =
+          (fromCatalog as unknown as Record<string, unknown>)[k as string]
+      }
+    })
+    setLimits(merged)
     setServerUsage(result.usage)
     setStatus(subStatus)
     setTrialEndsAt(result.subscription.trialEndsAt)
