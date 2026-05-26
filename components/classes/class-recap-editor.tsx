@@ -89,13 +89,18 @@ export function ClassRecapEditor({ session }: ClassRecapEditorProps) {
     setTimeout(() => setSaveStatus("idle"), 1500)
   }
 
-  // Sync down if the session is refreshed externally.
+  // Sync down if the session is refreshed externally (e.g. backend auto-setting the CDN url).
+  // We sync each field individually when the upstream value changes, so we don't
+  // clobber one field while the user is typing in another.
+  useEffect(() => { setWasHeld(session.wasHeld ?? false) }, [session.wasHeld])
+  useEffect(() => { setSummary(session.summary ?? "") }, [session.summary])
+  useEffect(() => { setRecordingUrl(session.recordingUrl ?? "") }, [session.recordingUrl])
+  
+  // Materials is a complex array. We do a JSON check to avoid clobbering or looping.
   useEffect(() => {
-    setWasHeld(session.wasHeld ?? false)
-    setSummary(session.summary ?? "")
-    setRecordingUrl(session.recordingUrl ?? "")
-    setMaterials(session.materials ?? [])
-  }, [session.id])  // eslint-disable-line react-hooks/exhaustive-deps
+    const next = session.materials ?? []
+    setMaterials(current => JSON.stringify(current) === JSON.stringify(next) ? current : next)
+  }, [session.materials])
 
   // Materials autosave — every change.
   useEffect(() => {

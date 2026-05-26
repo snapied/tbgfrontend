@@ -348,9 +348,14 @@ export default function CoursePublicPage({ params }: { params: Promise<{ slug: s
                 {!currentUser && (
                   <Button asChild>
                     <Link
-                      href={`/login?next=${encodeURIComponent(
-                        typeof window === "undefined" ? "" : window.location.pathname,
-                      )}`}
+                      href={inTenant 
+                        ? `${basePath}/login?next=${encodeURIComponent(
+                            typeof window === "undefined" ? "" : window.location.pathname,
+                          )}`
+                        : `/login?next=${encodeURIComponent(
+                            typeof window === "undefined" ? "" : window.location.pathname,
+                          )}`
+                      }
                     >
                       Sign in
                     </Link>
@@ -400,7 +405,7 @@ export default function CoursePublicPage({ params }: { params: Promise<{ slug: s
       toast.info("Sign in to enrol", {
         description: "We'll bring you right back to this course after you log in.",
       })
-      router.push(`/login?next=${encodeURIComponent(here)}`)
+      router.push(inTenant ? `${basePath}/signup?next=${encodeURIComponent(here)}` : `/login?next=${encodeURIComponent(here)}`)
       return
     }
     if (!isPublishedForEnrollment) {
