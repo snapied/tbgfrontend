@@ -453,12 +453,14 @@ function UsageBar({
   label, used, limit, unit,
 }: {
   label: string
-  used: number
-  limit: number
+  used: number | null | undefined
+  limit: number | null | undefined
   unit?: string
 }) {
-  const isUnlimited = limit === Infinity
-  const pct = isUnlimited ? 0 : Math.min(100, Math.round((used / Math.max(1, limit)) * 100))
+  const safeUsed = used ?? 0
+  const safeLimit = limit ?? Infinity
+  const isUnlimited = safeLimit === Infinity
+  const pct = isUnlimited ? 0 : Math.min(100, Math.round((safeUsed / Math.max(1, safeLimit)) * 100))
   const formatNum = (n: number) => {
     if (n === Infinity) return "Unlimited"
     if (unit === "GB") return `${n.toFixed(1)} GB`
@@ -469,7 +471,7 @@ function UsageBar({
       <div className="flex items-baseline justify-between text-sm">
         <span className="font-medium">{label}</span>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {formatNum(used)} {isUnlimited ? "" : `/ ${formatNum(limit)}`}
+          {formatNum(safeUsed)} {isUnlimited ? "" : `/ ${formatNum(safeLimit)}`}
         </span>
       </div>
       <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted">
