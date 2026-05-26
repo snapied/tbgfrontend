@@ -42,6 +42,7 @@ import {
   upsertPortalKeys,
 } from "@/lib/portal-state-client"
 import { lookupTenantsByEmail } from "@/lib/tenant-user-index-client"
+import { sendWhatsApp } from "@/lib/whatsapp"
 
 export const runtime = "nodejs"
 
@@ -401,6 +402,29 @@ async function reconcilePaymentCaptured(
     "store.orders.v1": [newOrder, ...orders],
     "store.entitlements.v1": [...newEnts, ...entitlements],
   })
+
+  // WhatsApp payment confirmation — fire-and-forget so the webhook
+  // response is never delayed by a downstream send failure.
+  const buyerPhone = payment.notes?.customerPhone ?? user?.phone
+  if (buyerPhone) {
+    const buyerName = newOrder.customerName || email.split("@")[0]
+    const amt = `${newOrder.currency} ${newOrder.total}`
+    void sendWhatsApp({
+      to: buyerPhone,
+      text: [
+        `Hi ${buyerName}! 🎉`,
+        ``,
+        `Your payment of *${amt}* has been received.`,
+        `Order ID: ${newOrder.id}`,
+        ``,
+        `You now have access to your purchase. Head to your dashboard to get started!`,
+      ].join("\n"),
+      kind: "payment-confirmation",
+    }).catch((err) => {
+      console.error("[payment-webhook] WhatsApp payment confirmation failed", err)
+    })
+  }
+
   return { handled: true, note: `Backfilled order + ${newEnts.length} entitlement(s).` }
 }
 

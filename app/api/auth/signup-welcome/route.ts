@@ -8,6 +8,7 @@ import { NextResponse, type NextRequest } from "next/server"
 import { sendEmail } from "@/lib/zepto"
 import { welcomeEmail, verifyEmailEmail } from "@/lib/email-templates"
 import { issueToken } from "@/lib/auth-tokens"
+import { sendWhatsApp } from "@/lib/whatsapp"
 
 export const runtime = "nodejs"
 
@@ -16,6 +17,7 @@ interface Payload {
   name?: string
   workspaceName?: string
   slug?: string
+  phone?: string
 }
 
 export async function POST(req: NextRequest) {
@@ -75,6 +77,25 @@ export async function POST(req: NextRequest) {
     // eslint-disable-next-line no-console
     console.error("[signup-welcome] verify send failed", err)
   })
+
+  // WhatsApp welcome — fire-and-forget alongside email. Only sends
+  // when the caller passes a phone number (student signup form).
+  const phone = (body.phone ?? "").trim()
+  if (phone) {
+    const recipientName = name || email.split("@")[0]
+    void sendWhatsApp({
+      to: phone,
+      text: [
+        `Welcome to ${workspaceName}, ${recipientName}! 🎉`,
+        ``,
+        `Your account is ready. Start exploring:`,
+        dashboardUrl,
+      ].join("\n"),
+      kind: "signup-welcome",
+    }).catch((err) => {
+      console.error("[signup-welcome] WhatsApp send failed", err)
+    })
+  }
 
   return NextResponse.json({ ok: true, verifySentAt: new Date().toISOString() })
 }

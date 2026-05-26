@@ -937,6 +937,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           orderId,
         })
       }
+
+      // WhatsApp enrollment confirmation — fire-and-forget via the
+      // server-side send endpoint. Only fires when a phone number is
+      // available on the input (storefront checkout form collects it).
+      if (input.customerPhone) {
+        void fetch("/api/whatsapp/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            to: input.customerPhone,
+            text: [
+              `Hi ${input.customerName || "there"}! 🎉`,
+              ``,
+              `You're enrolled! Your access to *${product.name}* is now active.`,
+              ``,
+              `Head to your dashboard to start learning.`,
+            ].join("\n"),
+          }),
+        }).catch(() => { /* non-fatal */ })
+      }
     }
 
     return { ok: true, order, entitlements: ents }
