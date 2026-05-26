@@ -84,7 +84,7 @@ export function LateJoinerRecap({
       <div className="flex items-start justify-between gap-2">
         <p className="inline-flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-300">
           <Clock className="h-3.5 w-3.5" />
-          You&apos;re {minutesLabel} &nsbps;late · here&apos;s the catch-up
+          You&apos;re {minutesLabel}&nbsp;late · here&apos;s the catch-up
         </p>
         <button
           type="button"
