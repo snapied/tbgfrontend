@@ -188,9 +188,29 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
       try { window.localStorage.setItem(GUEST_KEY, JSON.stringify({ name, email })) } catch { /* ignore */ }
     }
 
-    // Free orders never touch the gateway — go straight to the
-    // store. Same for stub mode (keys not configured or forced off).
-    if (total === 0 || !useRazorpay) {
+    // Subscriptions ALWAYS need a card mandate, even when the
+    // immediate amount is zero (free trial → recurring). Skipping
+    // Razorpay here would grant access without a card on file, and
+    // when the trial ends we'd have no way to charge — silent
+    // freeloader bug.
+    const isSubscription = product.pricing.type === "subscription"
+
+    if (isSubscription && !useRazorpay) {
+      // Stub mode + subscription = misconfiguration. Refuse rather
+      // than fake-grant a trial that can never auto-bill. Surfaces
+      // the missing-key problem early instead of after the trial
+      // ends with confused customers.
+      setError(
+        "Subscriptions require a configured payment gateway to capture the card. Set RAZORPAY_KEY_ID + NEXT_PUBLIC_RAZORPAY_KEY_ID on the server and rebuild, then try again.",
+      )
+      setSubmitting(false)
+      return
+    }
+
+    // Free / stub short-circuit applies ONLY to one-time and free
+    // products — there's literally nothing to bill later for those,
+    // so no card is needed.
+    if (!isSubscription && (total === 0 || !useRazorpay)) {
       finalisePurchase()
       return
     }
@@ -204,7 +224,6 @@ export default function CheckoutPage({ params }: { params: Promise<{ productId: 
     //   3. Server verifies the HMAC signature.
     //   4. Finalise the store order with the verified payment id.
     try {
-      const isSubscription = product.pricing.type === "subscription"
       let openInput: Parameters<typeof openRazorpayCheckout>[0]
 
       if (isSubscription && product.pricing.type === "subscription") {
