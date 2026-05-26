@@ -241,7 +241,40 @@ export default function PortalProductDetailPage({
                 </Button>
               ) : (
                 <Button
-                  onClick={() => router.push(`/checkout/${product.id}?back=${encodeURIComponent(storeHref)}`)}
+                  onClick={() => {
+                    const checkoutUrl = `/checkout/${product.id}?back=${encodeURIComponent(storeHref)}`
+                    // Authenticated visitors go straight to checkout.
+                    // Anonymous visitors land on the tenant signup
+                    // first so they finish with a real account on
+                    // this academy — that's how their purchase
+                    // entitlements survive a browser switch and how
+                    // they later access /my/courses. The signup page
+                    // honours `?next=` and routes them to checkout
+                    // immediately after the account is created.
+                    if (currentUser) {
+                      router.push(checkoutUrl)
+                    } else {
+                      // Save the buy intent so a visitor who bails
+                      // out of signup, navigates away, or refuses
+                      // cookies still finds their way back. Picked up
+                      // by /p/<tenant>/my and the tenant home, which
+                      // surface a "Resume your purchase" nudge.
+                      try {
+                        window.localStorage.setItem(
+                          "thebigclass.pendingPurchase.v1",
+                          JSON.stringify({
+                            productId: product.id,
+                            tenantSlug: tenant,
+                            backHref: storeHref,
+                            savedAt: new Date().toISOString(),
+                          }),
+                        )
+                      } catch { /* tolerable — no quota = no nudge */ }
+                      router.push(
+                        `/p/${tenant}/signup?next=${encodeURIComponent(checkoutUrl)}`,
+                      )
+                    }
+                  }}
                   className="w-full"
                   size="lg"
                 >

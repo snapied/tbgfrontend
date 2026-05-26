@@ -856,17 +856,6 @@ function LiveHostShell({
               space behind the scenes. */}
           <Button
             size="sm"
-            variant={breakoutsOpen ? "default" : "outline"}
-            onClick={() => breakoutsOpen ? setBreakoutsOpen(false) : openBreakouts()}
-            className="hidden gap-1 sm:inline-flex"
-            aria-pressed={breakoutsOpen}
-            aria-label="Toggle breakout rooms panel"
-          >
-            <Layers className="h-3.5 w-3.5" />
-            Breakouts
-          </Button>
-          <Button
-            size="sm"
             variant={rosterOpen ? "default" : "outline"}
             onClick={() => rosterOpen ? setRosterOpen(false) : openRoster()}
             className="hidden gap-1 sm:inline-flex"

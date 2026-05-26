@@ -24,7 +24,7 @@
 // bundled <VideoConference> because the latter has a known placeholder-swap
 // crash. The lower-level path is more stable.
 
-import { useMemo } from "react"
+import { useMemo, useCallback } from "react"
 import {
   LiveKitRoom as LKRoom,
   RoomAudioRenderer,
@@ -44,10 +44,15 @@ import {
   useRoomContext,
   useChat,
   useLocalParticipant,
+  FocusLayout,
   FocusLayoutContainer,
+  CarouselLayout,
   useParticipantContext,
+  usePinnedTracks,
+  useLayoutContext,
+  isTrackReference,
 } from "@livekit/components-react"
-import { RoomEvent, Track, VideoPresets } from "livekit-client"
+import { RoomEvent, Track, VideoPresets, AudioPresets } from "livekit-client"
 import { useRaisedHands } from "@/lib/raised-hands"
 import { Hand } from "lucide-react"
 import {
@@ -160,9 +165,25 @@ export function LiveKitRoom({
       videoCaptureDefaults: {
         resolution: VideoPresets.h1080.resolution,
       },
+      // Higher-quality audio capture — closer to Google Meet clarity.
+      // autoGainControl + echoCancellation + noiseSuppression are the
+      // WebRTC trinity that keeps voice clean even on laptop mics.
+      // 48 kHz sample rate matches Opus's native rate so there's no
+      // extra resampling step.
+      audioCaptureDefaults: {
+        autoGainControl: true,
+        echoCancellation: true,
+        noiseSuppression: true,
+        channelCount: 1,
+        sampleRate: 48000,
+      },
       publishDefaults: {
         videoEncoding: VideoPresets.h1080.encoding,
         screenShareEncoding: VideoPresets.h1440.encoding,
+        // Music-high-quality Opus preset: 48 kbps stereo-capable
+        // vs the default ~32 kbps. Noticeably sharper voice in a
+        // classroom setting where bandwidth is rarely the bottleneck.
+        audioPreset: AudioPresets.musicHighQuality,
       },
     }),
     [],
@@ -324,26 +345,7 @@ export function LiveKitVideoUI({
         {sessionId && (
           <ComprehensionCheckMount sessionId={sessionId} isHost={isHost} />
         )}
-        {tracks.length > 0 ? (
-          <FocusLayoutContainer style={{ height: "100%" }}>
-            <ParticipantTile>
-              {sessionId && <RaisedHandBadge sessionId={sessionId} />}
-            </ParticipantTile>
-          </FocusLayoutContainer>
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              height: "100%",
-              color: "rgba(255,255,255,0.5)",
-              fontSize: 13,
-            }}
-          >
-            Waiting for someone to turn on their camera…
-          </div>
-        )}
+        <VideoStage sessionId={sessionId} tracks={tracks} />
       </div>
       <ControlBar
         // Chat is enabled — LiveKit's built-in panel covers the
@@ -355,6 +357,132 @@ export function LiveKitVideoUI({
         variation="minimal"
       />
     </LayoutContextProvider>
+  )
+}
+
+// ============================================================
+// VideoStage — the main video grid / focus layout.
+//
+// Two modes:
+//   1. Grid mode (no screen share): all camera tracks in a GridLayout.
+//   2. Focus mode (screen share active): the screen-share track fills
+//      the center as a FocusLayout; camera tracks sit in a vertical
+//      CarouselLayout on the right side (like Google Meet).
+//
+// Each tile renders with an explicit `trackRef` prop — this is what
+// fixes the "No TrackRef" crash that happened when `<ParticipantTile>`
+// was rendered without context.
+//
+// Active speaker highlighting: tiles of currently speaking
+// participants get a pulsing green glow border via CSS.
+// ============================================================
+function VideoStage({
+  sessionId,
+  tracks,
+}: {
+  sessionId?: string
+  tracks: ReturnType<typeof useTracks>
+}) {
+  // Separate screen-share tracks from camera tracks.
+  const screenShareTracks = tracks.filter(
+    (t) => t.source === Track.Source.ScreenShare,
+  )
+  const cameraTracks = tracks.filter(
+    (t) => t.source === Track.Source.Camera,
+  )
+
+  // Focus on the first screen share if any exist.
+  const focusTrack = screenShareTracks[0]
+
+  if (focusTrack && isTrackReference(focusTrack)) {
+    // ── Focus mode: screen share centered, cameras in sidebar ──
+    return (
+      <div
+        className="lk-focus-layout-wrapper"
+        style={{
+          display: "flex",
+          height: "100%",
+          gap: 4,
+        }}
+      >
+        {/* Screen share — fills the remaining space */}
+        <div style={{ flex: 1, minWidth: 0, position: "relative" }}>
+          <FocusLayoutContainer style={{ height: "100%" }}>
+            <FocusLayout trackRef={focusTrack} />
+          </FocusLayoutContainer>
+        </div>
+
+        {/* Camera sidebar — vertical strip on the right */}
+        {cameraTracks.length > 0 && (
+          <div
+            style={{
+              width: 200,
+              maxWidth: "25%",
+              display: "flex",
+              flexDirection: "column",
+              gap: 4,
+              overflowY: "auto",
+            }}
+          >
+            {cameraTracks.map((trackRef) =>
+              isTrackReference(trackRef) ? (
+                <div
+                  key={trackRef.participant.sid + "-" + trackRef.source}
+                  style={{ position: "relative", borderRadius: 8, overflow: "hidden" }}
+                  className={trackRef.participant.isSpeaking ? "lk-speaking" : ""}
+                >
+                  <ParticipantTile trackRef={trackRef}>
+                    {sessionId && <RaisedHandBadge sessionId={sessionId} />}
+                  </ParticipantTile>
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Grid mode: no screen share, everyone in a grid ──
+  if (tracks.length === 0) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100%",
+          color: "rgba(255,255,255,0.5)",
+          fontSize: 14,
+        }}
+      >
+        Waiting for participants to enable their camera…
+      </div>
+    )
+  }
+
+  return (
+    <GridLayout tracks={tracks} style={{ height: "100%" }}>
+      <ParticipantTileWithSpeaker sessionId={sessionId} />
+    </GridLayout>
+  )
+}
+
+// Wrapper rendered inside GridLayout. GridLayout provides the
+// TrackRefContext for each cell automatically, so
+// `useParticipantContext()` is valid here. We use it to overlay
+// the raised-hand badge and the active-speaker glow.
+function ParticipantTileWithSpeaker({ sessionId }: { sessionId?: string }) {
+  const participant = useParticipantContext()
+  return (
+    <div
+      style={{ position: "relative", height: "100%" }}
+      className={participant.isSpeaking ? "lk-speaking" : ""}
+    >
+      <ParticipantTile>
+        {sessionId && <RaisedHandBadge sessionId={sessionId} />}
+      </ParticipantTile>
+    </div>
   )
 }
 

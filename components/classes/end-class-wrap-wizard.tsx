@@ -169,7 +169,7 @@ export function EndClassWrapWizard({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && close(false)}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="recording-box max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />

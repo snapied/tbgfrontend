@@ -127,3 +127,8 @@
 .p-relative {
   position: relative !important;
 }
+
+.recording-box {
+  max-height: 400px;
+  overflow: auto;
+}

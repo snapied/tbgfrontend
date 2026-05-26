@@ -96,6 +96,11 @@ export function PortalLivePreview({
   }, [autoRefresh, config, settings])
 
   const fullUrl = `/p/${tenant}${path === "/" ? "" : path}`
+  // Cache-busting: append a unique timestamp so the browser never
+  // serves a stale copy of the portal page when the iframe reloads.
+  // The param changes every time reloadKey bumps (manual refresh or
+  // auto-refresh from config change).
+  const iframeSrc = `${fullUrl}${fullUrl.includes("?") ? "&" : "?"}_t=${reloadKey}-${Date.now()}`
 
   // Measure the visible width of the iframe container BEFORE first
   // paint. Using useLayoutEffect (not useEffect) ensures the
@@ -226,7 +231,7 @@ export function PortalLivePreview({
               // `storage` events from other windows, so most edits
               // reflect without needing this manual refresh.
               key={reloadKey}
-              src={fullUrl}
+              src={iframeSrc}
               title="Portal preview"
               className="block border-0 bg-background"
               style={{
