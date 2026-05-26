@@ -10,6 +10,8 @@
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { BookOpen, CalendarPlus, Captions, CheckCircle2, Circle, FileText, Play, Share2, Trash2, Video } from "lucide-react"
+import { ProductTour, TakeATourButton } from "@/components/tour/product-tour"
+import { RECORDINGS_TOUR, RECORDINGS_TOUR_ID } from "@/components/dashboard/tours"
 import { ShareMenu } from "@/components/share/share-menu"
 import { AddRecordingToCourseDialog } from "@/components/recordings/add-to-course-dialog"
 import { AddToPlaylistPopover } from "@/components/recordings/add-to-playlist-popover"
@@ -305,6 +307,7 @@ export default function RecordingsPage() {
 
   return (
     <div className="space-y-6">
+      <ProductTour tourId={RECORDINGS_TOUR_ID} steps={RECORDINGS_TOUR} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Recordings</h1>
@@ -312,7 +315,7 @@ export default function RecordingsPage() {
             Every class recording in one place. Click watch to play inline — no jumping between class pages.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-tour="recordings-actions">
           <Button
             variant="outline"
             size="sm"
@@ -323,6 +326,7 @@ export default function RecordingsPage() {
             <ScanText className="h-3.5 w-3.5" />
             Search transcripts
           </Button>
+          <TakeATourButton tourId={RECORDINGS_TOUR_ID} />
         </div>
       </div>
       <TranscriptSearchDialog
@@ -334,7 +338,7 @@ export default function RecordingsPage() {
       <Card>
         <CardContent className="space-y-3 p-4">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="min-w-[200px] flex-1">
+            <div className="min-w-[200px] flex-1" data-tour="recordings-search">
               <SearchInput
                 pageId="recordings"
                 value={search}

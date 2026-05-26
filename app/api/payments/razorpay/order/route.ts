@@ -97,10 +97,14 @@ export async function POST(req: NextRequest) {
         currency,
         receipt,
         notes,
-        // payment_capture: 1 → auto-captures on success (no manual
-        // capture step). This matches how the storefront currently
-        // models orders: paid means access granted.
-        payment_capture: 1,
+        // Auto-capture happens at the account level (Razorpay
+        // Settings → Configuration → Payment Capture). The legacy
+        // per-order `payment_capture: 1` flag was deprecated in 2020
+        // and is now ignored by the API — kept out of the payload
+        // so it doesn't read as "this is doing something" to anyone
+        // skimming. If you ever need manual capture for a specific
+        // flow, flip the account setting to Manual and call the
+        // /payments/<id>/capture endpoint explicitly.
       }),
     })
   } catch (err) {

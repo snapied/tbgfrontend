@@ -11,6 +11,10 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef, Re
 // now it keeps each workspace's localStorage data fully isolated so switching
 // tenants in dev (?tenant=acme) gives you a clean slate.
 import { readCurrentTenantSlug } from "./tenant-store"
+import {
+  deleteTenantUserIndex,
+  upsertTenantUserIndex,
+} from "./tenant-user-index-client"
 import { regenerateCoverUrl } from "./cover-fallback"
 import { reportStorageError } from "./storage-error"
 import { pushToTrash, registerRestoreHandler } from "./trash"
@@ -2260,10 +2264,40 @@ export function LMSProvider({ children }: { children: ReactNode }) {
 
   const addUser = useCallback((user: User) => {
     setUsers((prev) => [user, ...prev])
-  }, [])
+    // Mirror the (email → tenant) mapping into the backend index so
+    // cross-tenant webhooks (Razorpay payments coming in for this
+    // person from an external context) can resolve to this workspace
+    // in O(1) instead of walking every tenant blob by email. Fire-
+    // and-forget — failures degrade to the legacy email-walk path,
+    // not to a broken signup.
+    if (user.email && tenantSlug) {
+      void upsertTenantUserIndex(user.email, tenantSlug, user.id)
+    }
+  }, [tenantSlug])
   const updateUser = useCallback((id: string, updates: Partial<User>) => {
-    setUsers((prev) => prev.map((u) => (u.id === id ? { ...u, ...updates } : u)))
-  }, [])
+    setUsers((prev) => {
+      const before = prev.find((u) => u.id === id)
+      const next = prev.map((u) => (u.id === id ? { ...u, ...updates } : u))
+      // Keep the email index in sync with whatever the new email is.
+      // On an email change the old (email, slug) row becomes stale —
+      // drop it so a webhook for the prior address doesn't keep
+      // resolving to this tenant. Then upsert the new one. We can't
+      // narrow the delete by email alone (would clear OTHER tenants
+      // for that user), so we pass the slug too.
+      const after = next.find((u) => u.id === id)
+      if (after && tenantSlug) {
+        const oldEmail = before?.email?.toLowerCase()
+        const newEmail = after.email?.toLowerCase()
+        if (oldEmail && newEmail && oldEmail !== newEmail) {
+          void deleteTenantUserIndex({ email: oldEmail, slug: tenantSlug })
+        }
+        if (newEmail) {
+          void upsertTenantUserIndex(newEmail, tenantSlug, after.id)
+        }
+      }
+      return next
+    })
+  }, [tenantSlug])
   // Cascade delete a user (typically a student). Removes:
   //   * the user row itself
   //   * every enrollment the user owned
@@ -2301,6 +2335,19 @@ export function LMSProvider({ children }: { children: ReactNode }) {
 
     setUsers((prev) => {
       targetUser = prev.find((u) => u.id === id)
+      // Drop the (email, slug) row from the backend lookup index in
+      // the same tick we drop the user locally. Stale rows aren't
+      // fatal — the webhook resolver still double-checks the tenant
+      // blob before trusting a match — but keeping the index honest
+      // avoids cross-tenant routing surprises after a delete. Fired
+      // from inside the setter callback so we have a guaranteed
+      // synchronous read of the user's email.
+      if (targetUser?.email && tenantSlug) {
+        void deleteTenantUserIndex({
+          email: targetUser.email,
+          slug: tenantSlug,
+        })
+      }
       return targetUser ? prev.filter((u) => u.id !== id) : prev
     })
     setEnrollments((prev) => {

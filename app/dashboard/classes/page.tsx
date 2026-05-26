@@ -3,6 +3,8 @@
 import { useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { ProductTour, TakeATourButton } from "@/components/tour/product-tour"
+import { LIVE_CLASSES_TOUR, LIVE_CLASSES_TOUR_ID } from "@/components/dashboard/tours"
 import {
   Bell,
   Calendar,
@@ -369,6 +371,7 @@ export default function ClassesPage() {
 
   return (
     <div className="space-y-6">
+      <ProductTour tourId={LIVE_CLASSES_TOUR_ID} steps={LIVE_CLASSES_TOUR} />
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -377,7 +380,7 @@ export default function ClassesPage() {
         </div>
         <div className="flex items-center gap-2">
           {/* View toggle */}
-          <div className="inline-flex overflow-hidden rounded-md border border-border">
+          <div data-tour="classes-filters" className="inline-flex overflow-hidden rounded-md border border-border">
             <button
               type="button"
               onClick={() => setView("calendar")}
@@ -415,7 +418,10 @@ export default function ClassesPage() {
               Past
             </button>
           </div>
-          <ScheduleClassButton sessions={liveSessions} />
+          <div data-tour="classes-new">
+            <ScheduleClassButton sessions={liveSessions} />
+          </div>
+          <TakeATourButton tourId={LIVE_CLASSES_TOUR_ID} />
         </div>
       </div>
 

@@ -10,6 +10,8 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { ProductTour, TakeATourButton } from "@/components/tour/product-tour"
+import { WHITEBOARDS_HOME_TOUR, WHITEBOARDS_HOME_TOUR_ID } from "@/components/dashboard/tours"
 import {
   Plus,
   PenSquare,
@@ -215,6 +217,7 @@ export default function WhiteboardsPage() {
 
   return (
     <div className="space-y-6">
+      <ProductTour tourId={WHITEBOARDS_HOME_TOUR_ID} steps={WHITEBOARDS_HOME_TOUR} />
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -224,23 +227,28 @@ export default function WhiteboardsPage() {
             <span className="text-foreground/60">Auto-saves as you draw.</span>
           </p>
         </div>
-        <Button onClick={handleCreate} className="shrink-0 gap-2">
-          <Plus className="h-4 w-4" />
-          New board
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button data-tour="whiteboards-new" onClick={handleCreate} className="shrink-0 gap-2">
+            <Plus className="h-4 w-4" />
+            New board
+          </Button>
+          <TakeATourButton tourId={WHITEBOARDS_HOME_TOUR_ID} />
+        </div>
       </div>
 
       {/* Search — "/" focuses, fuzzy matches against title + owner name */}
       {sorted.length > 0 && (
-        <SearchInput
-          pageId="whiteboards-list"
-          value={search}
-          onChange={setSearch}
-          placeholder="Search boards by title or owner — typos OK"
-          ariaLabel="Search whiteboards"
-          shortcutDescription="Focus whiteboard search"
-          className="max-w-md"
-        />
+        <div data-tour="whiteboards-search">
+          <SearchInput
+            pageId="whiteboards-list"
+            value={search}
+            onChange={setSearch}
+            placeholder="Search boards by title or owner — typos OK"
+            ariaLabel="Search whiteboards"
+            shortcutDescription="Focus whiteboard search"
+            className="max-w-md"
+          />
+        </div>
       )}
 
       {sorted.length === 0 ? (

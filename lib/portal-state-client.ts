@@ -101,6 +101,39 @@ export async function upsertPortalKey(
   }
 }
 
+// Atomic multi-key upsert. Use this when a single business event
+// mutates several keys and partial writes would corrupt invariants
+// (e.g. order row + entitlement row must land together). The backend
+// wraps the whole patch in a single transaction — any failure rolls
+// the whole thing back.
+//
+// For single-key autosave, `upsertPortalKey` is cheaper (no txn
+// overhead, no row lock on unrelated keys).
+export async function upsertPortalKeys(
+  slug: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  assertSlug(slug)
+  const entries = Object.entries(patch).map(([key, value]) => ({ key, value }))
+  if (entries.length === 0) return
+  const res = await fetch(
+    `${backendBase()}/api/portal-state/${encodeURIComponent(slug)}/bulk`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ entries }),
+      keepalive: true,
+    },
+  )
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}))
+    throw new Error(
+      (body as { error?: string }).error ||
+        `Backend rejected bulk upsert (HTTP ${res.status})`,
+    )
+  }
+}
+
 // Enumerate every tenant slug that has at least one stored key.
 // Used by routes that need to scan across tenants (certificate
 // public lookup, razorpay webhook tenant resolution by email).

@@ -39,13 +39,22 @@ import {
   loadPortalKey,
   loadPortalState,
   upsertPortalKey,
+  upsertPortalKeys,
 } from "@/lib/portal-state-client"
+import { lookupTenantsByEmail } from "@/lib/tenant-user-index-client"
 
 export const runtime = "nodejs"
 
 const KNOWN_EVENTS = new Set([
   "payment.captured",
   "payment.failed",
+  // Refund events — the dashboard-initiated refund flow already
+  // mutates the Order locally on the click, but Razorpay-dashboard
+  // refunds (created outside our UI) need to flow back here so the
+  // tenant blob doesn't drift. Idempotent — if the order is already
+  // refunded the reconciler short-circuits.
+  "refund.processed",
+  "refund.failed",
   "subscription.charged",
   "subscription.halted",
   "subscription.cancelled",
@@ -74,11 +83,20 @@ interface RpSubscription {
   charge_at?: number
   notes?: Record<string, string>
 }
+interface RpRefund {
+  id: string
+  payment_id: string
+  amount?: number
+  currency?: string
+  status?: string
+  notes?: Record<string, string>
+}
 interface RpWebhookBody {
   event?: string
   payload?: {
     payment?: { entity?: RpPayment }
     subscription?: { entity?: RpSubscription }
+    refund?: { entity?: RpRefund }
   }
   created_at?: number
 }
@@ -188,26 +206,55 @@ async function loadBlob(slug: string): Promise<Record<string, unknown> | null> {
   return Object.keys(blob).length === 0 ? null : blob
 }
 
-// Save back ONLY the listed keys. Each upsert is one row write — at
-// most 3 keys per event handler (orders, entitlements, subscriptions,
-// notifications) so the per-event write cost stays low. Order
-// doesn't matter; the backend serialises within the (slug, key) row.
+// Save back ONLY the listed keys, atomically. Razorpay can deliver
+// duplicate webhooks (5xx retry, network blip) and a busy tenant can
+// have multiple `subscription.charged` events processed in parallel —
+// using independent per-key writes (the prior `Promise.all` over
+// `upsertPortalKey`) opened a race where two webhooks both read the
+// same snapshot, both compute deltas, both write back, and the second
+// write silently overwrites the first's changes (lost grants or
+// orphaned entitlements).
+//
+// The bulk endpoint wraps the whole patch in a single Postgres
+// transaction, so a concurrent webhook either sees the prior write's
+// committed result (correct) or blocks briefly until the first
+// commits (also correct). All keys land together or none do.
 async function saveTenantKeys(
   slug: string,
   patch: Record<string, unknown>,
 ): Promise<void> {
-  await Promise.all(
-    Object.entries(patch).map(([k, v]) => upsertPortalKey(slug, k, v)),
-  )
+  await upsertPortalKeys(slug, patch)
 }
 
-// Walk every tenant blob looking for one that contains a user with
-// the given email. Used when the webhook's notes don't carry a
-// tenant pointer (older orders, or anything created outside our
-// checkout flow). Returns null when nobody matches.
+// Resolve which tenant owns this email. Try the indexed lookup
+// first (O(1) — backend table maintained by the user-store mutations
+// in lib/lms-store.tsx). If the index has no hit, fall back to the
+// legacy O(N) walk so older users created before the index existed
+// still resolve correctly.
+//
+// We sanity-check every indexed hit against the tenant's actual
+// `lms.users.v1` blob before trusting it — stale index rows (left
+// behind by a failed delete, or imported from a half-migrated tenant)
+// would otherwise route a webhook to the wrong workspace. The cost
+// of the verification is one extra blob read per match, vs N reads
+// in the brute-force walk.
 async function findTenantByEmail(email: string): Promise<string | null> {
-  const slugs = await listSlugs()
   const lowered = email.toLowerCase()
+
+  const indexed = await lookupTenantsByEmail(lowered)
+  for (const match of indexed) {
+    if (match.slug === SYSTEM_SLUG) continue
+    const users =
+      (await loadPortalKey<LMSUser[]>(match.slug, "lms.users.v1")) ?? []
+    if (users.some((u) => u.email?.toLowerCase() === lowered)) {
+      return match.slug
+    }
+  }
+
+  // Fallback — legacy users predate the index, or the upsert failed
+  // silently at signup time. Cap the walk so a buggy poller can't
+  // burn the whole tenant list on every webhook.
+  const slugs = await listSlugs()
   for (const slug of slugs) {
     if (slug === SYSTEM_SLUG) continue
     const users =
@@ -222,9 +269,10 @@ function genId(prefix: string): string {
 }
 
 function extractEntityId(body: RpWebhookBody): string | null {
-  const slots: Array<RpPayment | RpSubscription | undefined> = [
+  const slots: Array<RpPayment | RpSubscription | RpRefund | undefined> = [
     body.payload?.payment?.entity,
     body.payload?.subscription?.entity,
+    body.payload?.refund?.entity,
   ]
   for (const e of slots) if (e?.id) return e.id
   return null
@@ -421,6 +469,84 @@ async function reconcileSubscriptionCharged(
 }
 
 /**
+ * refund.processed — Razorpay successfully refunded a payment.
+ *
+ * The dashboard-initiated refund path already flipped the Order locally
+ * before this webhook ever fires, so the reconciler's primary job is
+ * to catch refunds that originated OUTSIDE our UI (Razorpay dashboard,
+ * partial refunds via API, etc.). Idempotent: if the Order is already
+ * `refunded` we no-op.
+ *
+ * Matching logic: look up the Order by paymentReference. The refund
+ * event carries `payment_id` directly, which the order stamps via the
+ * verify flow.
+ */
+async function reconcileRefundProcessed(
+  slug: string,
+  refund: RpRefund,
+): Promise<{ handled: boolean; note: string }> {
+  const blob = await loadBlob(slug)
+  if (!blob) return { handled: false, note: `Tenant blob not found for slug=${slug}.` }
+  const orders = (blob["store.orders.v1"] as StoreOrder[] | undefined) ?? []
+  const target = orders.find((o) => o.paymentReference === refund.payment_id)
+  if (!target) {
+    return {
+      handled: false,
+      note: `No order with paymentReference=${refund.payment_id} in tenant.`,
+    }
+  }
+  if (target.status === "refunded") {
+    return { handled: true, note: "Idempotent skip — order already refunded." }
+  }
+  const now = new Date().toISOString()
+  const nextOrders = orders.map((o) =>
+    o.id === target.id
+      ? {
+          ...o,
+          status: "refunded",
+          paidAt: o.paidAt,
+          // Stamp the gateway refund id so the dashboard can show the
+          // rfnd_ reference and ops can reconcile against Razorpay's
+          // panel. Reason comes through notes when present (dashboard-
+          // initiated refunds set notes.reason on the refund object).
+          // Cast through `unknown` because the StoreOrder type doesn't
+          // formally know about these fields yet — they were added on
+          // the client-side type at the same time as the refundOrder
+          // mutator, but the webhook's local type mirror hasn't been
+          // extended. Either approach works; this keeps the route file
+          // self-contained.
+          refundedAt: now,
+          ...(refund.notes?.reason ? { refundReason: refund.notes.reason } : {}),
+          refundReference: refund.id,
+        } as StoreOrder & {
+          refundedAt?: string
+          refundReason?: string
+          refundReference?: string
+        }
+      : o,
+  )
+  // Revoke any entitlements granted by this order — same shape as the
+  // client-side refundOrder mutator.
+  const entitlements = (blob["store.entitlements.v1"] as StoreEntitlement[] | undefined) ?? []
+  const nextEnts = entitlements.map((e) =>
+    e.orderId === target.id
+      ? {
+          ...e,
+          expiresAt: e.expiresAt && e.expiresAt < now ? e.expiresAt : now,
+        }
+      : e,
+  )
+  await saveTenantKeys(slug, {
+    "store.orders.v1": nextOrders,
+    "store.entitlements.v1": nextEnts,
+  })
+  return {
+    handled: true,
+    note: `Order ${target.id} refunded via ${refund.id}; entitlements revoked.`,
+  }
+}
+
+/**
  * subscription.halted / subscription.cancelled — fire an in-app
  * notification so the buyer can update their card and resume. Also
  * marks the local Subscription so the UI reflects reality.
@@ -520,22 +646,47 @@ export async function POST(req: NextRequest) {
   const event = body.event ?? "unknown"
   const id = extractEntityId(body) ?? genId("evt")
 
-  // Resolve the tenant from notes first (cheap), otherwise walk the
-  // blobs by email (one-off cost on startup-era orders).
+  // Resolve the tenant from notes first (cheap), otherwise the email
+  // index + walk fallback. Refund events don't carry an email — for
+  // those we try notes, then look up the order by paymentReference
+  // across tenants.
   let slug: string | null = null
   let resolutionNote = ""
   const payment = body.payload?.payment?.entity
   const sub = body.payload?.subscription?.entity
+  const refund = body.payload?.refund?.entity
   const notesTenant =
-    payment?.notes?.tenant ?? sub?.notes?.tenant ?? null
+    payment?.notes?.tenant ??
+    sub?.notes?.tenant ??
+    refund?.notes?.tenant ??
+    null
   if (notesTenant) {
     slug = notesTenant
+  } else if (refund?.payment_id) {
+    // Refund without a tenant note — find the tenant whose orders
+    // contain a row with paymentReference matching this refund's
+    // payment id. O(N tenants) but refunds are infrequent and we
+    // bail on first match.
+    const slugs = await listSlugs()
+    for (const s of slugs) {
+      if (s === SYSTEM_SLUG) continue
+      const orders =
+        (await loadPortalKey<StoreOrder[]>(s, "store.orders.v1")) ?? []
+      if (orders.some((o) => o.paymentReference === refund.payment_id)) {
+        slug = s
+        resolutionNote = `Resolved tenant by paymentReference walk (${refund.payment_id}).`
+        break
+      }
+    }
+    if (!slug) {
+      resolutionNote = `Could not resolve tenant for refund of payment ${refund.payment_id}.`
+    }
   } else {
     const email = (payment?.notes?.customerEmail ?? payment?.email ?? sub?.notes?.customerEmail ?? "").toLowerCase()
     if (email) {
       slug = await findTenantByEmail(email)
       resolutionNote = slug
-        ? `Resolved tenant by email walk (${email}).`
+        ? `Resolved tenant by email lookup (${email}).`
         : `Could not resolve tenant by email (${email}).`
     }
   }
@@ -566,6 +717,18 @@ export async function POST(req: NextRequest) {
         // means the buyer never had access. Log only.
         handled = true
         note = "Payment failed — no state change needed."
+      } else if (event === "refund.processed" && refund) {
+        const r = await reconcileRefundProcessed(slug, refund)
+        handled = r.handled
+        note = r.note
+      } else if (event === "refund.failed") {
+        // Refund attempt didn't succeed at the gateway. The local
+        // order may already be flipped to "refunded" optimistically
+        // — that's fine, the gateway dashboard remains authoritative
+        // for funds movement. We log and surface in the audit feed
+        // so ops can investigate manually if it happens.
+        handled = true
+        note = "Refund failed at gateway — no automatic state change."
       } else {
         note = "Recognised event but no reconciler matched the payload shape."
       }

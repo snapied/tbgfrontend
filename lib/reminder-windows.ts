@@ -17,14 +17,28 @@ export const REMINDER_WINDOWS: Array<{
   key: ReminderWindowKey
   /** Offset before the class in milliseconds. */
   offsetMs: number
+  /**
+   * How long after the threshold the reminder is still "fresh enough"
+   * to fire. After this grace, the label ("in 3 hours") would be too
+   * misleading to be worth sending — we'd rather skip and let the
+   * next-tighter window deliver an accurate reminder. The cron poller
+   * runs every ~60s so even small grace values catch normal ticks.
+   */
+  graceMs: number
   /** Short human label used in subject lines + WhatsApp openers. */
   inLabel: string
   /** Slightly different label used in body copy. */
   longLabel: string
 }> = [
-  { key: "3h", offsetMs: 3 * 60 * 60 * 1000, inLabel: "in 3 hours", longLabel: "in about 3 hours" },
-  { key: "1h", offsetMs: 1 * 60 * 60 * 1000, inLabel: "in 1 hour", longLabel: "in 1 hour" },
-  { key: "15m", offsetMs: 15 * 60 * 1000, inLabel: "in 15 minutes", longLabel: "in 15 minutes — gather your stuff" },
+  // 3h slot: fires only inside [T-3h, T-2:30]. Past that, "in about
+  // 3 hours" would be a lie — the 1h reminder is only 30 min away.
+  { key: "3h", offsetMs: 3 * 60 * 60 * 1000, graceMs: 30 * 60 * 1000, inLabel: "in 3 hours", longLabel: "in about 3 hours" },
+  // 1h slot: fires inside [T-1h, T-45m]. After T-45m the 15m
+  // reminder is just 30 min out — its tighter label wins.
+  { key: "1h", offsetMs: 1 * 60 * 60 * 1000, graceMs: 15 * 60 * 1000, inLabel: "in 1 hour", longLabel: "in 1 hour" },
+  // 15m slot: fires inside [T-15m, T-10m]. The label is the
+  // shortest, so even a small grace is enough.
+  { key: "15m", offsetMs: 15 * 60 * 1000, graceMs: 5 * 60 * 1000, inLabel: "in 15 minutes", longLabel: "in 15 minutes — gather your stuff" },
 ]
 
 export interface ReminderEligibility {
@@ -35,9 +49,16 @@ export interface ReminderEligibility {
 
 /**
  * Returns every reminder window that is currently due for the given
- * session: threshold crossed, class not yet started, marker unset.
- * Multiple windows could fire on the same scan tick (e.g. if the
- * scanner hadn't run for a while), so this returns an array.
+ * session. A window is due only inside its own tight time slot:
+ *
+ *   [ T - offset , T - offset + graceMs )
+ *
+ * Past the grace, the window's hard-coded label ("in 3 hours") would
+ * be too far from reality to be worth sending — we'd rather skip and
+ * let the next-tighter window deliver an accurate reminder. This is
+ * the difference between "the cron missed a tick by a minute" (still
+ * truthful, fires) and "the session was added 2h before start, so
+ * the 3h slot is long gone" (would be a lie, skipped).
  */
 export function dueReminders(
   scheduledAtIso: string,
@@ -51,11 +72,38 @@ export function dueReminders(
   const out: ReminderEligibility[] = []
   for (const w of REMINDER_WINDOWS) {
     if (remindersSent?.[w.key]) continue
-    if (nowMs >= scheduledMs - w.offsetMs) {
+    const lowerMs = scheduledMs - w.offsetMs
+    const upperMs = lowerMs + w.graceMs
+    if (nowMs >= lowerMs && nowMs < upperMs) {
       out.push({ key: w.key, inLabel: w.inLabel, longLabel: w.longLabel })
     }
   }
   return out
+}
+
+/**
+ * Returns reminder window keys that have ALREADY PASSED their grace
+ * without firing. The cron stamps these into `remindersSent` so they
+ * never retry — otherwise a session added 30min before start would
+ * have its 3h and 1h slots re-evaluated every cron tick forever,
+ * polluting logs and risking a stale "in 3 hours" send if the grace
+ * window were ever loosened.
+ */
+export function expiredUnfiredWindows(
+  scheduledAtIso: string,
+  remindersSent: Partial<Record<ReminderWindowKey, string>> | undefined,
+  now: Date = new Date(),
+): ReminderWindowKey[] {
+  const scheduledMs = Date.parse(scheduledAtIso)
+  if (!Number.isFinite(scheduledMs)) return []
+  const nowMs = now.getTime()
+  const expired: ReminderWindowKey[] = []
+  for (const w of REMINDER_WINDOWS) {
+    if (remindersSent?.[w.key]) continue
+    const upperMs = scheduledMs - w.offsetMs + w.graceMs
+    if (nowMs >= upperMs) expired.push(w.key)
+  }
+  return expired
 }
 
 export interface ReminderCopyInput {

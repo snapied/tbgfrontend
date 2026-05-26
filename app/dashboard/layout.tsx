@@ -62,11 +62,13 @@ export default function DashboardLayout({
         <div className="flex min-w-0 flex-1 flex-col">
           <DashboardHeader />
           {/* Generous padding so content never butts against the sidebar
-              on wide screens — two more notches than the prior lg:p-8. */}
+              on wide screens — two more notches than the prior lg:p-8.
+              Extra bottom padding leaves room for the fixed product-tour
+              widget that sits bottom-right (h-10 + bottom-6 = ~88px). */}
             <main
               id="main-content"
               tabIndex={-1}
-              className="min-w-0 flex-1 p-6 focus:outline-none lg:px-10 lg:py-8"
+              className="min-w-0 flex-1 p-6 pb-32 focus:outline-none lg:px-10 lg:py-8 lg:pb-32"
             >
             <EmailVerifyBanner />
             {children}

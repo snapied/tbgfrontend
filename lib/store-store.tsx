@@ -219,6 +219,13 @@ export interface Order {
   createdAt: string
   paidAt?: string
   refundedAt?: string
+  // Free-text reason captured at the click of Refund — surfaces on
+  // the receipt + future audit views. Optional because webhook-only
+  // refunds (e.g. from the Razorpay dashboard) won't have one.
+  refundReason?: string
+  // Gateway refund id (Razorpay's `rfnd_XXX`). Lets ops reconcile a
+  // local refund against the gateway dashboard.
+  refundReference?: string
   // Test purchases — true when the order was placed via the
   // "Test purchase" admin affordance. Renders a "TEST" watermark
   // on receipts + skips webhook fan-out so test orders don't
@@ -343,6 +350,16 @@ interface StoreState {
   // Synchronously runs the (stubbed) payment + grants entitlements. Returns
   // the new Order so the UI can route to the receipt page.
   checkout: (input: CheckoutInput) => CheckoutResult
+
+  // ---- Refunds ----
+  // Mark an order as refunded locally and revoke any entitlements it
+  // granted. Pure mutation — the caller is responsible for first
+  // talking to the gateway (e.g. POST /api/payments/razorpay/refund)
+  // and only flipping local state on success. We keep this as a
+  // separate mutator (not folded into the gateway call) so the
+  // refund webhook can call it without going through the gateway
+  // again.
+  refundOrder: (orderId: string, opts?: { reason?: string; gatewayRefundId?: string }) => { ok: true } | { ok: false; reason: string }
 
   // ---- Reads ----
   getOrdersForCustomer: (customerId: string) => Order[]
@@ -925,6 +942,48 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return { ok: true, order, entitlements: ents }
   }, [products, applyCoupon, grantEntitlementsForProduct, updateProduct])
 
+  // -------- Refunds --------
+  // Flip an order to refunded + revoke every entitlement it granted.
+  // Idempotent — re-running on an already-refunded order returns
+  // ok:true so the gateway webhook (which fires after the manual
+  // refund click finishes) can't double-revoke or error.
+  const refundOrder = useCallback<StoreState["refundOrder"]>(
+    (orderId, opts) => {
+      const target = orders.find((o) => o.id === orderId)
+      if (!target) return { ok: false, reason: "Order not found" }
+      if (target.status === "refunded") return { ok: true }
+      if (target.status !== "paid") {
+        return { ok: false, reason: `Cannot refund an order in status "${target.status}"` }
+      }
+      const now = new Date().toISOString()
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? {
+                ...o,
+                status: "refunded",
+                refundedAt: now,
+                refundReason: opts?.reason,
+                refundReference: opts?.gatewayRefundId,
+              }
+            : o,
+        ),
+      )
+      // Revoke entitlements granted by this order. We mark them as
+      // expired (expiresAt = now) rather than deleting so historical
+      // reporting still shows the grant + revocation timeline.
+      setEntitlements((prev) =>
+        prev.map((e) =>
+          e.orderId === orderId
+            ? { ...e, expiresAt: e.expiresAt && e.expiresAt < now ? e.expiresAt : now }
+            : e,
+        ),
+      )
+      return { ok: true }
+    },
+    [orders],
+  )
+
   // -------- Reads --------
 
   const getOrdersForCustomer = useCallback(
@@ -976,13 +1035,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     products, coupons, orders, entitlements, subscriptions, hydrated,
     addProduct, updateProduct, deleteProduct, getProductById, getProductBySlug, isSlugAvailable,
     addCoupon, deleteCoupon, applyCoupon,
-    checkout,
+    checkout, refundOrder,
     getOrdersForCustomer, getOrdersForProduct, getEntitlementsForCustomer, hasCourseAccess, hasProductAccess,
     cancelSubscription,
   }), [
     products, coupons, orders, entitlements, subscriptions, hydrated,
     addProduct, updateProduct, deleteProduct, getProductById, getProductBySlug, isSlugAvailable,
-    addCoupon, deleteCoupon, applyCoupon, checkout,
+    addCoupon, deleteCoupon, applyCoupon, checkout, refundOrder,
     getOrdersForCustomer, getOrdersForProduct, getEntitlementsForCustomer, hasCourseAccess, hasProductAccess,
     cancelSubscription,
   ])

@@ -6,10 +6,14 @@ import {
   ArrowLeft,
   ArrowRight,
   Filter,
+  Loader2,
   Receipt,
+  RotateCcw,
   Search,
   ShoppingBag,
 } from "lucide-react"
+import { toast } from "sonner"
+import { useConfirm } from "@/lib/use-confirm"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -30,11 +34,91 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { money, useStore, type OrderStatus } from "@/lib/store-store"
+import { useTenant } from "@/lib/tenant-store"
 
 export default function OrdersPage() {
-  const { orders, products } = useStore()
+  const { orders, products, refundOrder } = useStore()
+  const { currentTenant } = useTenant()
+  const confirm = useConfirm()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all")
+  // Per-row "refund in flight" state so the spinner sits on the
+  // clicked row instead of locking the whole table.
+  const [refundingId, setRefundingId] = useState<string | null>(null)
+
+  async function handleRefund(orderId: string) {
+    const order = orders.find((o) => o.id === orderId)
+    if (!order) return
+    if (order.status !== "paid") {
+      toast.error(`Can't refund an order in status "${order.status}".`)
+      return
+    }
+    const ok = await confirm({
+      title: "Refund this order?",
+      description: `Refunds ${money(order.total, order.currency)} to ${order.customerEmail || "the buyer"} and immediately revokes their access. Razorpay processes the refund within 5–7 business days. This can't be undone here — you'd need to re-checkout to grant access back.`,
+      destructive: true,
+      confirmLabel: "Refund + revoke access",
+    })
+    if (!ok) return
+    setRefundingId(orderId)
+    try {
+      // Only call the gateway when this order was actually charged
+      // through Razorpay AND we have a Razorpay payment id stamped on
+      // it. Test purchases, stub-mode orders, and manually-created
+      // rows fall through to the local-only refund path.
+      const isGatewayOrder =
+        order.paymentMethod === "razorpay" &&
+        typeof order.paymentReference === "string" &&
+        order.paymentReference.startsWith("pay_")
+      let gatewayRefundId: string | undefined
+      if (isGatewayOrder) {
+        const res = await fetch("/api/payments/razorpay/refund", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            paymentId: order.paymentReference,
+            // Full refund — omit amount.
+            reason: "Refunded from dashboard",
+            // Stash the tenant slug + local order id so the
+            // refund.processed webhook can route back to the right
+            // tenant in O(1) (without walking every tenant's orders
+            // for a matching paymentReference).
+            notes: {
+              orderId: order.id,
+              ...(currentTenant?.slug ? { tenant: currentTenant.slug } : {}),
+            },
+          }),
+        })
+        const body = (await res.json().catch(() => null)) as
+          | { ok: true; refund: { id: string; status: string } }
+          | { ok: false; error: string }
+          | null
+        if (!body || !body.ok) {
+          const errMsg = body && "error" in body ? body.error : "Refund failed"
+          toast.error(errMsg)
+          return
+        }
+        gatewayRefundId = body.refund.id
+      }
+      const r = refundOrder(orderId, {
+        reason: "Refunded from dashboard",
+        gatewayRefundId,
+      })
+      if (!r.ok) {
+        toast.error(r.reason)
+        return
+      }
+      toast.success(
+        isGatewayOrder
+          ? `Refund queued at Razorpay (${gatewayRefundId}). Access revoked.`
+          : "Order marked refunded. Access revoked.",
+      )
+    } catch (err) {
+      toast.error((err as Error).message || "Refund failed")
+    } finally {
+      setRefundingId(null)
+    }
+  }
 
   const rows = useMemo(() => {
     return [...orders]
@@ -160,13 +244,36 @@ export default function OrdersPage() {
                       </TableCell>
                       <TableCell><StatusBadge status={o.status} /></TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" asChild>
-                          <Link href={`/order/${o.id}`} target="_blank">
-                            <Receipt className="mr-1 h-3.5 w-3.5" />
-                            Receipt
-                            <ArrowRight className="ml-1 h-3 w-3" />
-                          </Link>
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {o.status === "paid" && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRefund(o.id)}
+                              disabled={refundingId === o.id}
+                              title={
+                                o.paymentMethod === "razorpay" && o.paymentReference?.startsWith("pay_")
+                                  ? "Refund via Razorpay + revoke access"
+                                  : "Mark refunded locally + revoke access (no gateway call — this order wasn't charged through Razorpay)"
+                              }
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            >
+                              {refundingId === o.id ? (
+                                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                              )}
+                              Refund
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" asChild>
+                            <Link href={`/order/${o.id}`} target="_blank">
+                              <Receipt className="mr-1 h-3.5 w-3.5" />
+                              Receipt
+                              <ArrowRight className="ml-1 h-3 w-3" />
+                            </Link>
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   )

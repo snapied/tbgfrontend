@@ -9,6 +9,8 @@ import { use, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Check, Globe, Lock, Pencil, UserPlus, X, Sparkles } from "lucide-react"
+import { ProductTour, TakeATourButton } from "@/components/tour/product-tour"
+import { WHITEBOARD_EDITOR_TOUR, WHITEBOARD_EDITOR_TOUR_ID } from "@/components/dashboard/tours"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useLMS } from "@/lib/lms-store"
@@ -204,6 +206,7 @@ export default function WhiteboardEditorPage({
     // every edge, the grid extends to the bottom of the screen, and there's
     // no page scrollbar.
     <div className="fixed inset-0 top-16 lg:top-0 lg:left-64 z-30 flex flex-col bg-background overflow-hidden">
+      <ProductTour tourId={WHITEBOARD_EDITOR_TOUR_ID} steps={WHITEBOARD_EDITOR_TOUR} />
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 bg-card px-4">
         <Button
           variant="ghost"
@@ -214,7 +217,7 @@ export default function WhiteboardEditorPage({
           <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
           Whiteboards
         </Button>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2" data-tour="wb-title">
           {editingTitle ? (
             <Input
               autoFocus
@@ -255,6 +258,7 @@ export default function WhiteboardEditorPage({
             return (
               <button
                 type="button"
+                data-tour="wb-visibility"
                 onClick={() => {
                   const next = isPublic ? "private" : "public"
                   updateWhiteboard(board.id, { visibility: next })
@@ -283,6 +287,7 @@ export default function WhiteboardEditorPage({
               </button>
             )
           })()}
+          <TakeATourButton tourId={WHITEBOARD_EDITOR_TOUR_ID} />
           {/* Pending edit-access requests from students. Owner-only
               affordance; the dropdown lists each pending request with
               Approve / Deny. Approve also pushes the student into

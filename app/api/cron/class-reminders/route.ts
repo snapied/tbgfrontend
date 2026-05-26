@@ -36,6 +36,7 @@ import { sendWhatsApp } from "@/lib/whatsapp"
 import {
   REMINDER_WINDOWS,
   dueReminders,
+  expiredUnfiredWindows,
   reminderEmailHtml,
   reminderEmailSubject,
   reminderTemplateParams,
@@ -107,6 +108,24 @@ export async function POST(_req: NextRequest) {
 
     for (const session of sessions) {
       if (session.status === "cancelled") continue
+
+      // Mark any reminder slots that have already passed unfired (e.g.
+      // session added after its 3h window, or cron missed a tick by
+      // hours). Without this stamp, `dueReminders` would keep
+      // skipping them every tick — correct, but noisy — and there's
+      // no way for the UI to show "this session had no T-3h
+      // reminder because it was added too late".
+      const expired = expiredUnfiredWindows(
+        session.scheduledAt,
+        session.remindersSent,
+      )
+      if (expired.length > 0) {
+        session.remindersSent = { ...(session.remindersSent ?? {}) }
+        const stampedAt = new Date().toISOString()
+        for (const key of expired) session.remindersSent[key] = `expired:${stampedAt}`
+        blobChanged = true
+      }
+
       const due = dueReminders(session.scheduledAt, session.remindersSent)
       if (due.length === 0) continue
       eligibleCount += due.length

@@ -11,6 +11,8 @@
 import { useEffect, useMemo, useState } from "react"
 import { cn } from "@/lib/utils"
 import Link from "next/link"
+import { ProductTour, TakeATourButton } from "@/components/tour/product-tour"
+import { COMMUNITIES_TOUR, COMMUNITIES_TOUR_ID } from "@/components/dashboard/tours"
 import {
   ArrowRight,
   Plus,
@@ -178,6 +180,7 @@ export default function BatchesPage() {
 
   return (
     <div className="space-y-6">
+      <ProductTour tourId={COMMUNITIES_TOUR_ID} steps={COMMUNITIES_TOUR} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -203,22 +206,25 @@ export default function BatchesPage() {
             noun="Community"
           />
           <CommunityTooltip>
-            <Button onClick={requestCreate}>
+            <Button data-tour="communities-new" onClick={requestCreate}>
               <Plus className="mr-1.5 h-4 w-4" /> New community
             </Button>
           </CommunityTooltip>
+          <TakeATourButton tourId={COMMUNITIES_TOUR_ID} />
         </div>
       </div>
 
-      <SearchInput
-        pageId="communities-list"
-        value={search}
-        onChange={setSearch}
-        placeholder="Search communities — typos OK"
-        ariaLabel="Search communities"
-        shortcutDescription="Focus community search"
-        className="max-w-md"
-      />
+      <div data-tour="communities-search">
+        <SearchInput
+          pageId="communities-list"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search communities — typos OK"
+          ariaLabel="Search communities"
+          shortcutDescription="Focus community search"
+          className="max-w-md"
+        />
+      </div>
 
       {filtered.length === 0 ? (
         <Card>

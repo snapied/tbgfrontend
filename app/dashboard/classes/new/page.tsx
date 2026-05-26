@@ -322,18 +322,37 @@ export default function NewClassPage() {
     return users.filter((u) => studentIds.includes(u.id))
   }, [courseId, enrollments, users])
 
+  // For courseless in-house rooms (1:1 doubt-clearing, ad-hoc Q&A,
+  // anything outside a curriculum), the host needs to invite specific
+  // students from the workspace roster — not from a non-existent
+  // enrollment list. This pool is the full student roster, used only
+  // when no course is selected.
+  const workspaceStudents = useMemo(
+    () => users.filter((u) => u.role === "student"),
+    [users],
+  )
+
   // Audience targeting — matches the quiz + assignment pattern. Defaults
   // to "everyone enrolled" so the existing one-click flow is unchanged
   // when a teacher just picks a course and hits Schedule.
   type ClassAudience = "all" | "selected"
   const [audience, setAudience] = useState<ClassAudience>("all")
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
+  // Whichever roster the picker pulls from. With a course → enrolled
+  // pool; without a course → the workspace student roster.
+  const audiencePool = courseId ? enrolledStudents : workspaceStudents
   const targetStudents = useMemo(() => {
+    if (!courseId) {
+      // No course → there's no implicit "all enrolled" — only
+      // explicitly-picked invitees make sense. Match against the full
+      // workspace roster.
+      return workspaceStudents.filter((u) => selectedStudentIds.includes(u.id))
+    }
     if (audience === "selected") {
       return enrolledStudents.filter((u) => selectedStudentIds.includes(u.id))
     }
     return enrolledStudents
-  }, [audience, enrolledStudents, selectedStudentIds])
+  }, [audience, enrolledStudents, workspaceStudents, courseId, selectedStudentIds])
 
   const recipientsWithEmail = targetStudents.filter((u) => !!u.email).length
   const recipientsWithPhone = targetStudents.filter((u) => !!u.phone).length
@@ -648,35 +667,49 @@ export default function NewClassPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Picking a course also unlocks the audience picker below.
+                  {isInHouse
+                    ? "Optional — leave blank for ad-hoc sessions (1:1 doubt-clearing, prospect demos). Pick attendees individually below."
+                    : "Picking a course also unlocks the audience picker below."}
                 </p>
               </div>
 
-              {courseId && (
+              {(courseId || isInHouse) && (
                 <div className="space-y-2">
                   <Label>Audience</Label>
-                  <Select
-                    value={audience}
-                    onValueChange={(v) => setAudience(v as ClassAudience)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        Everyone enrolled ({enrolledStudents.length})
-                      </SelectItem>
-                      <SelectItem value="selected">Specific students…</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {audience === "selected" && (
+                  {courseId ? (
+                    <Select
+                      value={audience}
+                      onValueChange={(v) => setAudience(v as ClassAudience)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">
+                          Everyone enrolled ({enrolledStudents.length})
+                        </SelectItem>
+                        <SelectItem value="selected">Specific students…</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    // Courseless in-house room: there's no "everyone
+                    // enrolled" because there's no enrollment. Force
+                    // the explicit picker so the host invites
+                    // individual students from the workspace roster.
+                    <p className="text-[11.5px] text-muted-foreground">
+                      No course selected — pick the students you want in this session from your workspace.
+                    </p>
+                  )}
+                  {(audience === "selected" || !courseId) && (
                     <div className="max-h-48 space-y-1.5 overflow-y-auto rounded-md border border-border/60 p-2">
-                      {enrolledStudents.length === 0 ? (
+                      {audiencePool.length === 0 ? (
                         <p className="text-xs text-muted-foreground">
-                          No students enrolled yet.
+                          {courseId
+                            ? "No students enrolled yet."
+                            : "No students in this workspace yet. Add one from Students → Add student."}
                         </p>
                       ) : (
-                        enrolledStudents.map((s) => {
+                        audiencePool.map((s) => {
                           const checked = selectedStudentIds.includes(s.id)
                           return (
                             <label

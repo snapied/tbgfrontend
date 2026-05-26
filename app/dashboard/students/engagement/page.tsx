@@ -11,6 +11,8 @@
 
 import { useMemo, useState } from "react"
 import Link from "next/link"
+import { ProductTour, TakeATourButton } from "@/components/tour/product-tour"
+import { ENGAGEMENT_TOUR, ENGAGEMENT_TOUR_ID } from "@/components/dashboard/tours"
 import {
   Activity,
   Filter,
@@ -511,12 +513,16 @@ export default function EngagementPage() {
 
   return (
     <div className="space-y-6">
+      <ProductTour tourId={ENGAGEMENT_TOUR_ID} steps={ENGAGEMENT_TOUR} />
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Engagement</h1>
-        <p className="text-muted-foreground">
-          Every enrolled student, classified by lifecycle stage so you can spot who needs a nudge before they slip.
-        </p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Engagement</h1>
+          <p className="text-muted-foreground">
+            Every enrolled student, classified by lifecycle stage so you can spot who needs a nudge before they slip.
+          </p>
+        </div>
+        <TakeATourButton tourId={ENGAGEMENT_TOUR_ID} />
       </div>
 
       {/* Stage counts strip — fast read on the cohort's health.

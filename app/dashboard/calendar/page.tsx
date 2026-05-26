@@ -18,6 +18,8 @@
 import { useMemo } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
+import { ProductTour, TakeATourButton } from "@/components/tour/product-tour"
+import { CALENDAR_TOUR, CALENDAR_TOUR_ID } from "@/components/dashboard/tours"
 import {
   Video,
   ClipboardList,
@@ -127,6 +129,7 @@ export default function CalendarPage() {
 
   return (
     <div className="space-y-6">
+      <ProductTour tourId={CALENDAR_TOUR_ID} steps={CALENDAR_TOUR} />
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -139,12 +142,15 @@ export default function CalendarPage() {
             Live classes, assignment due dates, course launches, and post publishes — in one view.
           </p>
         </div>
-        <Button asChild>
-          <Link href="/dashboard/classes/new">
-            <Plus className="mr-1.5 h-4 w-4" />
-            Schedule a class
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button asChild>
+            <Link href="/dashboard/classes/new">
+              <Plus className="mr-1.5 h-4 w-4" />
+              Schedule a class
+            </Link>
+          </Button>
+          <TakeATourButton tourId={CALENDAR_TOUR_ID} />
+        </div>
       </div>
 
       {/* Source legend — colour-code so the calendar reads at a glance */}
@@ -156,13 +162,15 @@ export default function CalendarPage() {
       </div>
 
       {/* Calendar */}
-      <CalendarView
-        date={date}
-        view={view}
-        events={events}
-        onDateChange={(d) => setQuery({ date: d })}
-        onViewChange={(v) => setQuery({ view: v })}
-      />
+      <div data-tour="calendar-view-toggle">
+        <CalendarView
+          date={date}
+          view={view}
+          events={events}
+          onDateChange={(d) => setQuery({ date: d })}
+          onViewChange={(v) => setQuery({ view: v })}
+        />
+      </div>
 
       {/* Empty-data nudge — only when truly nothing is on the calendar */}
       {events.length === 0 && (

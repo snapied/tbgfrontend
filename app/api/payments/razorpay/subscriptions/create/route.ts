@@ -117,9 +117,24 @@ export async function POST(req: NextRequest) {
   const currency = (body.currency ?? "INR").toUpperCase()
   const intervalDays = body.intervalDays ?? 30
   const amountMinor = Math.round(amountMajor * 100)
-  const totalCount = Number.isFinite(body.totalCount) && (body.totalCount as number) > 0
-    ? (body.totalCount as number)
-    : 12 // default 12 cycles — Razorpay requires a finite count for capture
+  // Razorpay requires a finite `total_count`. The buyer-friendly
+  // default is "effectively forever" — pick a count large enough that
+  // the subscription auto-expires only well past anything a creator
+  // would call a normal customer lifecycle. Compute it from the
+  // billing interval so each cadence gets ~10 years of cycles:
+  //   • monthly (30d)  → 120 cycles
+  //   • quarterly (90d) → 40
+  //   • semi-annual (180d) → 20
+  //   • yearly (365d)  → 10
+  // Caller can still override by passing an explicit `totalCount`.
+  const defaultTotalCount = Math.max(
+    10,
+    Math.round((10 * 365) / intervalDays),
+  )
+  const totalCount =
+    Number.isFinite(body.totalCount) && (body.totalCount as number) > 0
+      ? (body.totalCount as number)
+      : defaultTotalCount
 
   const cadence = razorpayCadence(intervalDays)
   const cacheKey = `${amountMinor}-${currency}-${cadence.period}-${cadence.interval}`

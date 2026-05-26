@@ -7,8 +7,9 @@
 // page).
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, Upload, FileText, X } from "lucide-react"
+import { ArrowLeft, Upload, FileText, X, UserCheck } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -171,10 +172,20 @@ export function StudentForm({ mode, initial, onSave }: Props) {
   // Duplicate-email guard: another user with the same email blocks
   // save (case-insensitive, edit-mode ignores ITSELF). Avoids the
   // silent dupe row that the store would otherwise accept.
+  //
+  // `users` is already tenant-scoped (lms-store keys are per-tenant),
+  // so a dupe here means "this person is already in YOUR workspace" —
+  // not a global collision. We surface the existing record so the
+  // teacher can jump straight to their profile instead of being
+  // stuck staring at a red error with no next step.
   const emailLower = draft.email.trim().toLowerCase()
-  const duplicateEmail = !!emailLower && users.some(
-    (u) => u.id !== initial?.id && u.email.toLowerCase() === emailLower,
-  )
+  const existingUserSameTenant = useMemo(() => {
+    if (!emailLower) return undefined
+    return users.find(
+      (u) => u.id !== initial?.id && u.email.toLowerCase() === emailLower,
+    )
+  }, [users, emailLower, initial?.id])
+  const duplicateEmail = !!existingUserSameTenant
 
   // On edit, an existing phone counts as valid unless the user
   // re-touched the field and it's now invalid. On create the
@@ -389,10 +400,19 @@ export function StudentForm({ mode, initial, onSave }: Props) {
                 {draft.email && !isValidEmail(draft.email) && (
                   <p className="mt-1 text-[11px] text-destructive">Doesn&apos;t look like a valid email.</p>
                 )}
-                {draft.email && isValidEmail(draft.email) && duplicateEmail && (
-                  <p className="mt-1 text-[11px] text-destructive">
-                    Another student is already using this email. Pick a different one or open their profile instead.
-                  </p>
+                {draft.email && isValidEmail(draft.email) && existingUserSameTenant && (
+                  <div className="mt-2 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-[11.5px] text-amber-900 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-200">
+                    <UserCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" />
+                    <div className="flex-1 leading-snug">
+                      <strong>{existingUserSameTenant.name || existingUserSameTenant.email}</strong> is already in this workspace. No need to add again — open their profile to message, enroll, or update.
+                      <Link
+                        href={`/dashboard/students/${existingUserSameTenant.id}`}
+                        className="ml-2 inline-flex items-center font-semibold text-amber-900 underline underline-offset-2 hover:text-amber-950 dark:text-amber-100"
+                      >
+                        Open profile →
+                      </Link>
+                    </div>
+                  </div>
                 )}
               </Field>
               <Field label="WhatsApp number *">
