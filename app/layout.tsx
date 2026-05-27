@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import { Inter, Playfair_Display, Geist_Mono, Great_Vibes, Allura, Dancing_Script, Caveat, Sacramento, Pacifico, Cormorant_Garamond, Cinzel, EB_Garamond, Manrope, Outfit, Fraunces } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
 import { CertificateProvider } from '@/lib/certificate-store'
@@ -19,14 +20,6 @@ import { Toaster } from '@/components/ui/sonner'
 // platform stay on the default theme so admin chrome doesn't suddenly
 // repaint when a teacher picks a new brand color.
 import './globals.css'
-
-// Skip static prerendering for every route. This app's data lives in
-// browser localStorage (LMS, tenants, docs, etc.) and every page is
-// effectively client-rendered, so prerendering produces empty shells
-// and trips up Next's CSR-bailout checks (useSearchParams without a
-// Suspense boundary, etc.). Forcing dynamic at the root layer cascades
-// to all child segments.
-export const dynamic = "force-dynamic"
 
 const inter = Inter({ 
   subsets: ["latin"],
@@ -219,6 +212,19 @@ export default function RootLayout({
         </ConfirmProvider>
         <Toaster richColors closeButton position="top-right" />
         {process.env.NODE_ENV === 'production' && <Analytics />}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-37E024KXN0"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){window.dataLayer.push(arguments);}
+            gtag('js', new Date());
+
+            gtag('config', 'G-37E024KXN0');
+          `}
+        </Script>
       </body>
     </html>
   )
