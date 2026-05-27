@@ -22,27 +22,29 @@ import { PathInput } from "@/components/portal/path-input"
 
 interface Props {
   columns: PortalFooterColumn[]
-  onChange: (next: PortalFooterColumn[]) => void
+  onChange: (patch: PortalFooterColumn[] | ((prev: PortalFooterColumn[]) => PortalFooterColumn[])) => void
 }
 
 export function FooterColumnsEditor({ columns, onChange }: Props) {
   const upsertColumn = (id: string, patch: Partial<PortalFooterColumn>) =>
-    onChange(columns.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+    onChange((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
   const removeColumn = (id: string) =>
-    onChange(columns.filter((c) => c.id !== id))
+    onChange((prev) => prev.filter((c) => c.id !== id))
   const moveColumn = (id: string, dir: -1 | 1) => {
-    const idx = columns.findIndex((c) => c.id === id)
-    if (idx === -1) return
-    const next = idx + dir
-    if (next < 0 || next >= columns.length) return
-    const arr = columns.slice()
-    const [m] = arr.splice(idx, 1)
-    arr.splice(next, 0, m)
-    onChange(arr)
+    onChange((prev) => {
+      const idx = prev.findIndex((c) => c.id === id)
+      if (idx === -1) return prev
+      const next = idx + dir
+      if (next < 0 || next >= prev.length) return prev
+      const arr = prev.slice()
+      const [m] = arr.splice(idx, 1)
+      arr.splice(next, 0, m)
+      return arr
+    })
   }
   const addColumn = () =>
-    onChange([
-      ...columns,
+    onChange((prev) => [
+      ...prev,
       {
         id: generatePortalId("col"),
         heading: "New column",

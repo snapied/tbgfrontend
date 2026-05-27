@@ -53,7 +53,7 @@ import { ContrastMeter } from "@/components/portal/contrast-meter"
 import { PresetApplyDialog } from "@/components/portal/preset-apply-dialog"
 import type { ThemePreset } from "@/lib/portal-theme-presets"
 import { HealthScore } from "@/components/ui/health-score"
-import { OgImageGenerator } from "@/components/portal/og-image-generator"
+import { ThumbnailField } from "@/components/upload/thumbnail-field"
 import { Image as ImageIcon, MessageSquarePlus, History } from "lucide-react"
 import { useReviewThread } from "@/lib/review-store"
 import { ReviewPanel } from "@/components/ui/review-panel"
@@ -816,27 +816,10 @@ function PortalBrandPageInner() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {/* Heads-up nudge when no share card has been set yet
-                  AND the workspace has the inputs we'd need to
-                  generate one. Click links straight to the
-                  Generate action in OgImageGenerator below. */}
-              {!brand.ogImage && effective.siteName && (
-                <div className="mb-4 rounded-md border border-accent/30 bg-accent/5 p-3 text-sm">
-                  <p className="font-medium">No share card set yet.</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Click <strong>Generate as PNG</strong> below — we&apos;ll build a 1200×630 card from your site name, tagline, and brand colours. Stops your link unfurls (WhatsApp / Slack / LinkedIn) from defaulting to a logo.
-                  </p>
-                </div>
-              )}
-              <OgImageGenerator
-                primaryColor={effective.primaryColor}
-                accentColor={effective.accentColor}
-                siteName={effective.siteName}
-                tagline={effective.tagline}
-                logoUrl={effective.logoUrl}
-                currentOgImage={brand.ogImage}
-                onGenerate={(dataUrl) => setBrand({ ogImage: dataUrl })}
-                onClear={() => setBrand({ ogImage: undefined })}
+              <ThumbnailField
+                value={brand.ogImage ?? ""}
+                onChange={(url) => setBrand({ ogImage: url || undefined })}
+                compress={{ maxDim: 1200, quality: 0.85, mime: "image/jpeg" }}
               />
             </CardContent>
           </Card>
@@ -1061,7 +1044,17 @@ function PortalBrandPageInner() {
             <CardContent>
               <HeaderNavEditor
                 nav={config.nav ?? {}}
-                onChange={(next) => updateConfig({ nav: next })}
+                onChange={(next) => {
+                  updateConfig((prev) => {
+                    const latestNav = prev.nav ?? {}
+                    const resolvedNext = typeof next === "function" ? next(latestNav) : next
+                    // HeaderNavEditor's onChange expects to replace the whole nav object,
+                    // but since it closes over the old nav during rapid edits, we must merge
+                    // its keys on top of the latest nav to avoid clobbering concurrent edits.
+                    // If it's a completely new structure, this still works for the CTAs and items.
+                    return { nav: { ...latestNav, ...resolvedNext } }
+                  })
+                }}
               />
             </CardContent>
           </Card>
@@ -1096,7 +1089,12 @@ function PortalBrandPageInner() {
             <CardContent>
               <FooterColumnsEditor
                 columns={config.footerColumns ?? []}
-                onChange={(next) => updateConfig({ footerColumns: next })}
+                onChange={(next) => {
+                  updateConfig((prev) => {
+                    const latestCols = prev.footerColumns ?? []
+                    return { footerColumns: typeof next === "function" ? next(latestCols) : next }
+                  })
+                }}
               />
             </CardContent>
           </Card>

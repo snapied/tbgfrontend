@@ -10,7 +10,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Globe, FileText, Mail, ExternalLink, LogIn, ShoppingBag, User as UserIcon } from "lucide-react"
-import { StableInput } from "@/components/ui/stable-input"
+import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { usePortal } from "@/lib/portal-store"
 
@@ -60,6 +60,18 @@ export function PathInput({
   const [open, setOpen] = useState(false)
   const [focused, setFocused] = useState(false)
   const wrapperRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  const [localValue, setLocalValue] = useState(value)
+  const blurredAtRef = useRef<number>(0)
+  const BLUR_LOCK_MS = 1500
+
+  // Sync prop value -> localValue when it changes externally
+  useEffect(() => {
+    if (focused) return
+    if (Date.now() - blurredAtRef.current < BLUR_LOCK_MS) return
+    if (value !== localValue) setLocalValue(value)
+  }, [value, focused, localValue])
 
   // Pages from the portal store. Drop duplicates of built-ins so a
   // user-created /contact (theirs would win) doesn't double-list.
@@ -78,17 +90,17 @@ export function PathInput({
   // Filter as the user types. We only filter when the value looks like
   // an internal path so external URLs don't accidentally hide the
   // dropdown noise. Empty value = show everything.
-  const looksInternal = !value || value.startsWith("/")
+  const looksInternal = !localValue || localValue.startsWith("/")
   const filtered = useMemo(() => {
     if (!looksInternal) return []
-    const q = value.toLowerCase().trim()
+    const q = localValue.toLowerCase().trim()
     if (!q || q === "/") return options
     return options.filter(
       (o) =>
         o.slug.toLowerCase().includes(q) ||
         o.label.toLowerCase().includes(q),
     )
-  }, [options, value, looksInternal])
+  }, [options, localValue, looksInternal])
 
   // Open the popover when the field gets focus AND the value looks
   // like an internal path (or is empty). Typing a URL closes it.
@@ -115,6 +127,7 @@ export function PathInput({
   }, [open])
 
   const pick = (option: PathOption) => {
+    setLocalValue(option.slug)
     onChange(option.slug)
     setOpen(false)
     setFocused(false)
@@ -126,20 +139,26 @@ export function PathInput({
   // with a bag, /my with a person — the iconography hints at the
   // destination type at a glance.
   const KindIcon = (() => {
-    if (value.startsWith("mailto:")) return Mail
-    if (value.startsWith("http")) return ExternalLink
-    if (value === "/login" || value === "/signup") return LogIn
-    if (value === "/store") return ShoppingBag
-    if (value.startsWith("/my")) return UserIcon
+    if (localValue.startsWith("mailto:")) return Mail
+    if (localValue.startsWith("http")) return ExternalLink
+    if (localValue === "/login" || localValue === "/signup") return LogIn
+    if (localValue === "/store") return ShoppingBag
+    if (localValue.startsWith("/my")) return UserIcon
     return Globe
   })()
 
   return (
     <div ref={wrapperRef} className="relative flex-1">
       <KindIcon className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      <StableInput
-        value={value}
-        onChange={(v) => onChange(v)}
+      <Input
+        ref={inputRef}
+        value={localValue}
+        onChange={(e) => setLocalValue(e.currentTarget.value)}
+        onBlur={() => {
+          setFocused(false)
+          blurredAtRef.current = Date.now()
+          onChange(localValue)
+        }}
         onFocus={() => setFocused(true)}
         onKeyDown={(e) => {
           if (e.key === "Escape") {
@@ -151,7 +170,7 @@ export function PathInput({
           // useEffect above handles the open state from the next
           // keystroke; this just guarantees the focus path covers it
           // when the input already had non-internal text.
-          if (e.key === "/" && (value === "" || !value.startsWith("/"))) {
+          if (e.key === "/" && (localValue === "" || !localValue.startsWith("/"))) {
             setFocused(true)
           }
         }}

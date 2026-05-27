@@ -44,11 +44,18 @@ export const StableInput = forwardRef<HTMLInputElement, Props>(
   function StableInput({ value, onChange, onFocus, onBlur, ...rest }, ref) {
     const [local, setLocal] = useState<string>(value)
     const focusedRef = useRef(false)
+    const blurredAtRef = useRef<number>(0)
+    const BLUR_LOCK_MS = 1500
+
     // Resync only when the parent's value changed AND the input
-    // isn't actively being typed in. Without the focus guard, the
-    // parent's mid-typing re-render would clobber the caret.
+    // isn't actively being typed in, AND it hasn't just been blurred.
+    // Without the focus guard, the parent's mid-typing re-render would
+    // clobber the caret. Without the blur lock, an optimistic update
+    // reverting (or slow network sync) would overwrite the user's input
+    // right after they click "Publish".
     useEffect(() => {
       if (focusedRef.current) return
+      if (Date.now() - blurredAtRef.current < BLUR_LOCK_MS) return
       if (value !== local) setLocal(value)
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [value])
@@ -63,15 +70,20 @@ export const StableInput = forwardRef<HTMLInputElement, Props>(
         }}
         onBlur={(e) => {
           focusedRef.current = false
+          blurredAtRef.current = Date.now()
           // If a debounced parent push hasn't quite landed yet, the
           // resync useEffect above will pull the canonical value back
           // in on the next render — but only if it differs.
           onBlur?.(e)
+          onChange(local)
         }}
         onChange={(e) => {
           const v = e.target.value
           setLocal(v)
-          onChange(v)
+          // We intentionally DO NOT call onChange(v) here.
+          // Firing onChange on every keystroke causes rapid parent state updates,
+          // which can lead to stale-closure data loss in complex editors (like
+          // HeaderNavEditor). We only push the committed value on blur.
         }}
         {...rest}
       />

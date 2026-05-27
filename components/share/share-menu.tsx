@@ -512,7 +512,7 @@ function ShareToCommunityDialog({
                   {artifact.description}
                 </p>
               )}
-              <p className="mt-1 truncate text-[10px] font-mono text-muted-foreground">
+              <p className="mt-1 break-all line-clamp-1 text-[10px] font-mono text-muted-foreground">
                 {artifact.url}
               </p>
             </div>

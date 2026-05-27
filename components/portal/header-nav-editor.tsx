@@ -24,7 +24,7 @@ import { PathInput } from "@/components/portal/path-input"
 
 interface Props {
   nav: PortalNavConfig
-  onChange: (next: PortalNavConfig) => void
+  onChange: (patch: PortalNavConfig | ((prev: PortalNavConfig) => PortalNavConfig)) => void
 }
 
 // Built-in destinations, keyed by a stable id we use both in the
@@ -89,7 +89,7 @@ export function HeaderNavEditor({ nav, onChange }: Props) {
       return (a.navOrder ?? 99) - (b.navOrder ?? 99) || a.title.localeCompare(b.title)
     })
   const items = nav.items ?? []
-  const setItems = (next: typeof items) => onChange({ ...nav, items: next.length > 0 ? next : undefined })
+  const setItems = (next: typeof items) => onChange((prev) => ({ ...prev, items: next.length > 0 ? next : undefined }))
 
   const addItem = () =>
     setItems([...items, { label: "New link", href: "/" }])
@@ -106,12 +106,16 @@ export function HeaderNavEditor({ nav, onChange }: Props) {
   }
 
   const setCta = (which: "primaryCta" | "secondaryCta", patch: Partial<PortalNavCta>) => {
-    const current = nav[which] ?? { label: "", href: "" }
-    onChange({ ...nav, [which]: { ...current, ...patch } })
+    onChange((prev) => {
+      const current = prev[which] ?? { label: "", href: "" }
+      return { ...prev, [which]: { ...current, ...patch } }
+    })
   }
   const clearCta = (which: "primaryCta" | "secondaryCta") => {
-    const { [which]: _omit, ...rest } = nav
-    onChange(rest)
+    onChange((prev) => {
+      const { [which]: _omit, ...rest } = prev
+      return rest
+    })
   }
 
   const mode: "auto" | "curated" = items.length > 0 ? "curated" : "auto"
@@ -214,11 +218,11 @@ export function HeaderNavEditor({ nav, onChange }: Props) {
                       href={meta.href}
                       icon={meta.icon}
                       value={value}
-                      onChange={(v) => onChange({ ...nav, [meta.flag]: v })}
+                      onChange={(v) => onChange((prev) => ({ ...prev, [meta.flag]: v }))}
                       canMoveUp={i > 0}
                       canMoveDown={i < orderedBuiltIns.length - 1}
-                      onMoveUp={() => onChange({ ...nav, builtInOrder: moveInOrder(orderedBuiltIns, key, -1) })}
-                      onMoveDown={() => onChange({ ...nav, builtInOrder: moveInOrder(orderedBuiltIns, key, 1) })}
+                      onMoveUp={() => onChange((prev) => ({ ...prev, builtInOrder: moveInOrder(orderedBuiltIns, key, -1) }))}
+                      onMoveDown={() => onChange((prev) => ({ ...prev, builtInOrder: moveInOrder(orderedBuiltIns, key, 1) }))}
                     />
                   )
                 })}

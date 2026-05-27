@@ -29,6 +29,7 @@ import { readCurrentTenantSlug, useTenant } from "./tenant-store"
 import { reportStorageError } from "./storage-error"
 import { pushToTrash, registerRestoreHandler } from "./trash"
 import { mirrorSliceToServer } from "./tenant-state-sync"
+import isEqual from "lodash-es/isEqual"
 
 // ============================================================
 // Types
@@ -853,6 +854,24 @@ async function pullServerBlob(slug: string): Promise<void> {
   }
   if (!serverOk) return
 
+  // ─── Publish-guard ────────────────────────────────────────────────────────
+  // If the user published AFTER we took the preSnapshot (i.e. while the fetch
+  // was in flight), the server response carries the OLD pre-publish live*
+  // values. Writing those back would revert liveConfig → config differs from
+  // liveConfig → publish button turns amber again. Guard: compare
+  // lastPublishedAt timestamps. If local is newer, the server is behind us
+  // (our flush is still in flight) — skip ALL live* keys entirely.
+  const LIVE_KEY_NAMES: KeyName[] = ["liveConfig", "livePages", "liveFaculty", "liveTestimonials", "livePosts"]
+  // Read lastPublishedAt fresh from localStorage (not preSnapshot) because
+  // publishDraft() may have written it after we took the snapshot above.
+  const localPublishedAtKey = `thebigclass.t.${slug}.${KEY_SUFFIXES.lastPublishedAt}`
+  const localPublishedAtRaw = window.localStorage.getItem(localPublishedAtKey)
+  const serverPublishedAtRaw = serverState[KEY_SUFFIXES.lastPublishedAt]
+  const localPublishedAt = localPublishedAtRaw ? new Date(JSON.parse(localPublishedAtRaw) as string).getTime() : 0
+  const serverPublishedAt = serverPublishedAtRaw ? new Date(serverPublishedAtRaw as string).getTime() : 0
+  // Local has published more recently than the server knows about → skip live* keys.
+  const localAheadOfServer = localPublishedAt > serverPublishedAt
+
   // Three-way sync between localStorage and the server blob, keyed by
   // each known portal suffix. The matrix:
   //   server-only      → write into localStorage (incognito visitor's
@@ -865,6 +884,10 @@ async function pullServerBlob(slug: string): Promise<void> {
   //                      server was slow — keep the fresh local edit)
   //   neither          → leave defaults
   for (const name of Object.keys(KEY_SUFFIXES) as KeyName[]) {
+    // If we published locally but the server doesn't know yet, don't let
+    // the server's stale live* values overwrite our fresh published state.
+    if (localAheadOfServer && LIVE_KEY_NAMES.includes(name)) continue
+
     const suffix = KEY_SUFFIXES[name]
     const lsKey = `thebigclass.t.${slug}.${suffix}`
     const inServer = Object.prototype.hasOwnProperty.call(serverState, suffix)
@@ -944,7 +967,7 @@ export interface PortalVersion {
 interface PortalContextValue {
   slug: string
   config: PortalConfig
-  updateConfig: (patch: Partial<PortalConfig>) => void
+  updateConfig: (patch: Partial<PortalConfig> | ((prev: PortalConfig) => Partial<PortalConfig>)) => void
   resetConfig: () => void
 
   pages: PortalPage[]
@@ -993,6 +1016,18 @@ interface PortalContextValue {
 
 const PortalContext = createContext<PortalContextValue | null>(null)
 
+// Deep equality for change detection. Pre-normalizes both sides through a
+// JSON round-trip so that undefined values are dropped (matching what
+// localStorage serialization does), then uses lodash isEqual for a correct,
+// order-independent, deep structural comparison.
+function jsonNormalize<T>(v: T): T {
+  try { return JSON.parse(JSON.stringify(v)) as T } catch { return v }
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  return isEqual(jsonNormalize(a), jsonNormalize(b))
+}
+
 export function PortalProvider({ children }: { children: ReactNode }) {
   const slug = readCurrentTenantSlug() || "default"
   const { currentTenant } = useTenant()
@@ -1033,6 +1068,12 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // (and overwrite the DB if it happened in Incognito). We skip
   // saving during the hydration window.
   const isHydrating = useRef(true)
+  // Tracks when the last publishDraft() completed (epoch ms). Any hydrate()
+  // call within PUBLISH_GRACE_MS after this timestamp will skip re-setting the
+  // live* React states — preventing the pullServerBlob.then()→hydrate() race
+  // from reverting liveConfig to a stale server value immediately after publish.
+  const lastPublishedAtRef = useRef<number>(0)
+  const PUBLISH_GRACE_MS = 60_000 // 60 s is more than enough for any pullServerBlob to resolve
   useEffect(() => {
     if (hydrated) {
       // Small timeout ensures the synchronous React render cycle
@@ -1105,21 +1146,25 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     setPosts(draftPosts)
     setLeads(loadJSON<PortalLead[]>(slug, "leads", []))
 
-    // Live snapshot — only the explicitly published version is used here.
-    // We no longer fall back to draft so that edits in the dashboard do
-    // NOT appear on the public site until the user clicks "Publish changes".
-    // Before a first publish the public site shows the default template;
-    // after publish it shows the saved live snapshot.
     const liveCfgRaw = loadJSON<PortalConfig | null>(slug, "liveConfig", null)
-    setLiveConfig(liveCfgRaw ?? { ...DEFAULT_PORTAL_CONFIG })
     const livePagesRaw = loadJSON<PortalPage[] | null>(slug, "livePages", null)
-    setLivePages(livePagesRaw ?? defaultPages())
     const liveFacRaw = loadJSON<PortalFacultyMember[] | null>(slug, "liveFaculty", null)
-    setLiveFaculty(liveFacRaw ?? [])
     const liveTestRaw = loadJSON<PortalTestimonial[] | null>(slug, "liveTestimonials", null)
-    setLiveTestimonials(liveTestRaw ?? [])
     const livePostsRaw = loadJSON<PortalBlogPost[] | null>(slug, "livePosts", null)
-    setLivePosts(livePostsRaw ?? [])
+
+    // Guard: if we published recently (within PUBLISH_GRACE_MS), skip re-setting
+    // the live* states. The pullServerBlob response was fetched BEFORE our
+    // publish hit the server, so its live* values are stale. Overwriting the
+    // live* React states with them would make config !== liveConfig again,
+    // turning the publish button amber immediately after a successful publish.
+    const recentlyPublished = Date.now() - lastPublishedAtRef.current < PUBLISH_GRACE_MS
+    if (!recentlyPublished) {
+      setLiveConfig(liveCfgRaw ?? { ...DEFAULT_PORTAL_CONFIG })
+      setLivePages(livePagesRaw ?? defaultPages())
+      setLiveFaculty(liveFacRaw ?? [])
+      setLiveTestimonials(liveTestRaw ?? [])
+      setLivePosts(livePostsRaw ?? [])
+    }
 
     // Versions, trimmed to the last 90 days. Anything older is dropped
     // here so a tenant returning after a long absence doesn't carry
@@ -1163,10 +1208,8 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // wouldn't show up in the embedded `/p/[tenant]` preview until the
   // iframe was manually refreshed.
   useEffect(() => {
-    const prefix = `thebigclass.t.${slug}.portal.`
     const onStorage = (e: StorageEvent) => {
-      if (!e.key || !e.key.startsWith(prefix)) return
-      hydrate()
+      if (e.key && e.key.startsWith(`thebigclass.t.${slug}`)) hydrate()
     }
     window.addEventListener("storage", onStorage)
     return () => window.removeEventListener("storage", onStorage)
@@ -1207,10 +1250,8 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // mutation method (not from the save effects) so that the initial
   // hydrate flush doesn't falsely mark the workspace as dirty.
   const stampEdited = useCallback(() => {
-    console.log("[PortalStore] stampEdited CALLED. hydrated:", hydrated, "slug:", slug)
     if (!hydrated) return
     const now = new Date().toISOString()
-    console.log("[PortalStore] stampEdited setting lastEditedAt to:", now)
     setLastEditedAt(now)
     saveJSON(slug, "lastEditedAt", now)
   }, [hydrated, slug])
@@ -1266,6 +1307,11 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // ────────────────────────────────────────────────────────────────
 
   const publishDraft = useCallback((label?: string): PortalVersion => {
+    // Stamp the publish ref FIRST — before any async work or state updates.
+    // This ensures that any hydrate() call triggered by pullServerBlob.then()
+    // sees a recent timestamp and skips overwriting the live* React states
+    // with the stale server data that was fetched before this publish.
+    lastPublishedAtRef.current = Date.now()
     const now = new Date().toISOString()
     const snapshot = {
       config,
@@ -1281,19 +1327,33 @@ export function PortalProvider({ children }: { children: ReactNode }) {
       snapshot,
     }
 
-    // Synchronously write live configurations to local storage & queue them for immediate bulk sync
+    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000
+    const nextVersions = [version, ...versions].filter((v) => new Date(v.takenAt).getTime() >= cutoff)
+
+    // Write lastPublishedAt FIRST so that if pullServerBlob() completes
+    // during or just after this function, the publish-guard in pullServerBlob
+    // sees a local timestamp newer than the server's and skips overwriting
+    // the live* keys we are about to set.
+    saveJSON(slug, "lastPublishedAt", now)
+
+    // Now write the live snapshots — order matters: timestamp is already
+    // set above so any concurrent pullServerBlob guard will fire correctly.
     saveJSON(slug, "liveConfig", snapshot.config)
     saveJSON(slug, "livePages", snapshot.pages)
     saveJSON(slug, "liveFaculty", snapshot.faculty)
     saveJSON(slug, "liveTestimonials", snapshot.testimonials)
     saveJSON(slug, "livePosts", snapshot.posts)
-
-    const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000
-    const nextVersions = [version, ...versions].filter((v) => new Date(v.takenAt).getTime() >= cutoff)
     saveJSON(slug, "versions", nextVersions)
-    saveJSON(slug, "lastPublishedAt", now)
 
-    // Update React states for reactive UI rendering
+    // Update React state atomically so hasUnpublishedChanges re-computes
+    // to false in the same React batch. Setting both draft and live to
+    // the same snapshot values makes JSON.stringify(config) ===
+    // JSON.stringify(liveConfig) true immediately.
+    setConfig(snapshot.config)
+    setPages(snapshot.pages)
+    setFaculty(snapshot.faculty)
+    setTestimonials(snapshot.testimonials)
+    setPosts(snapshot.posts)
     setLiveConfig(snapshot.config)
     setLivePages(snapshot.pages)
     setLiveFaculty(snapshot.faculty)
@@ -1349,21 +1409,25 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, [slug, versions])
 
   const hasUnpublishedChanges = useMemo(() => {
-    // Compare draft and live snapshots to determine if there are unpublished changes.
-    // Simple shallow checks for config and pages length; deep compare can be added if needed.
-    if (!liveConfig || !livePages) return false;
-    const configChanged = JSON.stringify(config) !== JSON.stringify(liveConfig);
-    const pagesChanged = JSON.stringify(pages) !== JSON.stringify(livePages);
-    const facultyChanged = JSON.stringify(faculty) !== JSON.stringify(liveFaculty);
-    const testimonialsChanged = JSON.stringify(testimonials) !== JSON.stringify(liveTestimonials);
-    const postsChanged = JSON.stringify(posts) !== JSON.stringify(livePosts);
-    const anyChanged = configChanged || pagesChanged || facultyChanged || testimonialsChanged || postsChanged;
-    console.log("[PortalStore] hasUnpublishedChanges computed:", anyChanged);
-    return anyChanged;
-  }, [config, pages, faculty, testimonials, posts, liveConfig, livePages, liveFaculty, liveTestimonials, livePosts]);
+    if (!liveConfig || !livePages) return false
+    // Use deepEqual (lodash isEqual + JSON round-trip normalization) so that:
+    //  1. Key order differences don't cause false positives
+    //  2. {key: undefined} vs {} are treated as equal (both serialize to the same JSON)
+    //  3. Type coercions (number/string) are caught correctly
+    return (
+      !deepEqual(config, liveConfig) ||
+      !deepEqual(pages, livePages) ||
+      !deepEqual(faculty, liveFaculty) ||
+      !deepEqual(testimonials, liveTestimonials) ||
+      !deepEqual(posts, livePosts)
+    )
+  }, [config, pages, faculty, testimonials, posts, liveConfig, livePages, liveFaculty, liveTestimonials, livePosts])
 
-  const updateConfig = useCallback((patch: Partial<PortalConfig>) => {
-    setConfig((prev) => ({ ...prev, ...patch }))
+  const updateConfig = useCallback((patch: Partial<PortalConfig> | ((prev: PortalConfig) => Partial<PortalConfig>)) => {
+    setConfig((prev) => {
+      const p = typeof patch === "function" ? patch(prev) : patch
+      return { ...prev, ...p }
+    })
     stampEdited()
   }, [stampEdited])
   const resetConfig = useCallback(() => {

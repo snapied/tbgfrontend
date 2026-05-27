@@ -805,7 +805,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Thumbnail */}
-          <Card>
+          <Card className="py-0">
             <div className="aspect-video bg-muted">
               <CourseCoverImage
                 course={course}

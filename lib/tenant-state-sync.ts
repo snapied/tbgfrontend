@@ -81,6 +81,10 @@ export function resetTenantBlobPull(slug?: string): void {
 // picker firing on every drag) into a single bulk POST after 600ms
 // of quiet. The localStorage write that accompanies this is immediate
 // either way, so the same-tab editor never feels laggy.
+// Active sync promises by slug, to prevent concurrent /bulk requests from
+// resolving out of order and corrupting the database with stale data.
+const activeSyncs = new Map<string, Promise<void>>()
+
 export function mirrorSliceToServer(
   slug: string,
   suffix: string,
@@ -111,7 +115,6 @@ export function mirrorSliceToServer(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ entries }),
-        keepalive: true,
       }).catch(() => {
         /* tolerable — local cache still has truth, next save retries */
       })
@@ -146,21 +149,40 @@ export async function flushTenantStateSync(slug: string): Promise<void> {
     clearTimeout(existing)
     mirrorTimers.delete(slug)
   }
+
+  // If a network request is already in flight, wait for it to finish first.
+  // This ensures that if the user clicks "Publish" while a debounced auto-save
+  // is inflight, the final "Publish" network request is sent AFTER the auto-save
+  // completes, guaranteeing the database ends up with the final published state.
+  while (activeSyncs.has(slug)) {
+    try {
+      await activeSyncs.get(slug)
+    } catch {
+      // ignore rejection, we just want to serialize
+    }
+  }
   
   const writesToFlush = pendingWrites.get(slug)
   if (!writesToFlush || writesToFlush.size === 0) return
   pendingWrites.delete(slug)
   
   const entries = Array.from(writesToFlush.entries()).map(([k, v]) => ({ key: k, value: v }))
-  try {
-    await fetch(`${endpoint(slug)}/bulk`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ entries }),
-      keepalive: true,
-    })
-  } catch {
-    /* tolerable — offline or network failure; state is still in local storage */
-  }
+  
+  const syncPromise = (async () => {
+    try {
+      await fetch(`${endpoint(slug)}/bulk`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entries }),
+      })
+    } catch {
+      /* tolerable — offline or network failure; state is still in local storage */
+    } finally {
+      activeSyncs.delete(slug)
+    }
+  })()
+
+  activeSyncs.set(slug, syncPromise)
+  await syncPromise
 }
 

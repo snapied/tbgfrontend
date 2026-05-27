@@ -122,6 +122,22 @@
   body {
     @apply bg-background text-foreground;
   }
+/* Globally prevent long text/URLs from breaking flex and grid layouts */
+a,
+p {
+  overflow-wrap: break-word;
+}
+}
+
+/* 
+  Global fix for flexbox blowouts when using .truncate 
+  Ensures the element can shrink below its content size in flex containers
+*/
+@layer utilities {
+  .truncate {
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 .p-relative {

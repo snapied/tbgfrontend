@@ -130,7 +130,18 @@ export function PlanProvider({ children }: { children: React.ReactNode }) {
         const parsed = JSON.parse(raw) as CachedPlan
         if (parsed?.plan && PLANS[parsed.plan]) {
           setPlan(parsed.plan)
-          setLimits(deserializeLimits(parsed.limits))
+          
+          const fromCache = deserializeLimits(parsed.limits || ({} as PlanLimits))
+          const fromCatalog = PLANS[parsed.plan]?.limits ?? PLANS.starter.limits
+          const merged: PlanLimits = { ...fromCatalog, ...fromCache }
+          ;(Object.keys(merged) as Array<keyof PlanLimits>).forEach((k) => {
+            if (merged[k] === null || merged[k] === undefined) {
+              ;(merged as unknown as Record<string, unknown>)[k as string] =
+                (fromCatalog as unknown as Record<string, unknown>)[k as string]
+            }
+          })
+          setLimits(merged)
+
           setServerUsage(parsed.usage)
           if (parsed.status) setStatus(parsed.status)
           if (parsed.trialEndsAt !== undefined) setTrialEndsAt(parsed.trialEndsAt)

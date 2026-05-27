@@ -58,7 +58,11 @@ export function PortalSiteHeader({ tenant, config, pages, basePath }: Props) {
     }
     const fromPages = pages
       .filter((p) => p.showInNav && p.status === "published")
-      .sort((a, b) => (a.navOrder ?? 99) - (b.navOrder ?? 99))
+      .sort((a, b) => {
+        if (a.slug === "/") return -1
+        if (b.slug === "/") return 1
+        return (a.navOrder ?? 99) - (b.navOrder ?? 99) || (a.title || "").localeCompare(b.title || "")
+      })
       .map((p) => ({
         // page.<id>.navLabel is the tenant-content key — translatable
         // from the Languages admin page. Falls back to the English
@@ -264,6 +268,26 @@ export function PortalSiteHeader({ tenant, config, pages, basePath }: Props) {
         {open && (
           <div className="border-t border-border md:hidden">
             <nav className="flex flex-col gap-1 px-4 py-3">
+              {finalPrimary && (
+                <Link
+                  key="primary-cta"
+                  href={finalPrimary.href}
+                  onClick={() => setOpen(false)}
+                  className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground text-center"
+                >
+                  {finalPrimary.label}
+                </Link>
+              )}
+              {finalSecondary && (
+                <Link
+                  key="secondary-cta"
+                  href={finalSecondary.href}
+                  onClick={() => setOpen(false)}
+                  className="rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground text-center"
+                >
+                  {finalSecondary.label}
+                </Link>
+              )}
               {allLinks.map((l) => (
                 <Link
                   key={l.href}
