@@ -43,7 +43,7 @@ export function ByCreator() {
       icon: Youtube,
       label: "For YouTubers",
       body: "Convert subs to paying members.",
-      img: "https://images.unsplash.com/photo-1593697972679-c4041d132a46?auto=format&fit=crop&w=800&q=80",
+      img: "./music.jpeg",
       className: "md:col-span-2 lg:col-span-2 row-span-2",
     },
     {
@@ -51,7 +51,7 @@ export function ByCreator() {
       icon: Instagram,
       label: "For Instagram creators",
       body: "Link-in-bio that actually earns.",
-      img: "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&w=800&q=80",
+      img: "./social.jpeg",
       className: "md:col-span-1 lg:col-span-1 row-span-1",
     },
     {
@@ -59,7 +59,7 @@ export function ByCreator() {
       icon: Briefcase,
       label: "For coaches",
       body: "1:1 sessions + group cohorts + content.",
-      img: "https://images.unsplash.com/photo-1573497019940-1c28c88b4f3e?auto=format&fit=crop&w=800&q=80",
+      img: "./coach.jpeg",
       className: "md:col-span-1 lg:col-span-1 row-span-1",
     },
     {
@@ -67,7 +67,7 @@ export function ByCreator() {
       icon: GraduationCap,
       label: "For course creators",
       body: "The full course platform — your URL.",
-      img: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=800&q=80",
+      img: "/creator.jpeg",
       className: "md:col-span-1 lg:col-span-1 row-span-1",
     },
     {
@@ -75,7 +75,7 @@ export function ByCreator() {
       icon: Sparkles,
       label: "For personal brands",
       body: "Multi-product creator brand at one URL.",
-      img: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=800&q=80",
+      img: "./youtuber.jpg",
       className: "md:col-span-2 lg:col-span-2 row-span-1",
     },
   ]

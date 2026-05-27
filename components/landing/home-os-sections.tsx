@@ -294,17 +294,17 @@ function PortalMockup() {
               {
                 title: "Calculus crash",
                 price: "₹2,999",
-                img: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?auto=format&fit=crop&w=120&h=80&q=80",
+                img: "./calculus-crash.webp",
               },
               {
                 title: "Vectors deep",
                 price: "₹4,499",
-                img: "https://images.unsplash.com/photo-1509228468518-180dd4864904?auto=format&fit=crop&w=120&h=80&q=80",
+                img: "./vector.webp"
               },
               {
                 title: "Trig in 5 days",
                 price: "₹1,499",
-                img: "https://images.unsplash.com/photo-1453733190148-c44698c26588?auto=format&fit=crop&w=120&h=80&q=80",
+                img: "./trig.webp"
               },
             ].map((c) => (
               <div
