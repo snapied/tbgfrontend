@@ -21,6 +21,8 @@ import { Toaster } from '@/components/ui/sonner'
 // repaint when a teacher picks a new brand color.
 import './globals.css'
 
+export const dynamic = "force-dynamic"
+
 const inter = Inter({ 
   subsets: ["latin"],
   variable: '--font-inter'
@@ -70,9 +72,9 @@ const editorFontVars = [
 // Slack / WhatsApp / Twitter / LinkedIn render a rich preview card
 // instead of a bare URL.
 const SITE_URL = 'https://thebigclass.com'
-const PLATFORM_TITLE = 'The Big Class — Teach, sell, certify. All in one.'
+const PLATFORM_TITLE = 'The Big Class — The Creator-Business OS for Modern Educators'
 const PLATFORM_DESCRIPTION =
-  'The all-in-one workspace for teachers, schools, and creators — live classes, courses, a branded storefront, certificates, and a Wall of Love. Launch your teaching brand in minutes.'
+  'The all-in-one workspace for educators, coaches, and creators. Host your courses, run live cohorts, build custom communities, and accept direct payments — on your own URL, with 0% platform commission.'
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),

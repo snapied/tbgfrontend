@@ -80,10 +80,10 @@ export function LandingHero() {
               <span className="relative inline-block">
                 <span className="relative z-10 bg-gradient-to-r from-primary via-violet-500 to-primary bg-clip-text text-transparent"
                   style={{ backgroundSize: "200% auto", animation: "shimmer 4s linear infinite" }}>
-                  internet
+                  independent
                 </span>
               </span>
-              {" "}business.
+              {" "}teaching brand.
             </h1>
 
             <p className="mt-5 max-w-xl text-balance text-lg leading-relaxed text-muted-foreground">
