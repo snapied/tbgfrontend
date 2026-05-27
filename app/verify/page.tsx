@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Search, Loader2 } from "lucide-react"
 import { Logo } from "@/components/brand/logo"
@@ -8,16 +8,28 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-// Certificate IDs look like `CERT-<YYYY>-<6+ alphanumeric>` — match
-// loosely so legitimate variations (longer suffixes, mixed case)
-// still pass while obvious garbage gets caught at the input gate
-// instead of bouncing through a 404 on the detail page.
-const CERT_ID_RE = /^CERT-\d{4}-[A-Z0-9]{4,}$/
+// Certificate IDs look like `CERT-XXXXXXXX` (with or without optional year prefixes).
+// Match loosely to accept all system variations while catching obvious garbage.
+const CERT_ID_RE = /^CERT-[A-Z0-9-]+$/
 
 export default function VerifyPage() {
   const [certificateId, setCertificateId] = useState("")
   const [isSearching, setIsSearching] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get("code")
+      if (code) {
+        const clean = code.trim().toUpperCase()
+        if (clean) {
+          setIsSearching(true)
+          window.location.href = `/verify/${clean}`
+        }
+      }
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,7 +41,7 @@ export default function VerifyPage() {
     // case where the format is valid but the ID isn't in the system.
     if (!CERT_ID_RE.test(id)) {
       setError(
-        "That doesn't look like a certificate ID. The format is CERT-YYYY-XXXXXXXX (year, then 8 letters/digits).",
+        "That doesn't look like a valid certificate ID. The format starts with CERT- followed by alphanumeric characters."
       )
       return
     }

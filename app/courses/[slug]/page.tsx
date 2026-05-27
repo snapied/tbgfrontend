@@ -1115,6 +1115,7 @@ export default function CoursePublicPage({ params }: { params: Promise<{ slug: s
                             })}
                             instructor={course.instructor?.name ?? "Instructor"}
                             certificateId="CERT-PREVIEW"
+                            organisation={config.brand.siteName || currentTenant?.name || "The Big Class"}
                           />
                         </div>
                         <p className="mt-3 text-[11px] text-muted-foreground">

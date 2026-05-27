@@ -257,6 +257,7 @@ export default function BatchDetailPage({ params }: { params: Promise<{ id: stri
                                   })}
                                   instructor={cert.instructorName}
                                   certificateId={cert.id}
+                                  organisation={orgSettings.organisationName || "The Big Class"}
                                 />
                                 )}
                               </div>

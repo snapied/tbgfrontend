@@ -1,7 +1,49 @@
 "use client"
 
+import { useState, useEffect } from "react"
+import QRCode from "qrcode"
 import { Award, Star, CheckCircle, Leaf, Square, Building2, Sparkles, Scroll, Stamp, Ruler, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+function CertificateQRCode({ code, size = 64, dark = true }: { code: string; size?: number; dark?: boolean }) {
+  const [qrUrl, setQrUrl] = useState<string>("")
+
+  useEffect(() => {
+    if (code) {
+      QRCode.toDataURL(
+        `https://thebigclass.com/verify/${code}`,
+        {
+          margin: 1,
+          width: size * 2, // higher resolution
+          color: {
+            dark: dark ? "#000000" : "#ffffff",
+            light: dark ? "#ffffff" : "#00000000", // transparent background
+          },
+        }
+      )
+        .then((url) => setQrUrl(url))
+        .catch((err) => console.error(err))
+    }
+  }, [code, size, dark])
+
+  if (!qrUrl) {
+    return <div className="animate-pulse rounded bg-muted" style={{ width: size, height: size }} />
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <img
+        src={qrUrl}
+        alt="Scan to verify"
+        className="rounded border border-border/10  p-0.5 shadow-sm"
+        style={{ width: size, height: size }}
+      />
+      <span className={cn("font-mono text-[7px] tracking-wider uppercase", dark ? "text-slate-400" : "text-slate-300/80")}>
+        Scan to verify
+      </span>
+    </div>
+  )
+}
 
 export type TemplateType =
   | "classic"
@@ -609,12 +651,13 @@ export function CertificateFull({
   date = "May 15, 2026",
   instructor = "Dr. Jane Doe",
   certificateId = "CERT-2026-ABCD1234",
-}: CertificatePreviewProps & { instructor?: string; certificateId?: string }) {
+  organisation = "The Big Class",
+}: CertificatePreviewProps & { instructor?: string; certificateId?: string; organisation?: string }) {
   return (
     <div className="aspect-[1.414/1] w-full max-w-3xl mx-auto">
       {template === "classic" && (
         <div
-          className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-amber-50 to-amber-100 p-12"
+          className="relative flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-amber-50 to-amber-100 p-12"
           style={{ border: "8px double #b8860b" }}
         >
           <div className="flex items-center gap-4 text-amber-700">
@@ -640,17 +683,20 @@ export function CertificateFull({
               <Award className="h-10 w-10 text-amber-600" />
             </div>
             <div className="text-center">
-              <p className="font-medium text-slate-700">The Big Class</p>
+              <p className="font-medium text-slate-700">{organisation}</p>
               <div className="mt-1 h-px w-32 bg-slate-400" />
               <p className="mt-1 text-sm text-slate-500">Issuing Authority</p>
             </div>
           </div>
           <p className="mt-6 font-mono text-xs text-slate-400">ID: {certificateId}</p>
+          <div className="absolute bottom-6 right-6">
+            <CertificateQRCode code={certificateId} size={50} dark={true} />
+          </div>
         </div>
       )}
 
       {template === "modern" && (
-        <div className="flex h-full w-full bg-white shadow-lg">
+        <div className="relative flex h-full w-full bg-white shadow-lg">
           <div className="w-3 bg-blue-600" />
           <div className="flex flex-1 flex-col justify-center p-12">
             <span className="text-sm font-medium uppercase tracking-widest text-blue-600">
@@ -680,18 +726,21 @@ export function CertificateFull({
             </div>
             <p className="mt-6 font-mono text-xs text-slate-400">Certificate ID: {certificateId}</p>
           </div>
+          <div className="absolute bottom-6 right-6">
+            <CertificateQRCode code={certificateId} size={50} dark={true} />
+          </div>
         </div>
       )}
 
       {template === "achievement" && (
-        <div className="flex h-full w-full flex-col bg-white shadow-lg">
+        <div className="relative flex h-full w-full flex-col bg-white shadow-lg">
           <div
             className="flex h-[40%] w-full flex-col items-center justify-center text-white"
             style={{
               background: "linear-gradient(135deg, #6d28d9 0%, #db2777 50%, #f59e0b 100%)",
             }}
           >
-            <p className="text-xs uppercase tracking-[0.4em] opacity-95">The Big Class</p>
+            <p className="text-xs uppercase tracking-[0.4em] opacity-95">{organisation}</p>
             <h1 className="mt-2 font-serif text-4xl font-black tracking-wide">
               Certificate of Achievement
             </h1>
@@ -716,11 +765,14 @@ export function CertificateFull({
             </div>
             <p className="mt-4 font-mono text-xs text-slate-400">ID: {certificateId}</p>
           </div>
+          <div className="absolute bottom-6 right-6">
+            <CertificateQRCode code={certificateId} size={50} dark={true} />
+          </div>
         </div>
       )}
 
       {template === "participation" && (
-        <div className="flex h-full w-full flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-orange-50 via-pink-50 to-purple-50 p-12 shadow-lg">
+        <div className="relative flex h-full w-full flex-col items-center justify-center rounded-2xl bg-gradient-to-br from-orange-50 via-pink-50 to-purple-50 p-12 shadow-lg">
           <div className="rounded-full bg-purple-100 p-4">
             <CheckCircle className="h-12 w-12 text-purple-600" />
           </div>
@@ -735,6 +787,9 @@ export function CertificateFull({
             for joining and taking part in <span className="font-bold text-purple-700">{course}</span> on {date}. Thank you for being part of the journey!
           </p>
           <p className="mt-6 font-mono text-xs text-slate-400">Certificate ID: {certificateId}</p>
+          <div className="absolute bottom-6 right-6">
+            <CertificateQRCode code={certificateId} size={50} dark={true} />
+          </div>
         </div>
       )}
 
@@ -745,7 +800,7 @@ export function CertificateFull({
             style={{ background: "linear-gradient(160deg, #0b1f3a, #1e4669)" }}
           >
             <p className="font-serif text-lg font-bold tracking-[0.2em] text-amber-300">
-              VIDYANXT
+              {organisation.toUpperCase()}
             </p>
             <div className="mt-2 h-0.5 w-6 bg-amber-300" />
             <p className="mt-8 text-[10px] uppercase tracking-[0.25em] text-slate-300">
@@ -758,7 +813,9 @@ export function CertificateFull({
             <p className="text-[9px] break-all text-slate-100">
               thebigclass.com/verify
             </p>
-            <Building2 className="mt-auto h-10 w-10 text-amber-300/60" />
+            <div className="mt-auto">
+              <CertificateQRCode code={certificateId} size={48} dark={false} />
+            </div>
           </div>
           <div className="flex flex-1 flex-col p-12">
             <p className="text-xs font-bold uppercase tracking-[0.3em] text-amber-600">
@@ -819,6 +876,9 @@ export function CertificateFull({
             in recognition of the honourable completion of &nbsp;<span className="font-bold not-italic text-amber-300">{course}</span>&nbsp;.
           </p>
           <p className="mt-6 font-mono text-[10px] tracking-widest text-amber-300/60">{certificateId}</p>
+          <div className="absolute bottom-6 right-6">
+            <CertificateQRCode code={certificateId} size={48} dark={true} />
+          </div>
         </div>
       )}
 
@@ -855,9 +915,8 @@ export function CertificateFull({
               <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">Instructor</p>
               <p className="font-bold text-black">{instructor}</p>
             </div>
-            <div className="flex items-end justify-end gap-3">
-              <p className="font-mono text-[9px] leading-tight text-slate-500">VERIFY</p>
-              <div className="h-14 w-14 bg-black" />
+            <div className="flex items-end justify-end">
+              <CertificateQRCode code={certificateId} size={56} dark={true} />
             </div>
           </div>
         </div>
@@ -888,6 +947,9 @@ export function CertificateFull({
             <div className="h-px w-12 bg-amber-800/60" />
           </div>
           <p className="mt-3 font-mono text-[10px] text-emerald-700/70">{certificateId}</p>
+          <div className="absolute bottom-6 right-6">
+            <CertificateQRCode code={certificateId} size={48} dark={true} />
+          </div>
         </div>
       )}
 
@@ -901,7 +963,7 @@ export function CertificateFull({
             <div className="absolute bottom-12 right-16 h-24 w-24 rounded-full border border-amber-300/15" />
             <div className="relative z-10 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center border border-amber-300 font-serif text-xl font-bold text-amber-300">V</div>
-              <p className="font-serif text-lg font-semibold tracking-[0.18em]">{"The Big Class".toUpperCase()}</p>
+              <p className="font-serif text-lg font-semibold tracking-[0.18em]">{organisation.toUpperCase()}</p>
             </div>
             <p className="relative z-10 mt-12 text-xs font-semibold tracking-[0.45em] text-amber-300">EXECUTIVE CERTIFICATION</p>
             <h1 className="relative z-10 mt-3 font-serif text-6xl font-semibold leading-[0.95]">
@@ -928,7 +990,9 @@ export function CertificateFull({
                 <p className="text-[10px] font-semibold tracking-[0.2em] text-emerald-900/60">PROGRAMME DIRECTOR</p>
               </div>
               <div className="text-right text-[10px] leading-tight text-emerald-900/60">
-                <div className="ml-auto mb-1 h-16 w-16 border border-amber-700/30 bg-white" />
+                <div className="ml-auto mb-1">
+                  <CertificateQRCode code={certificateId} size={56} dark={true} />
+                </div>
                 <p className="font-mono font-semibold text-emerald-950">{certificateId}</p>
               </div>
             </div>
@@ -961,7 +1025,7 @@ export function CertificateFull({
           <div className="relative z-10 flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div className="h-3 w-3 rounded-full shadow-[0_0_12px_rgba(56,132,255,0.6)]" style={{ background: "linear-gradient(135deg,#3884ff,#a855f7)" }} />
-              <p className="text-sm font-semibold tracking-[0.35em] text-blue-50">VIDYANXT ACADEMY</p>
+              <p className="text-sm font-semibold tracking-[0.35em] text-blue-50">{organisation.toUpperCase()}</p>
             </div>
             <div className="rounded-full border border-blue-400/35 px-3 py-1 font-mono text-[10px] tracking-widest text-blue-300">
               VERIFIED · {date}
@@ -974,7 +1038,7 @@ export function CertificateFull({
             <span className="bg-gradient-to-r from-[#3884ff] to-[#a855f7] bg-clip-text text-transparent">Completion</span>
           </h1>
           <p className="relative z-10 mt-6 max-w-2xl text-sm leading-relaxed text-blue-100/70">
-            Issued by The Big Class to the recipient named below, recognising successful completion of the programme.
+            Issued by {organisation} to the recipient named below, recognising successful completion of the programme.
           </p>
           <div className="relative z-10 mt-10 flex items-end gap-6">
             <p className="pb-2 font-mono text-xs tracking-widest text-blue-300 whitespace-nowrap">RECIPIENT —</p>
@@ -994,7 +1058,9 @@ export function CertificateFull({
               <p className="mt-1 font-semibold">{date}</p>
             </div>
             <div className="text-right">
-              <div className="ml-auto h-16 w-16 rounded bg-white" />
+              <div className="ml-auto mb-1">
+                <CertificateQRCode code={certificateId} size={56} dark={true} />
+              </div>
               <p className="mt-1.5 font-mono text-[10px] tracking-widest text-blue-300">{certificateId}</p>
             </div>
           </div>
@@ -1025,7 +1091,7 @@ export function CertificateFull({
             <div className="col-span-2 flex items-baseline justify-between border-b border-black/80 pb-3">
               <div className="flex items-center gap-3">
                 <div className="h-3 w-3 rounded-full bg-[#b8390f]" />
-                <p className="font-serif text-lg font-bold tracking-[0.05em] text-black">The Big Class</p>
+                <p className="font-serif text-lg font-bold tracking-[0.05em] text-black">{organisation}</p>
               </div>
               <p className="font-serif italic text-stone-500">Vol. 26 — Spring Issue</p>
             </div>
@@ -1056,11 +1122,11 @@ export function CertificateFull({
                 <p className="text-[10px] font-semibold tracking-[0.2em] text-stone-500">INSTRUCTOR OF RECORD</p>
               </div>
               <div>
-                <p className="font-serif text-base font-bold text-black">The Big Class</p>
+                <p className="font-serif text-base font-bold text-black">{organisation}</p>
                 <p className="text-[10px] font-semibold tracking-[0.2em] text-stone-500">ISSUING AUTHORITY</p>
               </div>
               <div className="text-right">
-                <div className="ml-auto h-14 w-14 border border-stone-300 bg-white" />
+                <CertificateQRCode code={certificateId} size={56} dark={true} />
               </div>
             </div>
           </div>
@@ -1077,7 +1143,7 @@ export function CertificateFull({
           <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-full border border-[#6b4f1d]">
             <Scroll className="h-10 w-10 text-[#6b4f1d]" />
           </div>
-          <p className="relative z-10 mt-3 text-base font-bold tracking-[0.3em] text-[#6b4f1d]">VIDYANXT ACADEMY</p>
+          <p className="relative z-10 mt-3 text-base font-bold tracking-[0.3em] text-[#6b4f1d]">{organisation.toUpperCase()}</p>
           <p className="relative z-10 mt-1 text-[10px] font-semibold tracking-[0.5em] text-amber-800/80">— FOUNDED IN PURSUIT OF KNOWLEDGE —</p>
           <p className="relative z-10 mt-3 font-serif text-lg tracking-[0.6em] text-[#a8874b]">❦ ❦ ❦</p>
           <h1 className="relative z-10 mt-2 font-serif text-5xl font-bold text-[#28201a]">
@@ -1099,12 +1165,15 @@ export function CertificateFull({
               <Star className="h-10 w-10 fill-[#a8874b] text-[#a8874b]" />
             </div>
             <div className="text-center">
-              <p className="font-serif text-lg font-semibold italic text-[#28201a]">The Big Class</p>
+              <p className="font-serif text-lg font-semibold italic text-[#28201a]">{organisation}</p>
               <div className="my-1 h-px w-full bg-[#28201a]" />
               <p className="text-[10px] font-semibold tracking-[0.2em] text-amber-800/80">ISSUING AUTHORITY</p>
             </div>
           </div>
-          <p className="relative z-10 mt-3 font-mono text-[10px] text-[#6b4f1d]">{certificateId} · {date}</p>
+          <div className="relative z-10 mt-4">
+            <CertificateQRCode code={certificateId} size={48} dark={true} />
+          </div>
+          <p className="relative z-10 mt-2 font-mono text-[10px] text-[#6b4f1d]">{certificateId} · {date}</p>
         </div>
       )}
 
@@ -1123,7 +1192,7 @@ export function CertificateFull({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-white/60 bg-white/15 font-extrabold">V</div>
-                <p className="text-sm font-bold tracking-[0.2em]">VIDYANXT ACADEMY</p>
+                <p className="text-sm font-bold tracking-[0.2em]">{organisation.toUpperCase()}</p>
               </div>
               <p className="text-[10px] font-semibold tracking-[0.3em] opacity-90">PROGRAMME CERTIFICATE · {date}</p>
             </div>
@@ -1161,7 +1230,9 @@ export function CertificateFull({
                 <p className="font-bold text-slate-900">{date}</p>
               </div>
               <div className="text-right">
-                <div className="ml-auto h-16 w-16 rounded border border-indigo-100 bg-white" />
+                <div className="ml-auto mb-1">
+                  <CertificateQRCode code={certificateId} size={56} dark={true} />
+                </div>
                 <p className="mt-1.5 font-mono text-[10px] font-semibold text-indigo-600">{certificateId}</p>
               </div>
             </div>
@@ -1184,7 +1255,7 @@ export function CertificateFull({
                   className="h-3 w-3 rounded-full shadow-[0_2px_8px_rgba(124,92,255,0.4)]"
                   style={{ background: "conic-gradient(from 0deg, #ff7eb3, #7c5cff, #2dd4bf, #ffb87a, #ff7eb3)" }}
                 />
-                The Big Class
+                {organisation}
               </div>
               <div className="rounded-full border border-purple-300/40 bg-white/60 px-4 py-1.5 text-xs font-medium tracking-[0.15em] text-[#4a3a8a]">
                 — {date} —
@@ -1229,7 +1300,9 @@ export function CertificateFull({
                 <p className="font-serif text-lg text-[#1a1a2e]">{date}</p>
               </div>
               <div className="text-right">
-                <div className="ml-auto h-16 w-16 rounded border border-purple-300/30 bg-white" />
+                <div className="ml-auto mb-1">
+                  <CertificateQRCode code={certificateId} size={56} dark={true} />
+                </div>
                 <p className="mt-1.5 font-mono text-[10px] font-semibold tracking-wider text-[#7c5cff]">{certificateId}</p>
               </div>
             </div>
@@ -1247,7 +1320,7 @@ export function CertificateFull({
           <div className="pointer-events-none absolute bottom-16 left-12 h-32 w-28 rounded-full bg-[#8b5a2b]/20" />
           <div className="relative flex h-full flex-col items-center justify-center p-16">
             <p className="font-serif text-xs tracking-[0.4em] text-[#6b4423]">— EST. MMXXVI —</p>
-            <p className="mt-2 font-serif text-lg font-bold tracking-[0.3em] text-[#3a2818]">{"The Big Class".toUpperCase()}</p>
+            <p className="mt-2 font-serif text-lg font-bold tracking-[0.3em] text-[#3a2818]">{organisation.toUpperCase()}</p>
             <p className="mt-2 font-serif text-xl tracking-[0.4em] text-[#8b5a2b]">❦ &nbsp; ❦ &nbsp; ❦</p>
             <h1 className="mt-3 font-serif text-6xl italic font-normal leading-none text-[#3a2818]">Certificate of Honour</h1>
             <p className="mt-4 font-serif text-base italic text-[#6b4423]">Let it be known to all who shall peruse these presents that</p>
@@ -1276,7 +1349,9 @@ export function CertificateFull({
           </div>
           <div className="absolute bottom-2 left-6 right-6 flex items-center justify-between text-[10px] tracking-wider text-[#6b4423]">
             <span>Conferred {date}</span>
-            <div className="h-12 w-12 border border-[#b8a07a] bg-white" />
+            <div>
+              <CertificateQRCode code={certificateId} size={44} dark={true} />
+            </div>
             <span className="font-mono text-[#3a2818]">{certificateId}</span>
           </div>
         </div>
@@ -1361,13 +1436,15 @@ export function CertificateFull({
                 </div>
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#6ea7e8]">APPROVED</p>
-                  <p className="text-base font-bold text-white">The Big Class</p>
+                  <p className="text-base font-bold text-white">{organisation}</p>
                 </div>
                 <div>
                   <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#6ea7e8]">DATE</p>
                   <p className="font-mono text-sm font-semibold text-[#ffd166]">{date}</p>
                 </div>
-                <div className="ml-auto h-16 w-16 border border-[#6ea7e8] bg-white" />
+                <div className="ml-auto">
+                  <CertificateQRCode code={certificateId} size={56} dark={true} />
+                </div>
               </div>
             </div>
           </div>
@@ -1391,7 +1468,7 @@ export function CertificateFull({
           <div className="relative flex h-full flex-col items-center justify-center px-16 py-12">
             <Award className="h-12 w-12 text-[#d4af37]" />
             <p className="mt-3 text-xs font-medium tracking-[0.6em] text-[#d4af37]">— ANNO MMXXVI —</p>
-            <p className="mt-2 font-serif text-xl font-bold tracking-[0.45em] text-[#f5e6b3]">{"The Big Class".toUpperCase()}</p>
+            <p className="mt-2 font-serif text-xl font-bold tracking-[0.45em] text-[#f5e6b3]">{organisation.toUpperCase()}</p>
             <div className="my-4 flex items-center gap-2">
               <div className="h-px w-20 bg-gradient-to-r from-transparent to-[#d4af37]" />
               <Square className="h-3 w-3 rotate-45 fill-[#d4af37] text-[#d4af37]" />
@@ -1414,7 +1491,9 @@ export function CertificateFull({
                 <p className="font-serif text-[10px] tracking-[0.3em] text-[#b8941f]">— INSTRUCTOR —</p>
               </div>
               <div className="text-right">
-                <div className="ml-auto h-16 w-16 bg-white p-1" />
+                <div className="ml-auto mb-1">
+                  <CertificateQRCode code={certificateId} size={56} dark={true} />
+                </div>
                 <p className="mt-1.5 font-mono text-[10px] text-[#d4af37]">{certificateId}</p>
               </div>
             </div>
@@ -1518,7 +1597,9 @@ export function CertificateFull({
                 <p className="font-mono text-[10px] tracking-[0.25em] text-cyan-300">SIG·ID</p>
                 <p className="font-mono text-sm text-[#ff2e88]">{certificateId}</p>
               </div>
-              <div className="ml-auto h-16 w-16 border border-cyan-300 bg-white shadow-[0_0_12px_rgba(0,240,255,0.4)]" />
+              <div className="ml-auto">
+                <CertificateQRCode code={certificateId} size={56} dark={true} />
+              </div>
             </div>
           </div>
         </div>

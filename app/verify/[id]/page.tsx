@@ -150,7 +150,7 @@ export default function VerifyCertificatePage({ params }: { params: Promise<{ id
 
       {/* Main Content */}
       <main id="main-content" className="flex flex-1 flex-col items-center justify-center px-6 py-12">
-        <div className="w-full max-w-2xl">
+        <div className="w-full max-w-6xl">
           <Button variant="ghost" asChild className="mb-6">
             <Link href="/verify">
               <ArrowLeft className="mr-2 h-4 w-4" />
@@ -251,6 +251,7 @@ export default function VerifyCertificatePage({ params }: { params: Promise<{ id
                         })}
                         instructor={certificate.instructorName}
                         certificateId={certificate.id}
+                        organisation={certificate.organisation}
                       />
                     )}
                   </div>

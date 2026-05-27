@@ -112,6 +112,7 @@ export async function generateCertificatePDF({ certificate }: PDFOptions): Promi
               date: formattedDate,
               instructor: certificate.instructorName,
               certificateId: certificate.id,
+              organisation: readOrgSettings().organisationName || "The Big Class",
             })
       )
     })
