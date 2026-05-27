@@ -5,7 +5,7 @@
 // playlists already containing this recording. Inline "New playlist"
 // input creates one on the fly.
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Check, ListPlus, Plus } from "lucide-react"
 import {
   Popover,
@@ -15,7 +15,6 @@ import {
 import {
   addToPlaylist,
   createPlaylist,
-  playlistsContaining,
   removeFromPlaylist,
   useRecordingPlaylists,
 } from "@/lib/recording-playlists"
@@ -29,15 +28,18 @@ interface Props {
 
 export function AddToPlaylistPopover({ userId, recordingId, recordingTitle }: Props) {
   const playlists = useRecordingPlaylists(userId)
-  const [containing, setContaining] = useState<Set<string>>(new Set())
   const [newName, setNewName] = useState("")
   const [open, setOpen] = useState(false)
 
-  // Re-pull which playlists already contain this recording when the
-  // popover opens (kept fresh in sync with the playlist list).
-  useEffect(() => {
-    setContaining(playlistsContaining(userId, recordingId))
-  }, [userId, recordingId, playlists, open])
+  // Derived — NOT stateful. `containing` is a pure function of `playlists`
+  // and `recordingId`. Using useEffect+setState here caused an infinite loop:
+  //   playlists changes (new array ref) → effect fires → setContaining(new Set)
+  //   → re-render → playlists is new array ref again → repeat.
+  // useMemo computes synchronously and never calls setState, so no loop.
+  const containing = useMemo(
+    () => new Set(playlists.filter((p) => p.recordingIds.includes(recordingId)).map((p) => p.id)),
+    [playlists, recordingId],
+  )
 
   const sorted = useMemo(
     () => [...playlists].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),

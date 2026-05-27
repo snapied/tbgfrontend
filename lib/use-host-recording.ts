@@ -115,7 +115,12 @@ export function useHostRecording({
 
   const start = useCallback(async () => {
     setError(null)
-    setStatus("recording")
+    // Show a brief "asking" state while the backend starts the egress.
+    // We do NOT flip to "recording" yet — we only do that after the backend
+    // confirms. This prevents the host UI showing "Recording" for a start
+    // that silently failed, which would cause the subsequent Stop to fire
+    // against a non-existent egress and get a 404.
+    setStatus("asking")
     startedAtRef.current = Date.now()
     try {
       const token = window.localStorage.getItem("thebigclass.accessToken")
@@ -135,6 +140,9 @@ export function useHostRecording({
         const body = await res.text().catch(() => "")
         throw new Error(`start recording failed (${res.status}): ${body || res.statusText}`)
       }
+      // Backend confirmed — NOW flip to recording. Any egress failure
+      // before this point lands in the catch block below.
+      setStatus("recording")
     } catch (e) {
       const err = e as Error
       setError(err.message)
@@ -156,6 +164,16 @@ export function useHostRecording({
       )
       if (!res.ok) {
         const body = await res.text().catch(() => "")
+        // 404 = no active egress on the backend. This can happen if
+        // the egress already completed on its own, or if the start call
+        // never reached LiveKit. Treat it as a soft no-op: the recording
+        // either never existed or is already done — in both cases, stop
+        // polling for a URL since there's nothing to wait for.
+        if (res.status === 404) {
+          console.warn("[recording] stop 404 — no active egress; likely start failed or egress already completed")
+          setStatus("idle")
+          return
+        }
         throw new Error(`stop recording failed (${res.status}): ${body || res.statusText}`)
       }
       startPolling()

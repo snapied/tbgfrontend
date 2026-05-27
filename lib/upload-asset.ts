@@ -3,12 +3,19 @@
 // Uploads a user-supplied image / file and returns a CDN URL the editor +
 // renderer can use as <img src>.
 //
-// Single path: POST to the backend's /api/assets/upload, which pushes to
-// Cloudflare R2 and returns the CDN URL. We DELIBERATELY don't keep a
-// local-disk fallback in this client — every upload must end up on the
-// tenant's CDN so URLs are stable, permanent, and shareable. If R2 isn't
-// configured or fails, the backend returns an error and the caller (UI
-// upload button) surfaces it as a toast.
+// Two upload paths, chosen automatically:
+//
+//   1. PRESIGNED (video files / files > PRESIGN_THRESHOLD_BYTES):
+//      Backend generates a short-lived PUT URL; the browser streams the file
+//      body directly to R2. Node memory is never involved — no size limit.
+//      Supports real upload progress via XHR. Ideal for 4K video (2-10 GB).
+//
+//   2. STANDARD (images, PDFs, small clips ≤ PRESIGN_THRESHOLD_BYTES):
+//      POST multipart/form-data to the backend which buffers in memory and
+//      re-uploads to R2. Simple, backward-compatible.
+//
+// If R2 isn't configured or the backend is down, both paths surface an error
+// the UI can toast — no silent localhost-URL fallback.
 
 import { readCurrentTenantSlug } from "./tenant-store"
 
@@ -30,6 +37,16 @@ export interface UploadResult {
   /** Always "asset" now — kept on the type for backward-compat with callers. */
   via: "asset"
 }
+
+// Files larger than this threshold, OR any video file, use the presigned
+// PUT path to avoid buffering through Node. 500 MB is the backend multer cap.
+const PRESIGN_THRESHOLD_BYTES = 500 * 1024 * 1024 // 500 MB
+
+function isVideoMime(mime: string) {
+  return mime.startsWith("video/")
+}
+
+// ─── Standard upload (multipart via backend) ──────────────────────────────
 
 async function postToBackend(
   endpoint: string,
@@ -60,9 +77,87 @@ async function postToBackend(
   }
 }
 
+// ─── Presigned upload (direct-to-R2 via signed PUT) ──────────────────────
+
+interface PresignResult {
+  uploadUrl: string
+  publicUrl: string
+  key: string
+  expiresIn: number
+}
+
+/**
+ * Upload a file using a presigned PUT URL — the file bytes go directly from
+ * the browser to R2, completely bypassing Node. Supports real upload progress.
+ *
+ * @param onProgress  Called with 0–100 as the upload progresses.
+ */
+async function presignedUpload(
+  apiBase: string,
+  file: File,
+  tenant: string,
+  folder: UploadFolder,
+  onProgress?: (pct: number) => void,
+): Promise<{ url: string } | { error: string }> {
+  try {
+    // Step 1 — ask the backend for a signed PUT URL.
+    const presignResp = await fetch(`${apiBase}/api/assets/presign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        mime: file.type,
+        filename: file.name,
+        bytes: file.size,
+        folder,
+        tenant,
+      }),
+    })
+    const presign = (await presignResp.json().catch(() => null)) as PresignResult & { error?: string } | null
+    if (!presignResp.ok || !presign?.uploadUrl) {
+      return { error: presign?.error || `Presign failed (${presignResp.status})` }
+    }
+
+    // Step 2 — PUT the raw file body directly to R2 using XHR for progress.
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open("PUT", presign.uploadUrl, true)
+      xhr.setRequestHeader("Content-Type", file.type)
+      // R2 needs the cache-control header we baked into the presigned command.
+      // Note: some browsers block custom headers on cross-origin PUT — R2
+      // accepts them because we signed with the exact header values.
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded / e.total) * 100))
+        }
+      }
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve()
+        else reject(new Error(`R2 PUT failed: ${xhr.status} ${xhr.statusText}`))
+      }
+      xhr.onerror = () => reject(new Error("Network error during R2 PUT"))
+      xhr.send(file)
+    })
+
+    onProgress?.(100)
+    return { url: presign.publicUrl }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Presigned upload failed" }
+  }
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────
+
+/**
+ * Upload a file to R2 and return its CDN URL.
+ *
+ * Automatically picks the presigned path for video files and files
+ * over 500 MB so they stream directly to R2 without touching Node.
+ */
 export async function uploadAsset(
   file: File,
   folder: UploadFolder = "general",
+  onProgress?: (pct: number) => void,
 ): Promise<UploadResult> {
   const tenant = (() => {
     try {
@@ -72,22 +167,25 @@ export async function uploadAsset(
     }
   })()
 
-  // The ONLY upload destination is the backend's R2-backed endpoint.
-  // No silent local-disk fallback — every asset must end up on the CDN
-  // so URLs are permanent, cross-device, and load anywhere.
   const apiBase = process.env.NEXT_PUBLIC_API_URL
   if (!apiBase) {
     throw new Error(
       "Upload disabled — NEXT_PUBLIC_API_URL not set. Configure the backend URL so uploads can reach the R2 bucket.",
     )
   }
-  const remote = await postToBackend(
-    `${apiBase.replace(/\/$/, "")}/api/assets/upload`,
-    file,
-    tenant,
-    folder,
-  )
+  const base = apiBase.replace(/\/$/, "")
+
+  // Use presigned upload for: any video file, OR any file over the threshold.
+  // This ensures 4K video (even just a few minutes = several GB) never hits
+  // the multer memory buffer.
+  const usePresign = isVideoMime(file.type) || file.size > PRESIGN_THRESHOLD_BYTES
+
+  const remote = usePresign
+    ? await presignedUpload(base, file, tenant, folder, onProgress)
+    : await postToBackend(`${base}/api/assets/upload`, file, tenant, folder)
+
   if ("url" in remote) return { url: remote.url, via: "asset" }
+
   // Surface the backend's reason — it tells the user exactly what's
   // wrong (R2 not configured / S3 transient error / file rejected /
   // network down) so they can fix it instead of getting a silent
@@ -110,4 +208,3 @@ export async function uploadDataUrl(
   const result = await uploadAsset(file, folder)
   return result.url
 }
-

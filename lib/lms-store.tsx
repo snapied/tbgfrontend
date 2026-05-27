@@ -4274,6 +4274,16 @@ export function LMSProvider({ children }: { children: ReactNode }) {
             roomEndedAt: endedAt,
             wasHeld: true,
             recordings,
+            // Set recordingUrl directly so the class detail page's
+            // "Watch recording" card appears as soon as the host ends
+            // the class with a URL in hand. Previously this field was
+            // never touched here — only recordings[] was updated —
+            // so /dashboard/classes/[id] never showed the Watch button
+            // even though /host did (host reads recordings[last]).
+            // When recording is still pending (egress in flight), we
+            // leave the field undefined; the EndedHostScreen poller
+            // backfills it via updateLiveSession once the URL arrives.
+            ...(recording?.url ? { recordingUrl: recording.url } : {}),
           }
         }),
       )

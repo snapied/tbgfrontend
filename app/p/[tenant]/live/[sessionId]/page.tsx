@@ -83,6 +83,48 @@ function useCachedDisplayName(): {
   return { hydrated, displayName, setDisplayName }
 }
 
+// Stable per-browser participant identity.
+//
+// LiveKit uses `identity` to distinguish participants in a room. If two
+// students get the same identity, the second one EVICTS the first — they
+// literally steal the seat. And all chat messages from everyone with the
+// same identity appear merged as a single participant.
+//
+// Priority order:
+//   1. currentUser.id — the real, authenticated user id (unique, stable).
+//   2. sessionStorage key `vidyanxt.participantId` — a `guest-<random>`
+//      generated once per browser tab. Survives page refreshes (same tab)
+//      but gets a new ID in a new tab/window, which is correct: two
+//      tabs opening the same class are treated as two attendees.
+const PARTICIPANT_ID_KEY = "vidyanxt.participantId"
+
+function useStableParticipantId(currentUserId?: string): string {
+  const [participantId, setParticipantId] = useState("")
+  useEffect(() => {
+    // Authenticated user: always use their real ID
+    if (currentUserId) {
+      setParticipantId(currentUserId)
+      return
+    }
+    // Guest: retrieve or generate a stable per-tab ID
+    try {
+      let stored = window.sessionStorage.getItem(PARTICIPANT_ID_KEY)
+      if (!stored) {
+        stored = `guest-${Math.random().toString(36).slice(2, 10)}-${Date.now().toString(36)}`
+        window.sessionStorage.setItem(PARTICIPANT_ID_KEY, stored)
+      }
+      setParticipantId(stored)
+    } catch {
+      // sessionStorage blocked (private mode) — use a random that lasts
+      // only for this React render tree lifetime.
+      setParticipantId(`guest-${Math.random().toString(36).slice(2, 10)}`)
+    }
+  // currentUserId is stable once the user is loaded; re-running on login
+  // is fine because LiveKitRoom.key pins the identity at connect time.
+  }, [currentUserId])
+  return participantId
+}
+
 export default function LiveClassPage({
   params,
 }: {
@@ -102,6 +144,7 @@ export default function LiveClassPage({
   } = useLMS()
   const brand = useTenantBrand()
   const nameState = useCachedDisplayName()
+  const participantId = useStableParticipantId(currentUser?.id)
 
   // Auto-fill the display name from the signed-in user — students
   // shouldn't have to retype their name every time they join a room
@@ -368,10 +411,10 @@ export default function LiveClassPage({
         hostName={host?.name ?? serverState?.hostName ?? undefined}
         tenant={tenant}
         nameState={nameState}
+        participantId={participantId}
       />
     )
   }
-
   // Sprint A Communities #20 — surface the attached community on the
   // post-class wrap screen for students who attended but aren't yet
   // members. Resolve the community via course.defaultBatchId, then
@@ -875,6 +918,7 @@ function InClassShell({
   hostName,
   tenant,
   nameState,
+  participantId,
 }: {
   session: LiveSession
   hostName?: string
@@ -884,6 +928,9 @@ function InClassShell({
     displayName: string
     setDisplayName: (n: string) => void
   }
+  /** Stable per-browser identity. Every student must have a different
+   *  identity or LiveKit evicts the earlier joiner and chat merges. */
+  participantId: string
 }) {
   // True once the participant hangs up — unmounts the Jitsi iframe (so we
   // don't see Jitsi's leave overlay) and renders our own LeftRoomCard.
@@ -1118,7 +1165,11 @@ function InClassShell({
           <LiveKitRoom
             roomCode={canonicalRoomCode(session)}
             user={{
-              id: `student-${session.id}`,
+              // Use the stable per-browser participant ID so every student
+              // gets a unique identity in the LiveKit room. Without this,
+              // all students share "student-<sessionId>" and the second
+              // joiner evicts the first — and chat shows as a single person.
+              id: participantId || `guest-${session.id}-${Date.now()}`,
               name: nameState.displayName || "Student",
             }}
             isHost={false}

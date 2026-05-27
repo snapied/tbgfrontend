@@ -335,37 +335,54 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {/* Recording surface — two states stacked:
-          (a) Processing: class ended (roomEndedAt set) but recordingUrl
-              hasn't landed yet. Shows an upload-progress card so the
-              host + students see the recording is on its way instead
-              of an empty page.
+          (a) Processing: class ended (roomEndedAt set) but recording URL
+              hasn't landed yet. Shows an upload-progress card.
           (b) Ready: full playback card.
-          Replaces the previous "show nothing until URL exists" gap
-          where students gave up between class end and the auto-email. */}
-      {session.recordingUrl ? (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardContent className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
-                <Video className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold">Class recording is ready</p>
-                <p className="text-xs text-muted-foreground">
-                  Anyone with this page open can replay the class anytime.
-                </p>
-              </div>
-            </div>
-            <RecordingPlayerDialog
-              url={session.recordingUrl}
-              title={session.title}
-              triggerLabel="Watch recording"
-            />
-          </CardContent>
-        </Card>
-      ) : session.roomEndedAt && session.roomState === "ended" ? (
-        <RecordingProcessingCard roomEndedAtIso={session.roomEndedAt} />
-      ) : null}
+
+          Source priority for the URL:
+            1. session.recordingUrl — the canonical field, set by endLiveRoom
+               (post-fix) or backfilled by the EndedHostScreen poller.
+            2. session.recordings[last].url — the host page reads this directly;
+               it's populated when the recording finished BEFORE the host clicked
+               End (pending=false path where the poller was skipped). Falling back
+               here means both pages show the Watch button from the same data. */}
+      {(() => {
+        const lastRec = session.recordings?.[session.recordings.length - 1]
+        const effectiveUrl =
+          session.recordingUrl ||
+          (lastRec && !lastRec.pending && lastRec.url ? lastRec.url : undefined)
+
+        if (effectiveUrl) {
+          return (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="flex flex-col items-start gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/15 text-primary">
+                    <Video className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold">Class recording is ready</p>
+                    <p className="text-xs text-muted-foreground">
+                      Anyone with this page open can replay the class anytime.
+                    </p>
+                  </div>
+                </div>
+                <RecordingPlayerDialog
+                  url={effectiveUrl}
+                  title={session.title}
+                  triggerLabel="Watch recording"
+                />
+              </CardContent>
+            </Card>
+          )
+        }
+
+        if (session.roomEndedAt && session.roomState === "ended") {
+          return <RecordingProcessingCard roomEndedAtIso={session.roomEndedAt} />
+        }
+
+        return null
+      })()}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">

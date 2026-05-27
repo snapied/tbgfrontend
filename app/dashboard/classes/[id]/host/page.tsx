@@ -1399,6 +1399,22 @@ function EndedHostScreen({ session }: { session: LiveSession }) {
   const { updateLiveSession } = useLMS()
   const recording = session.recordings?.[session.recordings.length - 1]
   const [recordingErr, setRecordingErr] = useState<string | null>(null)
+
+  // One-shot backfill: when the recording URL arrived BEFORE the host clicked
+  // End Class (pending=false, url already populated in recordings[last]), the
+  // pending-poller below is skipped entirely by its `if (!recording?.pending) return`
+  // guard. That means session.recordingUrl is never set, so the class detail
+  // page shows "Processing" even though the host page shows Watch. Fix: on mount,
+  // if the URL is already present but recordingUrl is missing, write it once.
+  useEffect(() => {
+    if (!recording?.url || recording.pending) return
+    if (session.recordingUrl) return // already in sync
+    updateLiveSession(session.id, { recordingUrl: recording.url })
+  // Run once on mount — deps intentionally stable (recording.url and
+  // session.recordingUrl are both read-once at mount time).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // If the recording is still pending (the egress was finalising when the
   // host clicked End Class), poll /state every 5s for the URL or an error.
   useEffect(() => {

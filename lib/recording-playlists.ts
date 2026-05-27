@@ -17,7 +17,7 @@
 //   useRecordingPlaylists() React hook
 //   playlistContaining(recordingId) helper
 
-import { useCallback, useSyncExternalStore } from "react"
+import { useCallback, useMemo, useSyncExternalStore } from "react"
 import { readCurrentTenantSlug } from "@/lib/tenant-store"
 
 export interface RecordingPlaylist {
@@ -166,8 +166,18 @@ export function useRecordingPlaylists(userId: string | undefined): RecordingPlay
     },
     [userId],
   )
+  // getSnapshot returns a JSON string — a stable primitive. useSyncExternalStore
+  // only calls subscribers when the string value actually changes, so the hook
+  // won't re-render unless the data changed.
   const getSnapshot = useCallback(() => JSON.stringify(listPlaylists(userId)), [userId])
   const getServerSnapshot = useCallback(() => "[]", [])
   const serialized = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot)
-  return JSON.parse(serialized) as RecordingPlaylist[]
+
+  // Parse ONCE per unique serialized value. Without useMemo here,
+  // JSON.parse(...) returns a NEW array on every render even when
+  // `serialized` hasn't changed — that makes the array a new reference
+  // every time, which breaks downstream effect dependency arrays and
+  // causes "Maximum update depth exceeded" loops.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(() => JSON.parse(serialized) as RecordingPlaylist[], [serialized])
 }

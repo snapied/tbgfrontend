@@ -24,7 +24,7 @@
 // bundled <VideoConference> because the latter has a known placeholder-swap
 // crash. The lower-level path is more stable.
 
-import { useMemo, useCallback } from "react"
+import { useMemo, useCallback, useRef } from "react"
 import {
   LiveKitRoom as LKRoom,
   RoomAudioRenderer,
@@ -122,13 +122,38 @@ export function LiveKitRoom({
   const [error, setError] = useState<string | null>(null)
   const roomName = livekitRoomName(roomCode)
 
+  // ─── Frozen identity ─────────────────────────────────────────────────────
+  // Once the first valid token arrives, we lock everything into refs.
+  // All subsequent parent re-renders (e.g. the 3s session-state poll,
+  // inline user objects being recreated) use these frozen values so the
+  // LKRoom key and the token prop NEVER change — tearing the WebRTC
+  // engine down mid-negotiation is what causes NegotiationError.
+  const frozenRoomName = useRef<string | null>(null)
+  const frozenUserId   = useRef<string | null>(null)
+  // Frozen token: once set, this ref is the single source of truth for
+  // the <LKRoom token> prop. We never pass a new token after connection.
+  const frozenToken    = useRef<string | null>(null)
+
+  // Stable identity fingerprint — collapses user.name + user.email into
+  // one string so the effect dep doesn't fire on every parent re-render
+  // that produces a new (but identical) inline `user` object.
+  // Only re-runs when the values actually differ.
+  const userFingerprint = useMemo(
+    () => `${user.id}::${user.name}::${user.email ?? ""}`,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user.id, user.name, user.email],
+  )
+
   useEffect(() => {
+    // ── Guard: already connected ─────────────────────────────────────
+    // If we have a frozen token the engine is (or was) live. Never
+    // re-fetch — that would deliver a new token to <LKRoom>, trigger a
+    // disconnect+reconnect cycle, and throw NegotiationError exactly
+    // when the old negotiation is still in flight.
+    if (frozenToken.current) return
+
     let cancelled = false
     setError(null)
-    // Diagnostic — host + student should print the SAME roomName in
-    // DevTools. If they differ, they're in different LiveKit rooms and
-    // won't see each other. The room code derivation is shared
-    // (canonicalRoomCode), so this is mostly to confirm in the field.
     // eslint-disable-next-line no-console
     console.info(
       `[livekit] joining as ${isHost ? "host" : "guest"} · room=${roomName} · user=${user.name} (${user.id})`,
@@ -142,6 +167,12 @@ export function LiveKitRoom({
           )
           return
         }
+        // Freeze identity + token the moment the first valid token arrives.
+        // All future renders use these refs — none of these values will
+        // change again for the lifetime of this component mount.
+        if (!frozenRoomName.current) frozenRoomName.current = roomName
+        if (!frozenUserId.current)   frozenUserId.current   = user.id
+        if (!frozenToken.current)    frozenToken.current    = t
         setToken(t)
       })
       .catch((e) => {
@@ -151,7 +182,12 @@ export function LiveKitRoom({
     return () => {
       cancelled = true
     }
-  }, [roomName, user.id, user.name, user.email, isHost])
+  // userFingerprint is the stable dep that replaces user.name + user.email.
+  // roomName and isHost are included because a different room or role
+  // genuinely needs a new token. frozenToken.current is read inside but
+  // intentionally NOT listed — it's a ref (mutable, not reactive).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomName, userFingerprint, isHost])
 
   // Memoize room options once per token to avoid the @livekit/components-react
   // track-array drift bug — re-creating the options object on every render
@@ -167,17 +203,47 @@ export function LiveKitRoom({
       videoCaptureDefaults: {
         resolution: VideoPresets.h1080.resolution,
       },
-      // Higher-quality audio capture — closer to Google Meet clarity.
-      // autoGainControl + echoCancellation + noiseSuppression are the
-      // WebRTC trinity that keeps voice clean even on laptop mics.
-      // 48 kHz sample rate matches Opus's native rate so there's no
-      // extra resampling step.
+      // Audio capture config for the microphone.
+      //
+      // echoCancellation is intentionally OFF:
+      //   When the host plays audio through speakers (YouTube, a demo video,
+      //   music) while mic is live, the browser's echo canceller treats that
+      //   output audio as "room echo" and aggressively suppresses the mic
+      //   signal — including the host's own voice. The result is a recording
+      //   where voices disappear during any speaker playback.
+      //   AEC is valuable on laptop speakers where the mic physically picks up
+      //   the speaker. For classroom screen-share + video playback scenarios,
+      //   the cost (lost voice) outweighs the benefit. Hosts typically use
+      //   headphones anyway; even on laptop speakers, voice suppression is
+      //   more disruptive than mild echo.
+      //
+      // autoGainControl + noiseSuppression stay on — they clean up
+      // background noise without interfering with intentional audio.
       audioCaptureDefaults: {
         autoGainControl: true,
-        echoCancellation: true,
+        echoCancellation: false,   // see note above
         noiseSuppression: true,
         channelCount: 1,
         sampleRate: 48000,
+      },
+      // Screen share audio capture.
+      //
+      // Setting audio: true here tells LiveKit to request audio permission
+      // when the user clicks the screen-share button. This causes Chrome/Edge
+      // to show the "Share tab audio" checkbox in their screen picker UI.
+      // Without this option, that checkbox is never offered and tab audio
+      // (YouTube, demo videos, etc.) is NEVER captured or sent to LiveKit,
+      // so it can't be in the recording no matter what.
+      //
+      // suppression: false — don't apply voice noise suppression to
+      // screen-share audio; it's designed for system/media audio, not voice,
+      // and the suppressor would mangle music/video audio noticeably.
+      screenShareCaptureDefaults: {
+        audio: {
+          autoGainControl: false,
+          echoCancellation: false,
+          noiseSuppression: false,
+        },
       },
       publishDefaults: {
         videoEncoding: VideoPresets.h1080.encoding,
@@ -186,6 +252,11 @@ export function LiveKitRoom({
         // vs the default ~32 kbps. Noticeably sharper voice in a
         // classroom setting where bandwidth is rarely the bottleneck.
         audioPreset: AudioPresets.musicHighQuality,
+        // Screen share audio: use the music-high-quality preset so that
+        // YouTube, demo videos, and music shared via "Share tab audio"
+        // are reproduced faithfully in the recording. The default audio
+        // preset (~32 kbps) is too lossy for music/video content.
+        screenShareAudioPreset: AudioPresets.musicHighQuality,
       },
     }),
     [],
@@ -214,15 +285,25 @@ export function LiveKitRoom({
     )
   }
 
+  // Use the frozen identity for the key — this is the critical guard.
+  // Falls back to the live values the very first render after token arrives
+  // (refs are populated just before setToken, so they should always be set
+  // by the time we reach here, but the fallback makes TypeScript happy).
+  const stableRoomName = frozenRoomName.current ?? roomName
+  const stableUserId   = frozenUserId.current   ?? user.id
+
   return (
     <div className={className} style={{ position: "relative" }} data-lk-theme="default">
-      {/* Stable key on LKRoom — never changes once we have a token, so React
-          never tears down and remounts the Room mid-call. */}
+      {/* Stable key + frozen token — the two guards against NegotiationError.
+          key: derived from frozen room+user, never changes after connect.
+          token: always frozenToken.current (the first valid token), never
+          a new one — LKRoom reacts to a token change by disconnecting,
+          which tears the engine while negotiation may still be in flight. */}
       <LKRoom
-        key={`${roomName}-${user.id}`}
-        token={token}
+        key={`${stableRoomName}-${stableUserId}`}
+        token={frozenToken.current ?? token}
         serverUrl={LIVEKIT_URL}
-        connect
+        connect={true}
         video
         audio
         options={roomOptions}
