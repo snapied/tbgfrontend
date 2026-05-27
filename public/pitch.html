@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Big Class — Built for Teachers Like You</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,400&family=Playfair+Display:wght@700;800;900&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #060810;
+      --surface: #0d1022;
+      --surface2: #131625;
+      --border: rgba(255,255,255,0.07);
+      --border2: rgba(255,255,255,0.12);
+      --accent: #7c5cfc;
+      --accent2: #f5a623;
+      --accent3: #1fddaa;
+      --red: #ff5f5f;
+      --text: #eef0ff;
+      --muted: rgba(238,240,255,0.48);
+      --g1: linear-gradient(135deg,#7c5cfc,#c471ed 50%,#f5a623);
+      --g2: linear-gradient(135deg,#1fddaa,#7c5cfc);
+    }
+
+    html, body { width:100%;height:100%;overflow:hidden;font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);user-select:none; }
+
+    /* ─── Deck ─── */
+    #deck { width:100%;height:100%;position:relative; }
+
+    .slide {
+      position:absolute;inset:0;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      padding:56px 72px;
+      opacity:0;transform:translateX(60px);
+      transition:opacity .5s cubic-bezier(.4,0,.2,1),transform .5s cubic-bezier(.4,0,.2,1);
+      pointer-events:none;overflow:hidden;
+    }
+    .slide.active  { opacity:1;transform:translateX(0);pointer-events:all; }
+    .slide.exit    { opacity:0;transform:translateX(-60px); }
+
+    /* ─── Ambient blobs ─── */
+    .blob { position:absolute;border-radius:50%;filter:blur(110px);pointer-events:none;z-index:0; }
+
+    /* ─── Progress bar ─── */
+    #progress { position:fixed;top:0;left:0;height:3px;background:var(--g1);transition:width .5s cubic-bezier(.4,0,.2,1);z-index:200; }
+
+    /* ─── Nav ─── */
+    #nav {
+      position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+      display:flex;align-items:center;gap:12px;z-index:100;
+      background:rgba(255,255,255,0.05);backdrop-filter:blur(20px);
+      border:1px solid var(--border2);border-radius:100px;padding:10px 22px;
+    }
+    .nav-btn {
+      width:36px;height:36px;border-radius:50%;
+      border:1px solid var(--border2);background:rgba(255,255,255,0.05);
+      color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center;
+      font-size:16px;transition:all .2s;
+    }
+    .nav-btn:hover { background:var(--accent);border-color:var(--accent); }
+    #slide-counter { font-size:12px;color:var(--muted);min-width:46px;text-align:center;font-variant-numeric:tabular-nums; }
+    .dot-track { display:flex;gap:5px;align-items:center; }
+    .dot { width:5px;height:5px;border-radius:50%;background:rgba(255,255,255,0.18);cursor:pointer;transition:all .3s; }
+    .dot.active { width:18px;border-radius:3px;background:var(--accent); }
+
+    /* ─── Slide key hint ─── */
+    #key-hint { position:fixed;bottom:28px;right:32px;font-size:11px;color:rgba(255,255,255,0.2);letter-spacing:.5px; }
+
+    /* ─── Shared components ─── */
+    .slide-tag { font-size:11px;letter-spacing:3.5px;text-transform:uppercase;color:var(--accent);margin-bottom:18px;font-weight:600; }
+    .slide-headline {
+      font-family:'Playfair Display',serif;
+      font-size:clamp(32px,4.2vw,62px);font-weight:900;text-align:center;line-height:1.12;margin-bottom:14px;max-width:960px;
+    }
+    .slide-sub { font-size:clamp(15px,1.5vw,19px);color:var(--muted);text-align:center;max-width:660px;margin-bottom:48px;line-height:1.75; }
+    .hl { background:var(--g1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+    .hl2 { color:var(--accent3); }
+    .z1 { position:relative;z-index:1; }
+
+    /* ─── Entrance animations ─── */
+    @keyframes fadeUp { from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:translateY(0)} }
+    @keyframes floatY { 0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)} }
+    @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(124,92,252,.6)}70%{box-shadow:0 0 0 16px rgba(124,92,252,0)} }
+    @keyframes shimmer { 0%{background-position:-400px 0}100%{background-position:400px 0} }
+    .anim-1{animation:fadeUp .55s .05s both}
+    .anim-2{animation:fadeUp .55s .18s both}
+    .anim-3{animation:fadeUp .55s .3s both}
+    .anim-4{animation:fadeUp .55s .43s both}
+    .anim-5{animation:fadeUp .55s .56s both}
+    .anim-6{animation:fadeUp .55s .69s both}
+    .float{animation:floatY 5s ease-in-out infinite}
+
+    /* ─── SLIDE 1: Cover ─── */
+    #slide-1 { background:radial-gradient(ellipse at 25% 40%,rgba(124,92,252,.22) 0%,transparent 55%),radial-gradient(ellipse at 78% 65%,rgba(245,166,35,.13) 0%,transparent 50%),var(--bg); }
+    .cover-eyebrow { font-size:12px;letter-spacing:5px;text-transform:uppercase;color:var(--accent2);margin-bottom:20px;font-weight:600; }
+    .cover-title {
+      font-family:'Playfair Display',serif;
+      font-size:clamp(58px,8.5vw,112px);font-weight:900;line-height:1.0;text-align:center;
+      background:var(--g1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+      margin-bottom:22px;
+    }
+    .cover-tagline { font-size:clamp(17px,2vw,24px);color:var(--muted);text-align:center;max-width:580px;line-height:1.65;margin-bottom:44px; }
+    .cover-badge {
+      display:flex;align-items:center;gap:10px;
+      background:rgba(255,255,255,0.04);border:1px solid var(--border2);border-radius:100px;
+      padding:10px 24px;font-size:18px;font-weight:700;letter-spacing:-.3px;
+    }
+    .cover-badge-dot {
+      width:32px;height:32px;border-radius:50%;background:var(--g1);
+      display:flex;align-items:center;justify-content:center;font-size:16px;
+    }
+    .float-card {
+      position:absolute;z-index:1;
+      background:rgba(255,255,255,0.04);backdrop-filter:blur(12px);
+      border:1px solid var(--border2);border-radius:16px;padding:14px 18px;
+    }
+    .fc-num { font-size:26px;font-weight:900;background:var(--g1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text; }
+    .fc-label { font-size:11px;color:var(--muted);margin-top:2px; }
+
+    /* ─── SLIDE 2: Pain Intro (rhetorical question) ─── */
+    .question-hero {
+      font-family:'Playfair Display',serif;
+      font-size:clamp(36px,5.5vw,80px);font-weight:900;text-align:center;line-height:1.1;max-width:880px;margin-bottom:36px;
+    }
+    .q-italic { font-style:italic;color:var(--accent2); }
+
+    /* ─── SLIDE 3: Interactive Pain Picker ─── */
+    .pain-intro { font-size:clamp(16px,1.8vw,22px);color:var(--muted);text-align:center;margin-bottom:36px;max-width:680px;line-height:1.7; }
+    .pain-grid {
+      display:grid;grid-template-columns:repeat(3,1fr);gap:14px;width:100%;max-width:1000px;
+    }
+    .pain-chip {
+      background:var(--surface);border:1.5px solid var(--border2);border-radius:16px;
+      padding:22px 20px;cursor:pointer;transition:all .25s;position:relative;overflow:hidden;
+    }
+    .pain-chip:hover { border-color:var(--accent);transform:translateY(-3px); }
+    .pain-chip.selected { border-color:var(--accent3);background:rgba(31,221,170,.08); }
+    .pain-chip.selected::after {
+      content:'✓';position:absolute;top:10px;right:12px;
+      font-size:13px;font-weight:700;color:var(--accent3);
+    }
+    .pc-icon { font-size:28px;margin-bottom:10px; }
+    .pc-text { font-size:13.5px;color:var(--muted);line-height:1.55; }
+    .pc-strong { font-size:14px;font-weight:700;color:var(--text);margin-bottom:6px; }
+    .pain-cta-row { margin-top:20px;text-align:center; }
+    .pain-cta { font-size:13px;color:var(--muted);transition:color .2s; }
+    .pain-cta span { color:var(--accent3);font-weight:600; }
+
+    /* ─── SLIDE 4: The Cost of Chaos ─── */
+    .chaos-grid { display:grid;grid-template-columns:repeat(2,1fr);gap:20px;width:100%;max-width:900px; }
+    .chaos-card {
+      background:var(--surface);border:1px solid var(--border);border-radius:20px;
+      padding:28px;display:flex;gap:18px;align-items:flex-start;transition:all .3s;
+    }
+    .chaos-card:hover { border-color:rgba(255,95,95,.3);background:rgba(255,95,95,.04); }
+    .chaos-icon { font-size:32px;flex-shrink:0;margin-top:2px; }
+    .chaos-title { font-size:15px;font-weight:700;margin-bottom:6px; }
+    .chaos-body { font-size:13px;color:var(--muted);line-height:1.65; }
+    .chaos-stat { display:inline-block;font-size:11px;font-weight:700;color:var(--red);background:rgba(255,95,95,.12);border-radius:100px;padding:3px 10px;margin-top:10px; }
+    .chaos-vs {
+      display:flex;align-items:center;justify-content:center;gap:20px;
+      background:rgba(255,95,95,.06);border:1px solid rgba(255,95,95,.15);
+      border-radius:16px;padding:18px 28px;margin-top:6px;width:100%;max-width:900px;
+    }
+    .chaos-vs-item { text-align:center; }
+    .cvs-num { font-size:36px;font-weight:900;color:var(--red); }
+    .cvs-label { font-size:12px;color:var(--muted); }
+    .cvs-div { font-size:32px;color:var(--border2); }
+
+    /* ─── SLIDE 5: The Opportunity ─── */
+    .opp-wrap { display:flex;align-items:center;gap:64px;width:100%;max-width:1060px; }
+    .opp-left { flex:1; }
+    .opp-right { flex:1;display:flex;flex-direction:column;gap:14px; }
+    .opp-stat-card {
+      background:var(--surface);border:1px solid var(--border2);border-radius:18px;
+      padding:22px 26px;display:flex;align-items:center;gap:18px;
+      transition:transform .3s;cursor:default;
+    }
+    .opp-stat-card:hover { transform:translateX(6px); }
+    .osc-num { font-size:40px;font-weight:900;background:var(--g1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;white-space:nowrap; }
+    .osc-label { font-size:14px;color:var(--muted);line-height:1.5; }
+    .big-text { font-family:'Playfair Display',serif;font-size:clamp(34px,4.5vw,58px);font-weight:900;line-height:1.15;margin-bottom:20px; }
+
+    /* ─── SLIDE 6: Solution intro ─── */
+    .solution-wrap { display:flex;align-items:center;gap:64px;width:100%;max-width:1080px; }
+    .sol-text { flex:1; }
+    .sol-visual { flex:1;position:relative;height:420px; }
+    .sol-headline { font-family:'Playfair Display',serif;font-size:clamp(30px,3.8vw,50px);font-weight:900;margin-bottom:18px;line-height:1.18; }
+    .sol-desc { font-size:clamp(14px,1.4vw,17px);color:var(--muted);line-height:1.85;margin-bottom:28px; }
+    .tick-row { display:flex;align-items:flex-start;gap:12px;font-size:14px;color:var(--muted);margin-bottom:14px; }
+    .tick { width:22px;height:22px;border-radius:50%;background:rgba(31,221,170,.12);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--accent3);flex-shrink:0;margin-top:1px; }
+    .phone-wrap {
+      width:230px;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+      background:var(--surface2);border:1.5px solid var(--border2);border-radius:34px;
+      padding:22px 18px;box-shadow:0 36px 72px rgba(0,0,0,.6);
+    }
+    .ph-header { font-size:10px;text-align:center;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:14px; }
+    .ph-row {
+      background:rgba(124,92,252,.1);border:1px solid rgba(124,92,252,.18);border-radius:10px;
+      padding:12px 14px;margin-bottom:8px;
+    }
+    .ph-top { display:flex;justify-content:space-between;margin-bottom:6px; }
+    .ph-label { font-size:10px;color:var(--muted); }
+    .ph-val { font-size:10px;font-weight:600;color:var(--accent3); }
+    .ph-bar { height:3px;border-radius:2px;background:rgba(255,255,255,.07);overflow:hidden; }
+    .ph-fill { height:100%;background:var(--g1);border-radius:2px; }
+    .ph-live { margin-top:12px;background:rgba(31,221,170,.08);border:1px solid rgba(31,221,170,.18);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:8px; }
+    .live-dot { width:8px;height:8px;border-radius:50%;background:var(--accent3);animation:pulse 2s infinite; }
+    .live-text { font-size:10px;color:var(--accent3);font-weight:600; }
+
+    /* ─── SLIDE 7: Features ─── */
+    .feat-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%;max-width:980px; }
+    .feat-card {
+      background:var(--surface);border:1.5px solid var(--border);border-radius:18px;
+      padding:26px 22px;transition:all .3s;cursor:default;position:relative;overflow:hidden;
+    }
+    .feat-card:hover { transform:translateY(-5px);border-color:rgba(124,92,252,.4);box-shadow:0 18px 44px rgba(124,92,252,.12); }
+    .feat-icon { width:48px;height:48px;border-radius:13px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px; }
+    .feat-name { font-size:15px;font-weight:700;margin-bottom:7px; }
+    .feat-desc { font-size:12.5px;color:var(--muted);line-height:1.65; }
+    .feat-badge { display:inline-block;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:3px 9px;border-radius:100px;margin-top:12px; }
+
+    /* ─── SLIDE 8: How it Works ─── */
+    .steps-row { display:flex;align-items:flex-start;width:100%;max-width:1000px;gap:0;position:relative; }
+    .step-item { flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 20px;position:relative; }
+    .step-item:not(:last-child)::after {
+      content:'';position:absolute;top:30px;left:calc(50% + 38px);right:calc(-50% + 38px);height:2px;
+      background:linear-gradient(90deg,rgba(124,92,252,.5),transparent);
+    }
+    .step-num {
+      width:60px;height:60px;border-radius:50%;background:var(--g1);
+      display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;
+      margin-bottom:18px;position:relative;z-index:1;box-shadow:0 0 28px rgba(124,92,252,.45);
+    }
+    .step-title { font-size:16px;font-weight:700;margin-bottom:8px; }
+    .step-desc { font-size:13px;color:var(--muted);line-height:1.65; }
+    .step-badge { font-size:10px;color:var(--accent2);font-weight:700;margin-top:10px; }
+    .step-banner {
+      margin-top:44px;width:100%;max-width:1000px;
+      background:rgba(31,221,170,.06);border:1px solid rgba(31,221,170,.18);border-radius:16px;
+      padding:18px 32px;text-align:center;font-size:14.5px;
+    }
+
+    /* ─── SLIDE 6: Who We Are (Soul) ─── */
+    .soul-wrap { display:flex;align-items:center;gap:72px;width:100%;max-width:1080px; }
+    .soul-left { flex:1.1; }
+    .soul-right { flex:.9;display:flex;flex-direction:column;gap:16px; }
+    .soul-quote {
+      font-family:'Playfair Display',serif;font-style:italic;
+      font-size:clamp(20px,2.4vw,30px);line-height:1.4;margin-bottom:20px;
+      color:var(--text);border-left:3px solid var(--accent);padding-left:20px;
+    }
+    .soul-attribution { font-size:12px;color:var(--muted);margin-bottom:24px; }
+    .soul-story { font-size:clamp(13px,1.3vw,14.5px);color:var(--muted);line-height:1.85;margin-bottom:18px; }
+    .soul-promise-card {
+      background:var(--surface);border:1px solid var(--border2);border-radius:14px;
+      padding:16px 18px;display:flex;gap:14px;align-items:flex-start;
+      transition:border-color .25s;
+    }
+    .soul-promise-card:hover { border-color:var(--accent3); }
+    .spc-icon { font-size:22px;flex-shrink:0; }
+    .spc-title { font-size:13px;font-weight:700;margin-bottom:4px; }
+    .spc-desc { font-size:11.5px;color:var(--muted);line-height:1.6; }
+    .soul-origin { font-size:11px;letter-spacing:2.5px;text-transform:uppercase;color:var(--accent2);margin-bottom:12px; }
+
+    /* ─── SLIDE 7: Competitor Comparison ─── */
+    .comp-table { width:100%;max-width:1020px;border-collapse:collapse; }
+    .comp-table th, .comp-table td { padding:11px 14px;text-align:center;font-size:12.5px;border-bottom:1px solid var(--border); }
+    .comp-table th { font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);font-weight:600;padding-bottom:14px; }
+    .comp-table td:first-child { text-align:left;font-size:13px;color:var(--muted);font-weight:500;white-space:nowrap; }
+    .comp-table .col-tbc { background:rgba(124,92,252,.07);font-weight:700;color:var(--text); }
+    .comp-table .col-tbc-head { background:rgba(124,92,252,.12);color:var(--accent);font-size:12px;letter-spacing:.5px;border-radius:10px 10px 0 0; }
+    .yes { color:var(--accent3);font-size:16px; }
+    .no { color:var(--red);font-size:12px;font-weight:700; }
+    .partial { color:var(--accent2);font-size:11px;font-weight:600; }
+    .comp-badge { display:inline-block;background:var(--g1);color:#fff;font-size:9px;font-weight:800;padding:2px 8px;border-radius:100px;letter-spacing:1px;text-transform:uppercase;margin-left:5px;vertical-align:middle; }
+
+    /* ─── SLIDE 11: CTA ─── */
+    #slide-11 { background:radial-gradient(ellipse at 50% 45%,rgba(124,92,252,.28) 0%,transparent 65%),var(--bg); }
+    .cta-super { font-size:11px;letter-spacing:4px;text-transform:uppercase;color:var(--accent2);margin-bottom:18px;font-weight:600; }
+    .cta-title { font-family:'Playfair Display',serif;font-size:clamp(44px,6.5vw,88px);font-weight:900;text-align:center;line-height:1.08;margin-bottom:20px;max-width:820px; }
+    .cta-sub { font-size:clamp(16px,1.7vw,21px);color:var(--muted);text-align:center;max-width:540px;margin-bottom:48px;line-height:1.7; }
+    .cta-buttons { display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:40px; }
+    .btn-primary {
+      padding:16px 40px;background:var(--g1);border:none;border-radius:12px;
+      color:#fff;font-size:16px;font-weight:700;cursor:pointer;
+      text-decoration:none;display:inline-block;
+      transition:opacity .2s,transform .2s;
+    }
+    .btn-primary:hover { opacity:.88;transform:translateY(-2px); }
+    .btn-secondary {
+      padding:16px 40px;background:transparent;border:2px solid var(--border2);border-radius:12px;
+      color:var(--text);font-size:16px;font-weight:600;cursor:pointer;
+      text-decoration:none;display:inline-block;transition:all .2s;
+    }
+    .btn-secondary:hover { border-color:var(--accent); }
+    .cta-email { display:flex;flex-direction:column;align-items:center;gap:6px; }
+    .cta-email p { font-size:13px;color:var(--muted); }
+    .cta-email a { color:var(--accent2);font-weight:600;text-decoration:none;font-size:17px; }
+    .confetti { position:absolute;font-size:26px;animation:confettiUp linear infinite;pointer-events:none;z-index:0; }
+    @keyframes confettiUp { 0%{transform:translateY(110vh) rotate(0deg);opacity:1}100%{transform:translateY(-10vh) rotate(540deg);opacity:0} }
+
+    /* ─── Misc ─── */
+    .divider { width:40px;height:3px;border-radius:2px;background:var(--g1);margin:0 auto 32px; }
+  </style>
+</head>
+<body>
+
+<div id="progress"></div>
+
+<div id="deck">
+
+  <!-- ══════════════════ SLIDE 1 — COVER ══════════════════ -->
+  <div class="slide active" id="slide-1">
+    <div class="blob" style="width:640px;height:640px;background:rgba(124,92,252,.2);top:-220px;left:-220px;"></div>
+    <div class="blob" style="width:480px;height:480px;background:rgba(245,166,35,.12);bottom:-160px;right:-160px;"></div>
+
+    <div class="float-card z1 float" style="top:17%;left:5%;animation-delay:0s">
+      <div class="fc-num">3×</div><div class="fc-label">Average revenue lift</div>
+    </div>
+    <div class="float-card z1 float" style="top:19%;right:5%;animation-delay:1.8s">
+      <div class="fc-num">10 min</div><div class="fc-label">To go live</div>
+    </div>
+    <div class="float-card z1 float" style="bottom:22%;left:4%;animation-delay:.9s">
+      <div class="fc-num">∞</div><div class="fc-label">Students you can reach</div>
+    </div>
+    <div class="float-card z1 float" style="bottom:20%;right:4%;animation-delay:2.4s">
+      <div class="fc-num">₹0</div><div class="fc-label">To start</div>
+    </div>
+
+    <div class="z1" style="display:flex;flex-direction:column;align-items:center;text-align:center;">
+      <div class="cover-eyebrow anim-1">A message for every brilliant teacher</div>
+      <div class="cover-title anim-2">The Big Class</div>
+      <div class="cover-tagline anim-3">You became a teacher to change lives —<br />not to fight technology.<br /><em style="color:var(--accent3)">We're about to change that.</em></div>
+      <div class="cover-badge anim-4">
+        <div class="cover-badge-dot">🎓</div>
+        <span>The Big Class · Your teaching empire starts here</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 2 — RHETORICAL QUESTION ══════════════════ -->
+  <div class="slide" id="slide-2">
+    <div class="blob" style="width:500px;height:500px;background:rgba(245,166,35,.1);top:-120px;right:-100px;"></div>
+
+    <div class="z1" style="display:flex;flex-direction:column;align-items:center;text-align:center;">
+      <div class="slide-tag anim-1">A question for you</div>
+      <div class="question-hero anim-2">
+        You know your subject<br />
+        <span class="q-italic">better than anyone.</span><br />
+        <span style="color:var(--muted);font-size:60%;">So why does teaching online<br />feel like a second job?</span>
+      </div>
+      <div class="anim-3" style="font-size:clamp(15px,1.5vw,18px);color:var(--muted);max-width:560px;line-height:1.75;">
+        Between juggling WhatsApp groups, Zoom links, Google Forms, and payment follow-ups — the actual <em>teaching</em> gets squeezed into whatever time is left.
+      </div>
+      <div class="anim-4" style="margin-top:36px;background:rgba(124,92,252,.08);border:1px solid rgba(124,92,252,.2);border-radius:14px;padding:16px 32px;font-size:15px;color:var(--muted);">
+        👇 &nbsp;Let's talk about what's actually costing you
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 3 — INTERACTIVE PAIN PICKER ══════════════════ -->
+  <div class="slide" id="slide-3">
+    <div class="blob" style="width:400px;height:400px;background:rgba(255,95,95,.08);bottom:-100px;left:-100px;"></div>
+
+    <div class="z1 text-center anim-1" style="margin-bottom:28px;">
+      <div class="slide-tag">Which of these do you recognise?</div>
+      <div class="slide-headline" style="font-size:clamp(26px,3.2vw,44px);">Tap everything that <span class="hl">hits home.</span></div>
+      <div class="pain-intro">These are real things teachers tell us every week.</div>
+    </div>
+
+    <div class="pain-grid z1 anim-2" id="pain-picker">
+      <div class="pain-chip" data-id="p1" onclick="togglePain(this)">
+        <div class="pc-icon">😩</div>
+        <div class="pc-strong">No real online presence</div>
+        <div class="pc-text">"My students find me through word of mouth. I don't even have a proper website."</div>
+      </div>
+      <div class="pain-chip" data-id="p2" onclick="togglePain(this)">
+        <div class="pc-icon">📱</div>
+        <div class="pc-strong">WhatsApp is my classroom</div>
+        <div class="pc-text">"I manage batches, doubts, fees and materials all inside one chaotic group."</div>
+      </div>
+      <div class="pain-chip" data-id="p3" onclick="togglePain(this)">
+        <div class="pc-icon">💸</div>
+        <div class="pc-strong">Paying for 5+ tools</div>
+        <div class="pc-text">"Zoom, Google Forms, Canva, Razorpay, Drive — the bills keep adding up."</div>
+      </div>
+      <div class="pain-chip" data-id="p4" onclick="togglePain(this)">
+        <div class="pc-icon">📉</div>
+        <div class="pc-strong">No idea who's falling behind</div>
+        <div class="pc-text">"I only find out a student is lost when they quietly disappear from the group."</div>
+      </div>
+      <div class="pain-chip" data-id="p5" onclick="togglePain(this)">
+        <div class="pc-icon">🕐</div>
+        <div class="pc-strong">Admin eats my teaching time</div>
+        <div class="pc-text">"I spend more time coordinating than actually teaching. It's exhausting."</div>
+      </div>
+      <div class="pain-chip" data-id="p6" onclick="togglePain(this)">
+        <div class="pc-icon">🌐</div>
+        <div class="pc-strong">Can't reach students outside my city</div>
+        <div class="pc-text">"I know I could be teaching hundreds, but I'm stuck with just whoever's nearby."</div>
+      </div>
+    </div>
+
+    <div class="pain-cta-row z1 anim-3" style="margin-top:18px;">
+      <div class="pain-cta" id="pain-feedback">Click the ones that feel familiar 👆</div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 4 — THE REAL COST ══════════════════ -->
+  <div class="slide" id="slide-4">
+    <div class="blob" style="width:440px;height:440px;background:rgba(255,95,95,.1);top:-100px;right:-100px;"></div>
+
+    <div class="z1 text-center anim-1" style="margin-bottom:36px;">
+      <div class="slide-tag">The Real Cost</div>
+      <div class="slide-headline" style="font-size:clamp(28px,3.5vw,50px);">Every month without the right tools<br />is a month of <span style="color:var(--red)">lost potential.</span></div>
+    </div>
+
+    <div class="chaos-grid z1 anim-2">
+      <div class="chaos-card">
+        <div class="chaos-icon">⏳</div>
+        <div>
+          <div class="chaos-title">8–12 hours/week lost to admin</div>
+          <div class="chaos-body">Sending reminder messages manually, chasing fee payments, copying links across platforms, re-explaining the same doubts in different chats.</div>
+          <span class="chaos-stat">= ~1.5 months of teaching time per year</span>
+        </div>
+      </div>
+      <div class="chaos-card">
+        <div class="chaos-icon">💰</div>
+        <div>
+          <div class="chaos-title">Students who leave silently</div>
+          <div class="chaos-body">Without engagement data, you never know who's at risk of dropping. The average teacher loses 30% of students before the course ends.</div>
+          <span class="chaos-stat">= real revenue walking out the door</span>
+        </div>
+      </div>
+      <div class="chaos-card">
+        <div class="chaos-icon">🚫</div>
+        <div>
+          <div class="chaos-title">Capped at your city's reach</div>
+          <div class="chaos-body">Without a proper website and online systems, you can't attract students from other cities, states or countries — no matter how brilliant you are.</div>
+          <span class="chaos-stat">= 99% of your audience never finds you</span>
+        </div>
+      </div>
+      <div class="chaos-card">
+        <div class="chaos-icon">🎭</div>
+        <div>
+          <div class="chaos-title">Looking unprofessional</div>
+          <div class="chaos-body">A teacher who sends Zoom links over WhatsApp and collects fees via UPI screenshots is judged differently than one with a clean, branded experience.</div>
+          <span class="chaos-stat">= parents & students choose competitors</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 5 — THE OPPORTUNITY ══════════════════ -->
+  <div class="slide" id="slide-5">
+    <div class="blob" style="width:500px;height:500px;background:rgba(31,221,170,.08);bottom:-150px;right:-150px;"></div>
+
+    <div class="opp-wrap z1">
+      <div class="opp-left anim-1">
+        <div class="slide-tag">The Opportunity</div>
+        <div class="big-text">India's biggest<br /><span class="hl">EdTech opportunity</span><br />is in your hands.</div>
+        <div style="font-size:clamp(14px,1.4vw,17px);color:var(--muted);line-height:1.8;margin-bottom:24px;max-width:440px;">
+          India has over 9.5 million teachers. Less than 2% have a proper digital presence. The demand for quality online education is exploding — and <strong style="color:var(--text)">your subject expertise is the product.</strong>
+        </div>
+        <div style="background:rgba(31,221,170,.08);border:1px solid rgba(31,221,170,.2);border-radius:12px;padding:14px 20px;font-size:14px;color:var(--accent3);font-weight:600;max-width:440px;">
+          You don't need to be a tech expert.<br/>You just need the right platform.
+        </div>
+      </div>
+      <div class="opp-right anim-2">
+        <div class="opp-stat-card">
+          <div class="osc-num">₹7,000Cr+</div>
+          <div class="osc-label">Indian online education market size &amp; growing 20% year-on-year</div>
+        </div>
+        <div class="opp-stat-card">
+          <div class="osc-num">680M+</div>
+          <div class="osc-label">Indians with internet access — your potential students</div>
+        </div>
+        <div class="opp-stat-card">
+          <div class="osc-num">3×</div>
+          <div class="osc-label">Average revenue increase for teachers who go digital with a proper platform</div>
+        </div>
+        <div class="opp-stat-card">
+          <div class="osc-num">10 min</div>
+          <div class="osc-label">That's all it takes to launch your own branded teaching portal today</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 6 — WHO WE ARE ══════════════════ -->
+  <div class="slide" id="slide-6">
+    <div class="blob" style="width:520px;height:520px;background:rgba(245,166,35,.1);top:-180px;right:-160px;"></div>
+    <div class="blob" style="width:280px;height:280px;background:rgba(124,92,252,.1);bottom:-80px;left:-80px;"></div>
+
+    <div class="soul-wrap z1">
+      <div class="soul-left anim-1">
+        <div class="soul-origin">Built in Dehradun · In the foothills of the Himalayas</div>
+        <div class="soul-quote">
+          "I wasn't trying to be a founder.<br />I was trying to be a good mother<br />who could also keep teaching."
+        </div>
+        <div class="soul-attribution">— Renu Rawat · Founder · Mother · Instructor · Builder. In that order.</div>
+        <div class="soul-story">
+          The first user of thebigclass.com is six years old — Divit, Renu's son. He doesn't know it's a product. He just knows it's where Mum teaches.<br /><br />
+          Renu started with one child, one cup of tea, one question: <em>why do ants walk in lines?</em> Then five neighbourhood families joined on Saturdays. Then eleven. Then a mother in Pune emailed: <em>"How are you doing this?"</em><br /><br />
+          She wasn't doing it well. She was doing it with <strong style="color:var(--text)">six apps and a prayer.</strong> So her husband Dinesh built the tool she wished existed. That became The Big Class.
+        </div>
+        <div style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--accent3);font-weight:600;">We build software for the people who taught us first.</div>
+      </div>
+      <div class="soul-right anim-2">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:4px;">Our 3 promises to every teacher</div>
+        <div class="soul-promise-card">
+          <div class="spc-icon">🎯</div>
+          <div>
+            <div class="spc-title">Best tool, not most features</div>
+            <div class="spc-desc">Every release is pressure-tested with real teachers. If it confuses a teacher in 5 minutes, it doesn't ship — ever.</div>
+          </div>
+        </div>
+        <div class="soul-promise-card">
+          <div class="spc-icon">💛</div>
+          <div>
+            <div class="spc-title">Honesty over polish</div>
+            <div class="spc-desc">No fake testimonials. No invented numbers. We tell you the truth even when the truth is "not yet." Lifetime deals are honoured — always.</div>
+          </div>
+        </div>
+        <div class="soul-promise-card">
+          <div class="spc-icon">🇮🇳</div>
+          <div>
+            <div class="spc-title">Indian-priced. Indian-hosted. IST support.</div>
+            <div class="spc-desc">Default region: Mumbai. Prices in rupees. UPI native. We answer from IST hours — like the educators we serve.</div>
+          </div>
+        </div>
+        <div style="background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.2);border-radius:12px;padding:12px 16px;font-size:12px;color:var(--muted);line-height:1.7;">
+          <strong style="color:var(--accent2);">The question on Renu's desk, every Monday:</strong><br />
+          <em>"Would I sign up for this if I were the teacher on the other side?"</em>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 7 — WHY NOT OTHERS? ══════════════════ -->
+  <div class="slide" id="slide-7">
+    <div class="blob" style="width:400px;height:400px;background:rgba(124,92,252,.1);top:-120px;left:-100px;"></div>
+
+    <div class="z1 text-center anim-1" style="margin-bottom:28px;">
+      <div class="slide-tag">The Honest Comparison</div>
+      <div class="slide-headline" style="font-size:clamp(22px,2.8vw,40px);">Why not just use <span class="hl">Teachable, Zoom or Graphy?</span></div>
+    </div>
+
+    <div class="z1 anim-2" style="width:100%;max-width:1020px;">
+      <table class="comp-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">What matters to you</th>
+            <th class="col-tbc-head">The Big Class <span class="comp-badge">★ You</span></th>
+            <th>Teachable / Thinkific</th>
+            <th>Zoom + WhatsApp</th>
+            <th>Graphy / Classplus</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Your own brand — no "Powered by X"</td>
+            <td class="col-tbc"><span class="yes">✓</span></td>
+            <td><span class="partial">Paid only</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="partial">Paid only</span></td>
+          </tr>
+          <tr>
+            <td>Zero % commission on student fees</td>
+            <td class="col-tbc"><span class="yes">✓</span></td>
+            <td><span class="no">5–10% cut</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="partial">Varies</span></td>
+          </tr>
+          <tr>
+            <td>Live classes built-in (no Zoom needed)</td>
+            <td class="col-tbc"><span class="yes">✓</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="yes">✓</span></td>
+            <td><span class="partial">Basic</span></td>
+          </tr>
+          <tr>
+            <td>WhatsApp reminders — automated</td>
+            <td class="col-tbc"><span class="yes">✓</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="no">Manual</span></td>
+            <td><span class="partial">Add-on cost</span></td>
+          </tr>
+          <tr>
+            <td>Student analytics (who's at risk)</td>
+            <td class="col-tbc"><span class="yes">✓</span></td>
+            <td><span class="partial">Basic</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="partial">Limited</span></td>
+          </tr>
+          <tr>
+            <td>10+ Indian language portals</td>
+            <td class="col-tbc"><span class="yes">✓</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="partial">Hindi only</span></td>
+          </tr>
+          <tr>
+            <td>UPI + Razorpay native (no FX fees)</td>
+            <td class="col-tbc"><span class="yes">✓</span></td>
+            <td><span class="no">USD only</span></td>
+            <td><span class="no">✗</span></td>
+            <td><span class="yes">✓</span></td>
+          </tr>
+          <tr>
+            <td>Full data export — free plan</td>
+            <td class="col-tbc"><span class="yes">✓</span></td>
+            <td><span class="no">Paid gate</span></td>
+            <td><span class="partial">Manual</span></td>
+            <td><span class="no">✗</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="z1 anim-3" style="margin-top:16px;background:rgba(31,221,170,.06);border:1px solid rgba(31,221,170,.18);border-radius:14px;padding:12px 28px;font-size:13.5px;text-align:center;max-width:820px;">
+      <span style="color:var(--muted);">The Big Class is the only platform where all 8 are ✓ — </span>
+      <span style="color:var(--accent3);font-weight:700;">on the free plan, with no commission, no data lock-in, no fine print.</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 8 — THE SOLUTION ══════════════════ -->
+  <div class="slide" id="slide-8">
+    <div class="blob" style="width:480px;height:480px;background:rgba(124,92,252,.15);top:-100px;left:-100px;"></div>
+
+
+    <div class="solution-wrap z1">
+      <div class="sol-text anim-1">
+        <div class="slide-tag">Introducing</div>
+        <div class="sol-headline">One platform.<br /><span class="hl">Everything a teacher needs.</span></div>
+        <div class="sol-desc">The Big Class replaces every fragmented tool you're using today with a single, beautiful, teacher-first platform. Your brand. Your students. Your rules.</div>
+        <div class="tick-row"><div class="tick">✓</div> Your own professional website — no coding</div>
+        <div class="tick-row"><div class="tick">✓</div> Live classes with polls, Q&amp;A, attendance &amp; recordings</div>
+        <div class="tick-row"><div class="tick">✓</div> Courses, batches, quizzes &amp; assignments in one place</div>
+        <div class="tick-row"><div class="tick">✓</div> Real-time analytics — see exactly who needs help</div>
+        <div class="tick-row"><div class="tick">✓</div> Automated WhatsApp + Email class reminders</div>
+        <div class="tick-row"><div class="tick">✓</div> 10+ Indian languages supported out of the box</div>
+      </div>
+      <div class="sol-visual anim-2">
+        <div class="phone-wrap float">
+          <div class="ph-header">Your Dashboard</div>
+          <div class="ph-row">
+            <div class="ph-top"><span class="ph-label">Physics — Batch A</span><span class="ph-val">78% avg</span></div>
+            <div class="ph-bar"><div class="ph-fill" style="width:78%"></div></div>
+          </div>
+          <div class="ph-row">
+            <div class="ph-top"><span class="ph-label">Chemistry — Batch B</span><span class="ph-val">65% avg</span></div>
+            <div class="ph-bar"><div class="ph-fill" style="width:65%"></div></div>
+          </div>
+          <div class="ph-row">
+            <div class="ph-top"><span class="ph-label">Maths Advanced</span><span class="ph-val">91% avg</span></div>
+            <div class="ph-bar"><div class="ph-fill" style="width:91%"></div></div>
+          </div>
+          <div class="ph-live">
+            <div class="live-dot"></div>
+            <div class="live-text">143 students active · 2 classes today</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 9 — FEATURES ══════════════════ -->
+  <div class="slide" id="slide-9">
+    <div class="blob" style="width:380px;height:380px;background:rgba(31,221,170,.08);bottom:-80px;right:-80px;"></div>
+
+    <div class="z1 text-center anim-1" style="margin-bottom:36px;">
+      <div class="slide-tag">What's Inside</div>
+      <div class="slide-headline" style="font-size:clamp(26px,3.2vw,44px);">Everything you ever wished<br /><span class="hl">one tool could do.</span></div>
+    </div>
+
+    <div class="feat-grid z1 anim-2">
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(124,92,252,.12);">🌐</div>
+        <div class="feat-name">Your Branded Website</div>
+        <div class="feat-desc">Your own portal with logo, custom colours, pages, and even a custom domain. Fully professional — zero code required.</div>
+        <span class="feat-badge" style="background:rgba(124,92,252,.12);color:var(--accent);">Live in 10 min</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(245,166,35,.12);">🎥</div>
+        <div class="feat-name">Live &amp; Recorded Classes</div>
+        <div class="feat-desc">Run interactive sessions with live polls, raise-hand Q&amp;A, auto-attendance, whiteboards, and HD recordings.</div>
+        <span class="feat-badge" style="background:rgba(245,166,35,.12);color:var(--accent2);">No Zoom needed</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(31,221,170,.12);">📊</div>
+        <div class="feat-name">Student Analytics</div>
+        <div class="feat-desc">Know who's engaged, who's falling behind, and who's about to drop — before they do. Act on data, not guesswork.</div>
+        <span class="feat-badge" style="background:rgba(31,221,170,.12);color:var(--accent3);">Real-time insights</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(124,92,252,.12);">📚</div>
+        <div class="feat-name">Courses &amp; Batches</div>
+        <div class="feat-desc">Create structured courses with modules and lessons. Organise students into separate batches with their own schedules.</div>
+        <span class="feat-badge" style="background:rgba(124,92,252,.12);color:var(--accent);">Self-paced or live</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(245,166,35,.12);">🔔</div>
+        <div class="feat-name">Smart Reminders</div>
+        <div class="feat-desc">Automated WhatsApp + email class reminders at T-3h, T-1h, and T-15m. Students never miss a class again.</div>
+        <span class="feat-badge" style="background:rgba(245,166,35,.12);color:var(--accent2);">WhatsApp built-in</span>
+      </div>
+      <div class="feat-card">
+        <div class="feat-icon" style="background:rgba(31,221,170,.12);">🌍</div>
+        <div class="feat-name">10+ Indian Languages</div>
+        <div class="feat-desc">Hindi, Tamil, Bengali, Marathi, Gujarati, Kannada and more. Your portal speaks your students' mother tongue.</div>
+        <span class="feat-badge" style="background:rgba(31,221,170,.12);color:var(--accent3);">Truly multilingual</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 8 — HOW IT WORKS ══════════════════ -->
+  <div class="slide" id="slide-10">
+    <div class="blob" style="width:600px;height:250px;background:rgba(124,92,252,.1);top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;"></div>
+
+    <div class="z1 text-center anim-1" style="margin-bottom:52px;">
+      <div class="slide-tag">Getting Started</div>
+      <div class="slide-headline" style="font-size:clamp(28px,3.8vw,52px);">You're 4 steps away from<br /><span class="hl">your own teaching empire.</span></div>
+    </div>
+
+    <div class="steps-row z1 anim-2">
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-title">Create your account</div>
+        <div class="step-desc">Sign up with your email. No credit card, no contracts, no commitments.</div>
+        <div class="step-badge">⏱ 2 minutes</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-title">Build your portal</div>
+        <div class="step-desc">Add your photo, name, subject &amp; brand colours. Your website goes live instantly.</div>
+        <div class="step-badge">⏱ 5 minutes</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-title">Add your courses</div>
+        <div class="step-desc">Create your first batch or upload a recorded course. Share the link with students.</div>
+        <div class="step-badge">⏱ 10 minutes</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">4</div>
+        <div class="step-title">Teach &amp; grow</div>
+        <div class="step-desc">Go live, track who's learning, answer doubts, get reviews — and scale without chaos.</div>
+        <div class="step-badge">🚀 Day 1</div>
+      </div>
+    </div>
+
+    <div class="step-banner z1 anim-3">
+      <span style="color:var(--muted);">No developers. No designers. No technical skills needed. Just </span>
+      <span style="color:var(--accent3);font-weight:700;">you and your knowledge. ✨</span>
+    </div>
+  </div>
+
+  <!-- ══════════════════ SLIDE 9 — CTA ══════════════════ -->
+  <div class="slide" id="slide-11">
+    <div class="blob" style="width:700px;height:700px;background:rgba(124,92,252,.22);top:50%;left:50%;transform:translate(-50%,-50%);"></div>
+
+    <div class="z1" style="display:flex;flex-direction:column;align-items:center;text-align:center;">
+      <div class="cta-super anim-1">The decision is yours</div>
+      <div class="cta-title anim-2">
+        Your students are out there<br />
+        <span class="hl">waiting for you.</span>
+      </div>
+      <div class="cta-sub anim-3">
+        Every day you wait is a student who doesn't find you.<br />
+        Start free. Be live in 10 minutes. Grow from there.
+      </div>
+      <div class="cta-buttons anim-4">
+        <a class="btn-primary" href="https://thebigclass.com/signup">🚀 Start Free — No Card Needed</a>
+        <a class="btn-secondary" href="mailto:welcome@thebigclass.com?subject=I%20want%20a%20demo&body=Please%20book%20a%20demo%20for%20me.">📅 Book a Personal Demo</a>
+      </div>
+      <div class="cta-email anim-5">
+        <p>Have questions? Reach us directly.</p>
+        <a href="mailto:welcome@thebigclass.com">welcome@thebigclass.com</a>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #deck -->
+
+<!-- ─── Nav ─── -->
+<div id="nav">
+  <button class="nav-btn" id="btn-prev">←</button>
+  <div class="dot-track" id="dots"></div>
+  <span id="slide-counter">1 / 11</span>
+  <button class="nav-btn" id="btn-next">→</button>
+</div>
+<div id="key-hint">← → arrow keys &nbsp;·&nbsp; F = fullscreen</div>
+
+<script>
+  const TOTAL = 11;
+  let current = 1;
+  let isAnimating = false;
+
+  // Build dots
+  const dotsEl = document.getElementById('dots');
+  for (let i = 1; i <= TOTAL; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot' + (i === 1 ? ' active' : '');
+    d.onclick = () => goTo(i);
+    dotsEl.appendChild(d);
+  }
+
+  function updateUI() {
+    document.getElementById('slide-counter').textContent = current + ' / ' + TOTAL;
+    document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i + 1 === current));
+    document.getElementById('progress').style.width = (current / TOTAL * 100) + '%';
+  }
+
+  function goTo(n) {
+    if (isAnimating || n === current || n < 1 || n > TOTAL) return;
+    isAnimating = true;
+    const from = document.getElementById('slide-' + current);
+    const to = document.getElementById('slide-' + n);
+    from.classList.remove('active');
+    from.classList.add('exit');
+    to.style.transform = n > current ? 'translateX(60px)' : 'translateX(-60px)';
+
+    // Re-trigger animations
+    to.querySelectorAll('[class*="anim-"]').forEach(el => {
+      el.style.animation = 'none';
+      void el.offsetHeight;
+      el.style.animation = '';
+    });
+
+    requestAnimationFrame(() => {
+      to.classList.add('active');
+      to.style.transform = '';
+      setTimeout(() => {
+        from.classList.remove('exit');
+        from.style.transform = '';
+        isAnimating = false;
+      }, 520);
+    });
+
+    current = n;
+    updateUI();
+    if (current === TOTAL) spawnConfetti();
+  }
+
+  document.getElementById('btn-next').onclick = () => goTo(current + 1);
+  document.getElementById('btn-prev').onclick = () => goTo(current - 1);
+
+  document.addEventListener('keydown', e => {
+    if (['ArrowRight','ArrowDown','PageDown',' '].includes(e.key)) { e.preventDefault(); goTo(current + 1); }
+    if (['ArrowLeft','ArrowUp','PageUp'].includes(e.key)) { e.preventDefault(); goTo(current - 1); }
+    if (e.key === 'f' || e.key === 'F') document.documentElement.requestFullscreen?.();
+  });
+
+  let tx = 0;
+  document.addEventListener('touchstart', e => { tx = e.touches[0].clientX; }, { passive:true });
+  document.addEventListener('touchend', e => { const dx = e.changedTouches[0].clientX - tx; if (Math.abs(dx) > 55) goTo(current + (dx < 0 ? 1 : -1)); });
+
+  // Pain picker interaction
+  let selectedPains = new Set();
+  window.togglePain = function(el) {
+    const id = el.dataset.id;
+    if (selectedPains.has(id)) {
+      selectedPains.delete(id);
+      el.classList.remove('selected');
+    } else {
+      selectedPains.add(id);
+      el.classList.add('selected');
+    }
+    const fb = document.getElementById('pain-feedback');
+    const count = selectedPains.size;
+    if (count === 0) fb.innerHTML = 'Click the ones that feel familiar 👆';
+    else if (count === 1) fb.innerHTML = '<span>You\'re not alone</span> — thousands of teachers feel this too.';
+    else if (count <= 3) fb.innerHTML = `<span>${count} things resonating</span> — these are solvable. Every single one.`;
+    else if (count <= 5) fb.innerHTML = `<span>${count} pain points</span> — this is exactly why we built The Big Class.`;
+    else fb.innerHTML = `<span>All 6!</span> — You really do need The Big Class. Let\'s fix all of this together. 🙌`;
+  };
+
+  // Confetti
+  function spawnConfetti() {
+    document.querySelectorAll('.confetti').forEach(e => e.remove());
+    ['🎉','✨','🎊','⭐','🌟','💫','🎓','📚','🚀','💡'].forEach((ch, i) => {
+      const c = document.createElement('div');
+      c.className = 'confetti';
+      c.textContent = ch;
+      c.style.cssText = `left:${Math.random()*100}vw;animation-duration:${4+Math.random()*5}s;animation-delay:${Math.random()*3}s`;
+      document.getElementById('deck').appendChild(c);
+    });
+  }
+
+  updateUI();
+</script>
+</body>
+</html>
