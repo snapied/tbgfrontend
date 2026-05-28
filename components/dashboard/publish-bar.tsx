@@ -72,32 +72,26 @@ export function PublishBar() {
   const [label, setLabel] = useState("")
   const [busy, setBusy] = useState(false)
 
-  const onPublish = async () => {
+  const doPublish = async (versionLabel?: string) => {
+    if (busy) return
     setBusy(true)
     try {
       // If the share card is still a base64 data URL (generated before
       // the CDN upload flow existed), push it to R2 first so the
       // public site serves a real CDN URL, not a bloated data string.
-      // We build the updated config directly here rather than calling
-      // updateConfig() (which triggers stampEdited and an async React
-      // state update) — then pass the patched config to publishDraft
-      // via the store's updateConfig+tick pattern below.
       const ogImg = config.brand?.ogImage
       if (ogImg && ogImg.startsWith("data:")) {
         try {
           const ogSlug = (config.brand?.siteName || "share")
             .toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)
           const cdnUrl = await uploadDataUrl(ogImg, `${ogSlug}-og`, "workspace")
-          // Update config via store so it persists, then wait two ticks
-          // for React to flush the state update before publishDraft captures
-          // the snapshot — otherwise publishDraft still sees the data: URL.
           updateConfig({ brand: { ...config.brand, ogImage: cdnUrl } })
           await new Promise((r) => setTimeout(r, 50))
         } catch {
           // Non-fatal — publish proceeds with the data URL.
         }
       }
-      const version = publishDraft(label || undefined)
+      const version = publishDraft(versionLabel || undefined)
       await flushTenantStateSync(slug)
       toast.success("Changes published.", {
         description: version.label,
@@ -266,15 +260,19 @@ export function PublishBar() {
           </SheetContent>
         </Sheet>
 
-        {/* Publish button */}
+        {/* Publish button — single click publishes immediately */}
         <Button
           size="sm"
-          onClick={() => setShowPublish(true)}
-          disabled={!hasUnpublishedChanges}
+          onClick={() => doPublish()}
+          disabled={!hasUnpublishedChanges || busy}
           className="gap-1.5"
         >
-          {hasUnpublishedChanges && <Upload className="h-4 w-4" />}
-          {hasUnpublishedChanges ? "Publish changes" : "Published"}
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : hasUnpublishedChanges ? (
+            <Upload className="h-4 w-4" />
+          ) : null}
+          {busy ? "Publishing..." : hasUnpublishedChanges ? "Publish" : "Published"}
         </Button>
       </div>
 
@@ -318,7 +316,7 @@ export function PublishBar() {
             >
               Cancel
             </Button>
-            <Button onClick={onPublish} disabled={busy} className="gap-1.5">
+            <Button onClick={() => doPublish(label || undefined)} disabled={busy} className="gap-1.5">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               Publish now
             </Button>

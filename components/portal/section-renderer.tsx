@@ -230,10 +230,10 @@ function SectionWrap({
 }) {
   return (
     <section
-      className={cn("relative px-6 py-16 sm:py-20 lg:px-8", className)}
+      className={cn("relative overflow-hidden px-6 py-16 sm:py-20 lg:px-8", className)}
       style={bg ? ({ background: bg } as CSSProperties) : undefined}
     >
-      <div className="mx-auto max-w-6xl">{children}</div>
+      <div className="mx-auto max-w-6xl break-words">{children}</div>
     </section>
   )
 }

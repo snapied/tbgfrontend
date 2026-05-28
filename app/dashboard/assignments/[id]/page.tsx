@@ -41,6 +41,7 @@ import {
   buildNotifications,
 } from "@/lib/notifications"
 import { AssignmentShareDialog } from "@/components/assignments/assignment-share-dialog"
+import { AnnotationDialog, AnnotatedPreview } from "@/components/assignments/annotation-dialog"
 
 export default function AssignmentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -52,6 +53,7 @@ export default function AssignmentDetailPage({ params }: { params: Promise<{ id:
     users,
     currentUser,
     gradeSubmission,
+    annotateSubmission,
     deleteAssignment,
     addNotifications,
     getViewsForAssignment,
@@ -330,6 +332,7 @@ export default function AssignmentDetailPage({ params }: { params: Promise<{ id:
               assignment={assignment}
               submission={selectedSubmission}
               studentName={users.find((u) => u.id === selectedSubmission.studentId)?.name ?? selectedSubmission.studentId}
+              onAnnotate={(url) => annotateSubmission(selectedSubmission.id, url)}
               onGrade={(s) => {
                 gradeSubmission(selectedSubmission.id, {
                   score: s.score,
@@ -600,15 +603,18 @@ function GradingPanel({
   submission,
   studentName,
   onGrade,
+  onAnnotate,
 }: {
   assignment: { maxScore: number; title: string }
   submission: AssignmentSubmission
   studentName: string
   onGrade: (s: { score: number; feedback?: string }) => void
+  onAnnotate: (annotatedUrl: string) => void
 }) {
   const [score, setScore] = useState<string>(submission.score?.toString() ?? "")
   const [feedback, setFeedback] = useState(submission.feedback ?? "")
   const [saving, setSaving] = useState(false)
+  const [annotateOpen, setAnnotateOpen] = useState(false)
 
   const numericScore = parseFloat(score)
   // Ungraded assignments (maxScore === 0) — the teacher just marks
@@ -642,20 +648,42 @@ function GradingPanel({
       <CardContent className="space-y-4">
         {submission.contentUrl ? (
           <div className="rounded-md border border-border/60 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Submission link
-            </p>
-            <a
-              href={submission.contentUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="mt-1 inline-flex items-center gap-1 text-sm text-primary hover:underline"
-            >
-              {submission.contentUrl}
-              <ExternalLink className="h-3 w-3" />
-            </a>
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Submission link
+                </p>
+                <a
+                  href={submission.contentUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  {submission.contentUrl}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAnnotateOpen(true)}
+                className="shrink-0 gap-1.5"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Annotate
+              </Button>
+            </div>
           </div>
         ) : null}
+
+        {submission.annotatedUrl && (
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-primary">
+              Your annotation
+            </p>
+            <AnnotatedPreview url={submission.annotatedUrl} />
+          </div>
+        )}
 
         {submission.notes && (
           <div className="rounded-md border border-border/60 p-3">
@@ -733,6 +761,17 @@ function GradingPanel({
           </Button>
         </div>
       </CardContent>
+
+      {submission.contentUrl && (
+        <AnnotationDialog
+          open={annotateOpen}
+          onOpenChange={setAnnotateOpen}
+          contentUrl={submission.contentUrl}
+          studentName={studentName}
+          assignmentTitle={assignment.title}
+          onSave={onAnnotate}
+        />
+      )}
     </Card>
   )
 }

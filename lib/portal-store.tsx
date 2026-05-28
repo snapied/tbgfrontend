@@ -1046,6 +1046,14 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [testimonials, setTestimonials] = useState<PortalTestimonial[]>([])
   const [posts, setPosts] = useState<PortalBlogPost[]>([])
   const [leads, setLeads] = useState<PortalLead[]>([])
+  // Refs that always hold the latest draft state. publishDraft reads
+  // from these instead of the closure-captured state variables so it
+  // never snapshots a stale version of pages/config/etc.
+  const configRef = useRef(config);  configRef.current = config
+  const pagesRef = useRef(pages);    pagesRef.current = pages
+  const facultyRef = useRef(faculty); facultyRef.current = faculty
+  const testimonialsRef = useRef(testimonials); testimonialsRef.current = testimonials
+  const postsRef = useRef(posts);    postsRef.current = posts
   // Live snapshot — what the public /p/<tenant> site reads. Seeded
   // from draft on first hydrate so existing tenants don't suddenly
   // serve empty content after this rollout.
@@ -1055,6 +1063,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   const [liveTestimonials, setLiveTestimonials] = useState<PortalTestimonial[]>([])
   const [livePosts, setLivePosts] = useState<PortalBlogPost[]>([])
   const [versions, setVersions] = useState<PortalVersion[]>([])
+  const versionsRef = useRef(versions); versionsRef.current = versions
   const [lastEditedAt, setLastEditedAt] = useState<string | null>(null)
   const [lastPublishedAt, setLastPublishedAt] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
@@ -1313,12 +1322,15 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     // with the stale server data that was fetched before this publish.
     lastPublishedAtRef.current = Date.now()
     const now = new Date().toISOString()
+    // Read from refs (not closure-captured state) so we always snapshot
+    // the absolute latest draft — even if React hasn't re-rendered yet
+    // after the last upsertPage / updateConfig call.
     const snapshot = {
-      config,
-      pages,
-      faculty,
-      testimonials,
-      posts,
+      config: configRef.current,
+      pages: pagesRef.current,
+      faculty: facultyRef.current,
+      testimonials: testimonialsRef.current,
+      posts: postsRef.current,
     }
     const version: PortalVersion = {
       id: genId("ver"),
@@ -1328,7 +1340,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }
 
     const cutoff = Date.now() - 90 * 24 * 60 * 60 * 1000
-    const nextVersions = [version, ...versions].filter((v) => new Date(v.takenAt).getTime() >= cutoff)
+    const nextVersions = [version, ...versionsRef.current].filter((v) => new Date(v.takenAt).getTime() >= cutoff)
 
     // Write lastPublishedAt FIRST so that if pullServerBlob() completes
     // during or just after this function, the publish-guard in pullServerBlob
@@ -1363,7 +1375,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     setLastPublishedAt(now)
 
     return version
-  }, [slug, config, pages, faculty, testimonials, posts, versions])
+  }, [slug])
 
   const restoreVersion = useCallback((id: string) => {
     const v = versions.find((x) => x.id === id)

@@ -71,19 +71,18 @@ export const StableInput = forwardRef<HTMLInputElement, Props>(
         onBlur={(e) => {
           focusedRef.current = false
           blurredAtRef.current = Date.now()
-          // If a debounced parent push hasn't quite landed yet, the
-          // resync useEffect above will pull the canonical value back
-          // in on the next render — but only if it differs.
           onBlur?.(e)
+          // Final commit on blur in case the parent missed a keystroke.
           onChange(local)
         }}
         onChange={(e) => {
           const v = e.target.value
           setLocal(v)
-          // We intentionally DO NOT call onChange(v) here.
-          // Firing onChange on every keystroke causes rapid parent state updates,
-          // which can lead to stale-closure data loss in complex editors (like
-          // HeaderNavEditor). We only push the committed value on blur.
+          // Push every keystroke to the parent so the store stays in
+          // sync. The local state is the display source of truth, so
+          // even if the parent re-renders with a stale value, the
+          // useEffect guard (focusedRef) prevents clobbering.
+          onChange(v)
         }}
         {...rest}
       />

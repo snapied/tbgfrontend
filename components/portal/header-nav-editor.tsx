@@ -94,8 +94,14 @@ export function HeaderNavEditor({ nav, onChange }: Props) {
   const addItem = () =>
     setItems([...items, { label: "New link", href: "/" }])
   const removeItem = (i: number) => setItems(items.filter((_, j) => j !== i))
+  // Use functional update so we always patch the freshest items array,
+  // not a stale closure capture (fixes input reversion on rapid typing).
   const updateItem = (i: number, patch: Partial<(typeof items)[number]>) =>
-    setItems(items.map((it, j) => (j === i ? { ...it, ...patch } : it)))
+    onChange((prev) => {
+      const cur = prev.items ?? []
+      const next = cur.map((it, j) => (j === i ? { ...it, ...patch } : it))
+      return { ...prev, items: next.length > 0 ? next : undefined }
+    })
   const move = (i: number, dir: -1 | 1) => {
     const next = i + dir
     if (next < 0 || next >= items.length) return

@@ -9,7 +9,7 @@
 // the actual page on the right. Each section card has the fields
 // relevant to its kind, plus reorder up/down, show/hide, and delete.
 
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import {
   ArrowDown,
   ArrowUp,
@@ -187,6 +187,13 @@ export function PageSectionsEditor({
   const sectionLabel = (kind: SectionKind): string =>
     SECTION_LABELS[kind]?.label ?? kind
 
+  // Keep a ref to the latest page so mutation closures never read a
+  // stale snapshot. Without this, fast typing loses keystrokes because
+  // each keystroke's closure captures the page from the last render,
+  // not the one updated by the previous keystroke's upsertPage call.
+  const pageRef = useRef(page)
+  pageRef.current = page
+
   if (!page) {
     if (!showMissingHint) return null
     return (
@@ -198,32 +205,45 @@ export function PageSectionsEditor({
 
   const persist = (next: PortalPage) => upsertPage(next)
 
+  // All mutation helpers read from pageRef.current so they always
+  // operate on the freshest page even when React hasn't re-rendered
+  // yet after a prior upsertPage call.
   const updateSection = (id: string, patch: Partial<PortalSection>) => {
-    persist({
-      ...page,
-      sections: page.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)),
-    })
+    const cur = pageRef.current!
+    const updated = {
+      ...cur,
+      sections: cur.sections.map((s) => (s.id === id ? { ...s, ...patch } : s)),
+    }
+    pageRef.current = updated
+    persist(updated)
   }
   const updateSectionConfig = (id: string, configPatch: Record<string, unknown>) => {
-    persist({
-      ...page,
-      sections: page.sections.map((s) =>
+    const cur = pageRef.current!
+    const updated = {
+      ...cur,
+      sections: cur.sections.map((s) =>
         s.id === id ? { ...s, config: { ...s.config, ...configPatch } } : s,
       ),
-    })
+    }
+    pageRef.current = updated
+    persist(updated)
   }
   const moveSection = (id: string, dir: -1 | 1) => {
-    const idx = page.sections.findIndex((s) => s.id === id)
+    const cur = pageRef.current!
+    const idx = cur.sections.findIndex((s) => s.id === id)
     if (idx === -1) return
     const next = idx + dir
-    if (next < 0 || next >= page.sections.length) return
-    const arr = page.sections.slice()
+    if (next < 0 || next >= cur.sections.length) return
+    const arr = cur.sections.slice()
     const [m] = arr.splice(idx, 1)
     arr.splice(next, 0, m)
-    persist({ ...page, sections: arr })
+    const updated = { ...cur, sections: arr }
+    pageRef.current = updated
+    persist(updated)
   }
   const deleteSection = async (id: string) => {
-    const target = page.sections.find((s) => s.id === id)
+    const cur = pageRef.current!
+    const target = cur.sections.find((s) => s.id === id)
     if (!target) return
     const label = sectionLabel(target.kind)
     const ok = await confirm({
@@ -234,19 +254,22 @@ export function PageSectionsEditor({
       confirmLabel: "Remove",
     })
     if (!ok) return
-    persist({ ...page, sections: page.sections.filter((s) => s.id !== id) })
-    // Also close the side drawer if it was open on the section we just
-    // removed — otherwise it'd render against a gone section.
+    const updated = { ...cur, sections: cur.sections.filter((s) => s.id !== id) }
+    pageRef.current = updated
+    persist(updated)
     setOpenSectionId((cur) => (cur === id ? null : cur))
     toast.success(`Removed the ${label} section.`)
   }
   const addSection = (kind: SectionKind) => {
+    const cur = pageRef.current!
     const s: PortalSection = {
       id: generatePortalId("sec"),
       kind,
       config: defaultConfigFor(kind),
     }
-    persist({ ...page, sections: [...page.sections, s] })
+    const updated = { ...cur, sections: [...cur.sections, s] }
+    pageRef.current = updated
+    persist(updated)
     setOpenSectionId(s.id)
   }
 
@@ -365,9 +388,12 @@ export function PageSectionsEditor({
           ogImage: brand?.ogImage,
           primaryColor: brand?.primaryColor,
         }}
-        onChange={(seo) =>
-          upsertPage({ ...page, seo, updatedAt: new Date().toISOString() })
-        }
+        onChange={(seo) => {
+          const cur = pageRef.current!
+          const updated = { ...cur, seo, updatedAt: new Date().toISOString() }
+          pageRef.current = updated
+          upsertPage(updated)
+        }}
       />
 
       {/* Two-column: editor / preview */}

@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dialog"
 import { RichTextEditor } from "@/components/editor/rich-text-editor"
 import { buildNotifications, type DispatchPayload } from "@/lib/notifications"
+import { AnnotatedPreview } from "@/components/assignments/annotation-dialog"
 import { toast } from "sonner"
 
 const GUEST_ID_KEY = "thebigclass.assignment.guestId"
@@ -501,6 +502,14 @@ function SubmissionPanel({
               <span className="font-semibold">Instructor feedback: </span>
               {existing!.feedback}
             </p>
+          )}
+          {existing!.annotatedUrl && (
+            <div className="space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Annotated feedback
+              </p>
+              <AnnotatedPreview url={existing!.annotatedUrl} />
+            </div>
           )}
           {existing!.contentUrl && (
             <a

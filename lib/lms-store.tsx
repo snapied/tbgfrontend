@@ -1382,6 +1382,7 @@ export interface AssignmentSubmission {
   feedback?: string
   gradedAt?: string
   gradedBy?: string
+  annotatedUrl?: string  // URL of teacher-annotated image (drawn over student's submission)
   status: "submitted" | "graded"
 }
 
@@ -2045,6 +2046,7 @@ interface LMSStore {
   submissions: AssignmentSubmission[]
   submitAssignment: (submission: AssignmentSubmission) => void
   gradeSubmission: (id: string, grade: { score: number; feedback?: string; gradedBy?: string }) => void
+  annotateSubmission: (id: string, annotatedUrl: string) => void
   getSubmissionsForAssignment: (assignmentId: string) => AssignmentSubmission[]
   getSubmissionsForStudent: (studentId: string) => AssignmentSubmission[]
 
@@ -4647,6 +4649,9 @@ export function LMSProvider({ children }: { children: ReactNode }) {
       return next
     })
   }, [assignments, users, courses])
+  const annotateSubmission = useCallback((id: string, annotatedUrl: string) => {
+    setSubmissions(prev => prev.map(s => s.id === id ? { ...s, annotatedUrl } : s))
+  }, [])
   const getSubmissionsForAssignment = useCallback((assignmentId: string) =>
     submissions.filter(s => s.assignmentId === assignmentId), [submissions])
   const getSubmissionsForStudent = useCallback((studentId: string) =>
@@ -5156,6 +5161,7 @@ export function LMSProvider({ children }: { children: ReactNode }) {
       submissions,
       submitAssignment,
       gradeSubmission,
+      annotateSubmission,
       getSubmissionsForAssignment,
       getSubmissionsForStudent,
       assignmentViews,

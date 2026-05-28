@@ -1864,7 +1864,11 @@ function LocalSyncInput({
       placeholder={placeholder}
       onFocus={handleFocus}
       onBlur={handleBlur}
-      onChange={(e) => setValue(e.target.value)}
+      onChange={(e) => {
+        const v = e.target.value
+        setValue(v)
+        onChange(v)
+      }}
     />
   )
 }

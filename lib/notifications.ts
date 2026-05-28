@@ -1,10 +1,9 @@
-// Notification dispatcher seam.
+// Notification dispatcher.
 //
-// Today this is a stub: it logs the payload and marks the notification as
-// "queued" (in-app) or "sent" (email/whatsapp) so the in-app bell still
-// renders something useful. When SMTP / WhatsApp Business credentials land,
-// replace `sendEmailStub` / `sendWhatsAppStub` with real transport calls —
-// the rest of the app already depends on this single function.
+// Three channels: in-app (stored in LMS store), email (POST to
+// /api/email/send → ZeptoMail), and WhatsApp (POST to /api/whatsapp/send
+// → Meta Cloud API or Twilio). Both external channels are fire-and-forget:
+// failures log but never block the UI.
 
 import { generateId, type Notification, type NotificationChannel, type User } from "./lms-store"
 
@@ -77,14 +76,13 @@ export function buildNotifications(
         continue
       }
 
-      // Fire-and-forget transport stub. Real implementations should `await`
-      // a transactional send and set status="failed" with an error in meta
-      // when the transport rejects.
+      // Fire-and-forget transport. Failures are caught and logged — they
+      // never block the UI or prevent in-app notifications from rendering.
       try {
         if (channel === "email" && user.email) {
-          sendEmailStub({ to: user.email, name: user.name, payload })
+          sendEmail({ to: user.email, name: user.name, payload })
         } else if (channel === "whatsapp" && user.phone) {
-          sendWhatsAppStub({ to: user.phone, name: user.name, payload })
+          sendWhatsApp({ to: user.phone, name: user.name, payload })
         }
         out.push({ ...baseEntry, status: "sent", sentAt: now })
       } catch (err) {
@@ -99,55 +97,65 @@ export function buildNotifications(
   return out
 }
 
-// ---------------- Transport stubs ----------------
-// Replace each with a real call once credentials are wired (Nodemailer/SES for
-// email, WhatsApp Cloud API or Twilio for WhatsApp). Keep the signature so the
-// rest of the codebase doesn't need to change.
+// ---------------- Transports ----------------
 
-interface StubArgs {
+interface TransportArgs {
   to: string
   name: string
   payload: DispatchPayload
 }
 
-function sendEmailStub({ to, name, payload }: StubArgs) {
-  // Browser-side: POST to /api/email/send which hits ZeptoMail server-side.
-  // The route is fire-and-forget — failures log but don't break the UI.
-  if (typeof window !== "undefined") {
-    const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")
-    const absoluteUrl = payload.url
-      ? payload.url.startsWith("http") ? payload.url : `${base || window.location.origin}${payload.url}`
-      : undefined
-    const html = buildNotificationHtml({ title: payload.title, body: payload.body, url: absoluteUrl, ctaLabel: ctaFor(payload.type) })
-    fetch("/api/email/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: [{ email: to, name }],
-        subject: payload.title,
-        html,
-        text: `${payload.title}\n\n${payload.body}${absoluteUrl ? `\n\n${absoluteUrl}` : ""}`,
-      }),
-    }).catch((err) => {
-      // eslint-disable-next-line no-console
-      console.warn("[notifications:email] POST /api/email/send failed", err)
-    })
-    return
-  }
-  // Server-side fallback (shouldn't normally hit — but keeps the type happy).
-  // eslint-disable-next-line no-console
-  console.info("[notifications:email server-stub]", { to, name, subject: payload.title })
+function resolveAbsoluteUrl(relativeUrl: string | undefined): string | undefined {
+  if (!relativeUrl) return undefined
+  if (relativeUrl.startsWith("http")) return relativeUrl
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/$/, "")
+  return `${base || (typeof window !== "undefined" ? window.location.origin : "")}${relativeUrl}`
 }
 
-function sendWhatsAppStub({ to, name, payload }: StubArgs) {
-  // WhatsApp transport is still stubbed (no provider chosen yet). Logging
-  // gives the dev a way to see the exact payload that would have been sent.
-  // eslint-disable-next-line no-console
-  console.info("[notifications:whatsapp STUB]", {
-    to,
-    name,
-    message: `${payload.title}\n\n${payload.body}${payload.url ? `\n\n${payload.url}` : ""}`,
-    type: payload.type,
+function sendEmail({ to, name, payload }: TransportArgs) {
+  if (typeof window === "undefined") {
+    // eslint-disable-next-line no-console
+    console.info("[notifications:email server-skip]", { to, name, subject: payload.title })
+    return
+  }
+  const absoluteUrl = resolveAbsoluteUrl(payload.url)
+  const html = buildNotificationHtml({ title: payload.title, body: payload.body, url: absoluteUrl, ctaLabel: ctaFor(payload.type) })
+  fetch("/api/email/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to: [{ email: to, name }],
+      subject: payload.title,
+      html,
+      text: `${payload.title}\n\n${payload.body}${absoluteUrl ? `\n\n${absoluteUrl}` : ""}`,
+    }),
+  }).catch((err) => {
+    // eslint-disable-next-line no-console
+    console.warn("[notifications:email] POST /api/email/send failed", err)
+  })
+}
+
+function sendWhatsApp({ to, name, payload }: TransportArgs) {
+  if (typeof window === "undefined") {
+    // eslint-disable-next-line no-console
+    console.info("[notifications:whatsapp server-skip]", { to })
+    return
+  }
+  // "to" is user.phone — skip silently if it doesn't look like a phone number
+  if (!to || !/\d{10,}/.test(to)) return
+
+  const absoluteUrl = resolveAbsoluteUrl(payload.url)
+  fetch("/api/whatsapp/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to,
+      text: `${payload.title}\n\n${payload.body}${absoluteUrl ? `\n\n${absoluteUrl}` : ""}`,
+      kind: payload.type,
+    }),
+  }).catch((err) => {
+    // eslint-disable-next-line no-console
+    console.warn("[notifications:whatsapp] POST /api/whatsapp/send failed", err)
   })
 }
 

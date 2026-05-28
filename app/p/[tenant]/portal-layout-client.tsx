@@ -273,7 +273,7 @@ export default function PortalLayoutClient({
             <SkipToContent />
             <AnnouncementBar bar={effectiveConfig.announcementBar} tenant={tenant} />
             <PortalSiteHeader tenant={tenant} config={effectiveConfig} pages={pages} basePath={basePath} />
-            <main id="main-content" tabIndex={-1} className="min-h-[60vh] focus:outline-none">{children}</main>
+            <main id="main-content" tabIndex={-1} className="min-h-[60vh] overflow-x-hidden focus:outline-none">{children}</main>
             <PortalSiteFooter tenant={tenant} config={effectiveConfig} basePath={basePath} />
             <Popup popups={effectiveConfig.popups} tenant={tenant} pageSlug={pageSlug} />
             {/* Sprint B Brand #21 — wishlist tray. Self-hiding when

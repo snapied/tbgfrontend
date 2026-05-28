@@ -153,7 +153,11 @@ export function PathInput({
       <Input
         ref={inputRef}
         value={localValue}
-        onChange={(e) => setLocalValue(e.currentTarget.value)}
+        onChange={(e) => {
+          const v = e.currentTarget.value
+          setLocalValue(v)
+          onChange(v)
+        }}
         onBlur={() => {
           setFocused(false)
           blurredAtRef.current = Date.now()
