@@ -44,11 +44,24 @@ export default function PortalLayoutClient({
   // First-touch is preserved forever; subsequent visits with fresh
   // UTMs or a foreign referrer append to the chain.
   useAttributionCapture({ tenantSlug: tenant })
-  const basePath = `/p/${tenant}`
+  // On subdomain (kishorchem.thebigclass.com): basePath = "" so links
+  // become /courses, /about, etc. On path-based (/p/kishorchem/...):
+  // basePath = "/p/kishorchem".
+  const isSubdomain = typeof window !== "undefined" && (() => {
+    const host = window.location.hostname.toLowerCase()
+    const platformHost = process.env.NEXT_PUBLIC_PLATFORM_HOST || "thebigclass.com"
+    const suffix = `.${platformHost}`
+    if (!host.endsWith(suffix)) return false
+    const sub = host.slice(0, -suffix.length)
+    return !!sub && !sub.includes(".") && sub !== "www"
+  })()
+  const basePath = isSubdomain ? "" : `/p/${tenant}`
+
   // Strip the /p/[tenant] prefix to get the "logical" page slug ("/",
   // "/about", "/blog/foo") so the popup config can scope by slug.
-  const pageSlug = pathname.startsWith(basePath)
-    ? pathname.slice(basePath.length) || "/"
+  const internalBasePath = `/p/${tenant}`
+  const pageSlug = pathname.startsWith(internalBasePath)
+    ? pathname.slice(internalBasePath.length) || "/"
     : "/"
 
   // Zen routes — surfaces that should take the entire viewport with no

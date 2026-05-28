@@ -1131,6 +1131,32 @@ function PortalBrandPageInner() {
             }}
           />
 
+          {/* Custom domain — Coming Soon */}
+          <Card className="opacity-75">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Custom Domain</CardTitle>
+                  <CardDescription>
+                    Connect your own domain like <code className="font-mono text-xs">learn.youracademy.com</code> for a fully branded experience.
+                  </CardDescription>
+                </div>
+                <span className="rounded-full bg-muted px-2.5 py-1 text-[10px] font-semibold text-muted-foreground shrink-0">
+                  Coming soon
+                </span>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="flex gap-2">
+                <Input placeholder="learn.youracademy.com" className="font-mono" disabled />
+                <Button disabled>Connect</Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Custom domains will let you point your own domain to your portal with automatic SSL. Your subdomain ({currentTenant?.slug}.thebigclass.com) will always remain active.
+              </p>
+            </CardContent>
+          </Card>
+
           {/* White-label toggles. Hide the "Powered by The Big
               Class" attribution in the portal footer + hide every
               other platform-branded element from the public
