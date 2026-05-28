@@ -16,7 +16,7 @@ const SITE = "https://thebigclass.com"
 
 // Solution pages — one per audience / use case.
 const SOLUTIONS = [
-  "for-coaches",
+  "for-teachers",
   "for-course-creators",
   "for-instagram-creators",
   "for-personal-brands",

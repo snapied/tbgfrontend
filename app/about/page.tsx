@@ -37,7 +37,7 @@ export default function AboutPage() {
               We build software for the people who taught us first.
             </h1>
             <p className="mt-5 text-lg leading-relaxed text-muted-foreground">
-              The Big Class is a product of <span className="font-semibold text-foreground">Divisocial Tech Solutions</span>. We make tools for teachers, coaches, schools and institutes — because the people who shape minds shouldn&apos;t have to stitch together seven SaaS subscriptions to do their job.
+              The Big Class is a product of <span className="font-semibold text-foreground">Divisocial Tech Solutions</span>. We make tools for teachers, teachers, schools and institutes — because the people who shape minds shouldn&apos;t have to stitch together seven SaaS subscriptions to do their job.
             </p>
             
             <div className="mt-12 overflow-hidden rounded-2xl border border-border shadow-2xl">
@@ -261,7 +261,7 @@ export default function AboutPage() {
                     principle was small enough to fit on an index card:{" "}
                     <em>
                       if it works for a mother teaching five kids in her living room,
-                      it will work for a coach with five thousand. Solve the smallest
+                      it will work for a teacher with five thousand. Solve the smallest
                       case honestly and the big ones follow.
                     </em>
                   </p>
@@ -370,7 +370,7 @@ export default function AboutPage() {
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Why we exist.</h2>
             <div className="mt-5 space-y-4 leading-relaxed text-muted-foreground">
               <p>
-                Most teaching tools were built for venture-funded course empires — and priced like it. The actual people teaching online classes today are coaches running a Saturday batch, school teachers running a weekend cohort, college lecturers running a department track, and corporate L&amp;D teams running compliance onboarding.
+                Most teaching tools were built for venture-funded course empires — and priced like it. The actual people teaching online classes today are teachers running a Saturday batch, school teachers running a weekend cohort, college lecturers running a department track, and corporate L&amp;D teams running compliance onboarding.
               </p>
               <p>
                 None of those teachers want a 14-day &quot;trial&quot; that becomes a sales call. They want to be live this week, without a developer, without a logo redesign, without a procurement cycle. So we built that.

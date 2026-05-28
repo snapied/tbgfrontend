@@ -46,7 +46,7 @@ export default function ForYouTubersPage() {
               </span>
             </>
           }
-          subtitle="Give your YouTube subscribers a premium learning destination. Teach structured video courses, sell digital storefront assets, run live cohorts, and host active student communities — all under your own white-labeled custom domain."
+          subtitle="Give your YouTube subscribers a premium learning destination. Teacher structured video courses, sell digital storefront assets, run live cohorts, and host active student communities — all under your own white-labeled custom domain."
           heroVisual={<YouTuberHeroVisual />}
           outcomes={[
             {

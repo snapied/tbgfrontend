@@ -198,3 +198,150 @@ async function post<T>(path: string, body: unknown): Promise<T | ErrorResult> {
   }
   return (await res.json()) as T
 }
+
+// ── Full-course AI builder (SSE streaming) ──────────────────────────
+
+export interface CourseBuilderInput {
+  title: string
+  description?: string
+  category?: string
+  audience?: string
+  level?: "beginner" | "intermediate" | "advanced"
+  language?: string
+  tone?: string
+  duration?: string
+  price?: number
+  originalPrice?: number
+  keywords?: string[]
+  quizPerModule?: boolean
+  customInstructions?: string
+}
+
+export interface CourseBuilderProgress {
+  stage: string
+  step: number
+  totalSteps: number
+  detail?: string
+}
+
+export interface GeneratedLesson {
+  title: string
+  content: string
+  estimatedMinutes: number
+}
+
+export interface GeneratedQuizQuestion {
+  question: string
+  type: "multiple-choice" | "true-false" | "short-answer"
+  options?: string[]
+  correctAnswer: string | number
+  explanation?: string
+  points: number
+}
+
+export interface GeneratedModule {
+  title: string
+  description: string
+  lessons: GeneratedLesson[]
+  quiz?: GeneratedQuizQuestion[]
+}
+
+export interface GeneratedCourse {
+  title: string
+  subtitle: string
+  description: string
+  category: string
+  tags: string[]
+  level: "beginner" | "intermediate" | "advanced"
+  language: string
+  modules: GeneratedModule[]
+  whatYouLearn: string[]
+  requirements: string[]
+  features: string[]
+  seoTitle: string
+  seoDescription: string
+  seoKeywords: string[]
+  faq: { question: string; answer: string }[]
+  promoText: string
+  failedLessons: number
+}
+
+/**
+ * Calls the full-course AI builder endpoint with SSE streaming.
+ * Returns the complete GeneratedCourse on success, or an ErrorResult.
+ */
+export async function aiGenerateFullCourse(
+  input: CourseBuilderInput,
+  onProgress: (p: CourseBuilderProgress) => void,
+  signal?: AbortSignal,
+): Promise<GeneratedCourse | ErrorResult> {
+  const res = await fetch(`${apiBase()}/api/ai/generate-course`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...authHeaders() },
+    credentials: "include",
+    body: JSON.stringify(input),
+    signal,
+  })
+
+  if (!res.ok) {
+    try {
+      return (await res.json()) as ErrorResult
+    } catch {
+      return { error: `Request failed (${res.status})` }
+    }
+  }
+
+  const reader = res.body?.getReader()
+  if (!reader) return { error: "Streaming not supported" }
+
+  const decoder = new TextDecoder()
+  let buffer = ""
+  let result: GeneratedCourse | ErrorResult = { error: "Generation did not complete" }
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      buffer += decoder.decode(value, { stream: true })
+
+      // Parse SSE frames (split on double newline).
+      const frames = buffer.split("\n\n")
+      // Keep the last partial frame in the buffer.
+      buffer = frames.pop() ?? ""
+
+      for (const frame of frames) {
+        if (!frame.trim()) continue
+        let eventType = "message"
+        let data = ""
+        for (const line of frame.split("\n")) {
+          if (line.startsWith("event: ")) {
+            eventType = line.slice(7).trim()
+          } else if (line.startsWith("data: ")) {
+            data += line.slice(6)
+          }
+        }
+        if (!data) continue
+        try {
+          const parsed = JSON.parse(data)
+          if (eventType === "progress") {
+            onProgress(parsed as CourseBuilderProgress)
+          } else if (eventType === "complete") {
+            result = parsed as GeneratedCourse
+          } else if (eventType === "error") {
+            result = { error: parsed.error ?? "Generation failed" }
+          }
+        } catch {
+          // Malformed frame — skip.
+        }
+      }
+    }
+  } catch (err) {
+    if (signal?.aborted) {
+      return { error: "Generation cancelled" }
+    }
+    return { error: err instanceof Error ? err.message : "Stream reading failed" }
+  }
+
+  return result
+}

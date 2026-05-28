@@ -62,7 +62,7 @@ export function InAppTools() {
           <ToolCard
             eyebrowIcon={Video}
             eyebrow="Live calling, in-app"
-            title="Click. Teach. We record."
+            title="Click. Teacher. We record."
             body="Built-in cloud room — students join with a name, no signup, no app install. Click Start recording and a server-side worker captures the full room and uploads to your CDN."
             bullets={[
               "No third-party signup — students join from the browser",

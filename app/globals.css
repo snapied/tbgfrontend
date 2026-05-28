@@ -584,3 +584,7 @@ div[role="dialog"] {
     max-width: 100%;
   }
 }
+div[data-slot="dialog-footer"] {
+  POSITION: relative;
+  BOTTOM: 0;
+}

@@ -23,7 +23,7 @@ const TESTIMONIALS_ROW_1: Testimonial[] = [
   {
     photo: "/people/teacher-1.png",
     name: "Priya Sharma",
-    role: "Yoga & Wellness Coach, Mumbai",
+    role: "Yoga & Wellness Teacher, Mumbai",
     quote: "Moved 200 students from WhatsApp groups to a real academy in one weekend. The CSV import is a genuine superpower.",
     stars: 5,
   },
@@ -89,7 +89,7 @@ const TESTIMONIALS_ROW_2: Testimonial[] = [
   {
     photo: "/people/sanjay.jpg",
     name: "Sanjay Kapoor",
-    role: "Finance & Investing Coach, Mumbai",
+    role: "Finance & Investing Teacher, Mumbai",
     quote: "The API lets me pull student progress into my custom dashboards. No other creator platform even has one — let alone free on every plan.",
     stars: 5,
   },

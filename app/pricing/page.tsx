@@ -455,14 +455,16 @@ interface Addon {
   name: string
   price: string
   desc: string
+  /** True when the addon is purchasable today. False = "Coming soon" badge. */
+  live: boolean
 }
 
 const ADDONS: Addon[] = [
-  { name: "+500 students",     price: "₹499/mo",   desc: "Stack as many as you need." },
-  { name: "+1 teacher seat",   price: "₹699/mo",   desc: "For co-instructors or TAs." },
-  { name: "+100 GB recordings", price: "₹299/mo",   desc: "Extra retention on top of plan cap." },
-  { name: "Auto-transcription", price: "₹2 / min",  desc: "Searchable transcripts + captions." },
-  { name: "SMS notifications",  price: "₹0.20/SMS", desc: "Passthrough — we don't mark up." },
+  { name: "+500 students",     price: "₹499/mo",   desc: "Stack as many as you need.",              live: true },
+  { name: "+1 teacher seat",   price: "₹699/mo",   desc: "For co-instructors or TAs.",              live: true },
+  { name: "+100 GB recordings", price: "₹299/mo",   desc: "Extra retention on top of plan cap.",     live: true },
+  { name: "Auto-transcription", price: "₹2 / min",  desc: "Searchable transcripts + captions.",      live: false },
+  { name: "SMS notifications",  price: "₹0.20/SMS", desc: "Passthrough — we don't mark up.",         live: false },
 ]
 
 // ────────────────────────────────────────────────────────────────────
@@ -556,10 +558,20 @@ function AddonsStrip() {
           {ADDONS.map((a) => (
             <div
               key={a.name}
-              className="flex flex-col rounded-lg border border-border bg-background p-4"
+              className={cn(
+                "flex flex-col rounded-lg border bg-background p-4",
+                a.live ? "border-border" : "border-border/60 opacity-75",
+              )}
             >
               <div className="flex items-baseline justify-between gap-2">
-                <p className="text-sm font-semibold">{a.name}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">{a.name}</p>
+                  {!a.live && (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                      Coming soon
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm font-bold tabular-nums text-primary">{a.price}</p>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">{a.desc}</p>

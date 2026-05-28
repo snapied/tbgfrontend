@@ -217,7 +217,7 @@ const SECTIONS: ChangeSection[] = [
       },
       {
         title: "Collapsible sidebar",
-        body: "The 30-item sidebar is now 5 collapsible sections (Teach · Certificates · Community · Public site · Workspace), with Dashboard pinned at the top. State sticks across navigations; the section you're in auto-expands.",
+        body: "The 30-item sidebar is now 5 collapsible sections (Teacher · Certificates · Community · Public site · Workspace), with Dashboard pinned at the top. State sticks across navigations; the section you're in auto-expands.",
         href: "/help/sidebar-groups",
       },
       {

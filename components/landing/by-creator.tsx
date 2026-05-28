@@ -55,9 +55,9 @@ export function ByCreator() {
       className: "md:col-span-1 lg:col-span-1 row-span-1",
     },
     {
-      href: "/solutions/for-coaches",
+      href: "/solutions/for-teachers",
       icon: Briefcase,
-      label: "For coaches",
+      label: "For teachers",
       body: "1:1 sessions + group cohorts + content.",
       img: "./coach.jpeg",
       className: "md:col-span-1 lg:col-span-1 row-span-1",

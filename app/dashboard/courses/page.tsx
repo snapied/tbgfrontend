@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import {
   Plus, Search, MoreHorizontal, Eye, Pencil, Trash2, Users, Clock, Star,
   Archive, ArchiveRestore, X, ArrowDownAZ, ArrowUpAZ, ArrowDown01, ArrowUp01,
-  TrendingUp, Send, Copy as CopyIcon, BookOpen,
+  TrendingUp, Send, Copy as CopyIcon, BookOpen, Sparkles,
 } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
@@ -36,7 +37,11 @@ import {
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Eye as EyeIcon, EyeOff as EyeOffIcon, Lock as LockIcon } from "lucide-react"
-import { useLMS } from "@/lib/lms-store"
+import { useLMS, generateId, type Course, type Module } from "@/lib/lms-store"
+import { slugify } from "@/lib/lesson-utils"
+import { AIGenerateButton } from "@/components/ai/ai-generate-button"
+import { AICourseBuilderDialog } from "@/components/ai/ai-course-builder-dialog"
+import type { GeneratedCourse, CourseBuilderInput } from "@/lib/ai-client"
 import { PlanLimitHint, PlanLimitWarning } from "@/components/dashboard/plan-lock"
 import { usePlan } from "@/lib/use-plan"
 import { fireWebhookEvent } from "@/lib/event-dispatcher"
@@ -53,6 +58,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { useTenant } from "@/lib/tenant-store"
 import { tenantPublicUrl } from "@/lib/tenant-resolver"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
+import { CreateInviteDialog } from "@/components/invite/create-invite-dialog"
 import { ModuleTrashButton } from "@/components/dashboard/module-trash-button"
 
 // Verb labels shown on every visibility action — confirm dialog,
@@ -102,7 +108,7 @@ const COURSES_TOUR: TourStep[] = [
 ]
 
 export default function CoursesPage() {
-  const { courses, updateCourse, deleteCourse, getEnrolledCount } = useLMS()
+  const { courses, updateCourse, deleteCourse, getEnrolledCount, addCourse, currentUser } = useLMS()
   const { currentTenant } = useTenant()
   // Build the public-site URL for a course card. Prefers the tenant's
   // verified custom domain, falls back to <slug>.<platform>. When we
@@ -141,6 +147,80 @@ export default function CoursesPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   // Bulk-password dialog state. Opened by bulkSetVisibility("password").
   const [pwBulkOpen, setPwBulkOpen] = useState(false)
+
+  // ── AI Course Builder ─────────────────────────────────────────
+  const [aiBuilderOpen, setAiBuilderOpen] = useState(false)
+
+  // Invite dialog state
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
+  const [inviteCourse, setInviteCourse] = useState<{ id: string; title: string; price: number } | null>(null)
+  const router = useRouter()
+
+  const handleAICourseGenerated = useCallback(
+    (generated: GeneratedCourse, builderInput: CourseBuilderInput) => {
+      const mappedModules: Module[] = generated.modules.map((mod, mi) => ({
+        id: generateId("module"),
+        title: mod.title,
+        description: mod.description,
+        order: mi,
+        lessons: mod.lessons.map((lesson, li) => ({
+          id: generateId("lesson"),
+          title: lesson.title,
+          description: "",
+          type: "text" as const,
+          content: lesson.content,
+          duration: lesson.estimatedMinutes || 10,
+          order: li,
+          isPreview: mi === 0 && li === 0,
+        })),
+      }))
+
+      const totalLessons = mappedModules.reduce((sum, m) => sum + m.lessons.length, 0)
+      const totalDuration = mappedModules.reduce(
+        (sum, m) => sum + m.lessons.reduce((s, l) => s + l.duration, 0),
+        0,
+      )
+
+      const newCourse: Course = {
+        id: generateId("course"),
+        title: generated.title,
+        subtitle: generated.subtitle || undefined,
+        slug: slugify(generated.title),
+        description: generated.description,
+        thumbnail: "/placeholder.svg?height=400&width=600",
+        instructor: currentUser!,
+        price: builderInput.price ?? 0,
+        originalPrice: builderInput.originalPrice,
+        currency: "INR",
+        category: generated.category || builderInput.category || "",
+        tags: generated.tags,
+        level: generated.level,
+        language: generated.language || "English",
+        modules: mappedModules,
+        totalDuration,
+        totalLessons,
+        enrolledCount: 0,
+        rating: 0,
+        reviewCount: 0,
+        status: "draft",
+        features: generated.features,
+        requirements: generated.requirements,
+        whatYouLearn: generated.whatYouLearn,
+        seoTitle: generated.seoTitle,
+        seoDescription: generated.seoDescription,
+        seoKeywords: generated.seoKeywords,
+        certificateEligible: false,
+        certificateTemplate: "modern",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+
+      addCourse(newCourse)
+      toast.success("AI course created as draft!")
+      router.push(`/dashboard/courses/${newCourse.id}`)
+    },
+    [addCourse, currentUser, router],
+  )
 
   // Background self-healing migration to automatically regenerate legacy cut-off thumbnails.
   // Run-once flag is *checked* before we even read `courses`, so the
@@ -435,12 +515,23 @@ export default function CoursesPage() {
               </Link>
             </Button>
           ) : (
-            <Button asChild data-tour="courses-new">
-              <Link href="/dashboard/courses/new">
-                <Plus className="mr-2 h-4 w-4" />
-                Create Course
-              </Link>
-            </Button>
+            <>
+              {/* Show AI builder in the header only when courses exist —
+                  when empty, the AI path lives in the EmptyState card below. */}
+              {courses.length > 0 && (
+                <AIGenerateButton
+                  label="AI Course Builder"
+                  size="default"
+                  onGenerate={() => setAiBuilderOpen(true)}
+                />
+              )}
+              <Button asChild data-tour="courses-new">
+                <Link href="/dashboard/courses/new">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Course
+                </Link>
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -617,14 +708,14 @@ export default function CoursesPage() {
           <EmptyState
             icon={<span>📚</span>}
             title="Build your first course"
-            description="Three ways to start — most teachers go with the AI draft. You can edit anything it produces."
+            description="Three ways to start — most teachers go with the AI builder. You can edit anything it produces."
             paths={[
               {
                 id: "ai",
-                label: "Draft with AI",
-                hint: "Type a title, get a curriculum",
-                icon: <Plus className="h-4 w-4" />,
-                href: "/dashboard/courses/new",
+                label: "AI Course Builder",
+                hint: "Provide a few details, get a full course",
+                icon: <Sparkles className="h-4 w-4" />,
+                onClick: () => setAiBuilderOpen(true),
                 primary: true,
               },
               {
@@ -638,7 +729,7 @@ export default function CoursesPage() {
                 id: "help",
                 label: "How courses work",
                 hint: "5-min read with examples",
-                icon: <Plus className="h-4 w-4" />,
+                icon: <BookOpen className="h-4 w-4" />,
                 href: "/help/course-create",
               },
             ]}
@@ -799,6 +890,15 @@ export default function CoursesPage() {
                         <CopyIcon className="mr-2 h-4 w-4" />
                         Copy public URL
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => {
+                          setInviteCourse({ id: course.id, title: course.title, price: course.price })
+                          setInviteDialogOpen(true)
+                        }}
+                      >
+                        <Send className="mr-2 h-4 w-4" />
+                        Send Payment Link
+                      </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       {course.status !== "archived" ? (
                         <DropdownMenuItem
@@ -910,6 +1010,25 @@ export default function CoursesPage() {
       {/* Bulk password-mode dialog — replaces the native
           window.prompt with a focused, themed input that fits the
           rest of the dashboard chrome and supports show / hide. */}
+      {/* AI Course Builder Dialog */}
+      <AICourseBuilderDialog
+        open={aiBuilderOpen}
+        onOpenChange={setAiBuilderOpen}
+        onCourseGenerated={handleAICourseGenerated}
+      />
+
+      {/* Invite / Payment Link Dialog */}
+      {inviteCourse && (
+        <CreateInviteDialog
+          open={inviteDialogOpen}
+          onOpenChange={setInviteDialogOpen}
+          courseId={inviteCourse.id}
+          courseTitle={inviteCourse.title}
+          coursePrice={inviteCourse.price}
+          onCreated={() => toast.success("Payment link created!")}
+        />
+      )}
+
       <BulkSetPasswordDialog
         open={pwBulkOpen}
         onOpenChange={setPwBulkOpen}

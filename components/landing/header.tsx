@@ -95,7 +95,7 @@ const SOLUTIONS: MegaSection[] = [
     items: [
       { href: "/solutions/for-youtubers",            icon: Youtube,   label: "For YouTubers",           body: "Convert subs to paying members",       color: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" },
       { href: "/solutions/for-instagram-creators",   icon: Instagram, label: "For Instagram creators",  body: "Link-in-bio that actually earns",      color: "bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-900/40 dark:text-fuchsia-300" },
-      { href: "/solutions/for-coaches",              icon: Briefcase, label: "For coaches",             body: "1:1 sessions + group cohorts + content", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
+      { href: "/solutions/for-teachers", icon: Briefcase, label: "For teachers", body: "1:1 sessions + group cohorts + content", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" },
       { href: "/solutions/for-course-creators",      icon: GraduationCap, label: "For course creators", body: "The full course platform — your URL",  color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300" },
       { href: "/solutions/for-personal-brands",      icon: Sparkles,  label: "For personal brands",     body: "Multi-product creator brand at one URL", color: "bg-primary/10 text-primary" },
     ],

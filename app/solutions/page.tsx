@@ -33,7 +33,7 @@ const GROUPS = [
     items: [
       { href: "/solutions/for-youtubers", icon: Youtube, label: "For YouTubers", body: "Convert subs into paying members" },
       { href: "/solutions/for-instagram-creators", icon: Instagram, label: "For Instagram creators", body: "Link-in-bio that actually earns" },
-      { href: "/solutions/for-coaches", icon: Briefcase, label: "For coaches", body: "1:1 sessions, group cohorts, content" },
+      { href: "/solutions/for-teachers", icon: Briefcase, label: "For teachers", body: "1:1 sessions, group cohorts, content" },
       { href: "/solutions/for-course-creators", icon: GraduationCap, label: "For course creators", body: "The full course platform — your URL" },
       { href: "/solutions/for-personal-brands", icon: Sparkles, label: "For personal brands", body: "Multi-product creator brand at one URL" },
     ],

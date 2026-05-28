@@ -82,7 +82,7 @@ type NavTarget = {
 }
 
 const NAV_TARGETS: NavTarget[] = [
-  // Teach
+  // Teacher
   { label: "Dashboard", href: "/dashboard", icon: <LayoutDashboard /> },
   { label: "Courses", href: "/dashboard/courses", icon: <BookOpen />, aliases: "teach lessons modules" },
   { label: "Students", href: "/dashboard/students", icon: <GraduationCap />, aliases: "learners enrolled" },

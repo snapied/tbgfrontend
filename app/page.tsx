@@ -44,12 +44,12 @@ import type { Metadata } from "next"
 export const metadata: Metadata = {
   title: "The Creator-Business OS for Modern Educators · The Big Class",
   description:
-    "The all-in-one workspace for educators, coaches, and creators. Host your courses, run live cohorts, build custom communities, and accept direct payments — on your own URL, with 0% platform commission.",
+    "The all-in-one workspace for educators, teachers, and creators. Host your courses, run live cohorts, build custom communities, and accept direct payments — on your own URL, with 0% platform commission.",
   alternates: { canonical: "https://thebigclass.com" },
   openGraph: {
     title: "The Creator-Business OS for Modern Educators · The Big Class",
     description:
-      "The all-in-one workspace for educators, coaches, and creators. Host your courses, run live cohorts, build custom communities, and accept direct payments — on your own URL, with 0% platform commission.",
+      "The all-in-one workspace for educators, teachers, and creators. Host your courses, run live cohorts, build custom communities, and accept direct payments — on your own URL, with 0% platform commission.",
     type: "website",
     url: "https://thebigclass.com",
     siteName: "The Big Class",
@@ -58,7 +58,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "The Creator-Business OS for Modern Educators · The Big Class",
     description:
-      "The all-in-one workspace for educators, coaches, and creators. One workspace replaces Notion + Discord + Zoom + Teachable.",
+      "The all-in-one workspace for educators, teachers, and creators. One workspace replaces Notion + Discord + Zoom + Teachable.",
   },
 }
 

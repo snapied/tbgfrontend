@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Film,
+  FlaskConical,
   GraduationCap,
   Hand,
   Heart,
@@ -36,9 +37,24 @@ interface UseCase {
 
 const USE_CASES: UseCase[] = [
   {
+    id: "school-teacher-kishor",
+    icon: FlaskConical,
+    who: "School teachers with hired staff",
+    headline: "Commissions, contracts, and student privacy — on auto-pilot.",
+    body:
+      "Kishor runs a chemistry academy in Jaipur with a hired teacher, Gaurav. Commission tracking used to live on paper. Now it's automated, transparent, and legally signed — with student data locked down.",
+    pillars: [
+      { title: "Invite & set commission", detail: "Two-step wizard: profile + 70/30 split with live preview of the exact math." },
+      { title: "Legal agreement built in", detail: "Auto-generated contract with IP, privacy, and non-compete clauses. Signed digitally." },
+      { title: "Full payout transparency", detail: "Gaurav sees every transaction's math. Student names are masked. No hidden fees." },
+      { title: "Student data is locked", detail: "Anti-bypass filter auto-redacts phone numbers and emails in messages." },
+    ],
+    cta: "Read Kishor's full story →",
+  },
+  {
     id: "solo-instructor",
     icon: UserIcon,
-    who: "Solo creators & coaches",
+    who: "Solo creators & teachers",
     headline: "Stop stitching seven tools together.",
     body:
       "You teach, you market, you run the store — alone. The Big Class collapses the toolchain into one workspace so you can focus on the cohort, not the plumbing.",
@@ -129,7 +145,7 @@ export default function UseCasesPage() {
               One platform. Many ways to teach.
             </h1>
             <p className="mt-4 text-lg leading-relaxed text-muted-foreground">
-              Whether you&apos;re a solo coach, a coaching institute with 80 teachers, a university department, a corporate L&amp;D team, or an NGO running training programs — the workspace adapts.
+              Whether you&apos;re a solo teacher, a coaching institute with 80 teachers, a university department, a corporate L&amp;D team, or an NGO running training programs — the workspace adapts.
             </p>
           </div>
         </section>
@@ -346,7 +362,9 @@ function UseCaseBlock({ useCase, reverse }: { useCase: UseCase; reverse: boolean
                 ))}
               </ul>
               <Button asChild className="mt-6 gap-2">
-                <Link href="/signup">{useCase.cta} <ArrowRight className="h-4 w-4" /></Link>
+                <Link href={useCase.id === "school-teacher-kishor" ? "/use-cases/school-teacher-kishor" : "/signup"}>
+                  {useCase.cta} <ArrowRight className="h-4 w-4" />
+                </Link>
               </Button>
             </div>
             <div className={cn("relative flex items-center justify-center bg-gradient-to-br from-secondary/40 via-background to-secondary/20 p-6 lg:p-8", reverse && "lg:order-1")}>

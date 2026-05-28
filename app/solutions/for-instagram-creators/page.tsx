@@ -213,7 +213,7 @@ export default function ForInstagramCreatorsPage() {
                   <Calendar className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-foreground">Fitness, Wellness & Yoga Coaches</h4>
+                  <h4 className="font-bold text-sm text-foreground">Fitness, Wellness & Yoga Teachers</h4>
                   <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
                     Sell digital workout sheets, customized diet PDF schedules, and let followers easily book 1:1 diet consult calls or live group yoga cohorts directly.
                   </p>

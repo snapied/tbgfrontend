@@ -7,7 +7,7 @@
 //
 // Scope: nursery school to working professionals. The list deliberately
 // covers every kind of teacher we expect on the platform — preschool
-// teachers, school subject teachers, test-prep coaches, college lecturers,
+// teachers, school subject teachers, test-prep teachers, college lecturers,
 // language tutors, music/dance instructors, vocational trainers, corporate
 // L&D, and the usual tech/business/marketing creators. When unsure, lean
 // toward including a category — empty groups feel worse than a long list,

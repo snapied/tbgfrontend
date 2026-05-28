@@ -1020,7 +1020,7 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
     keywords: ["class recordings", "recordings library", "video archive"],
     updated: "2026-05-20",
     sections: [
-      { kind: "p", body: "Open /dashboard/recordings (sidebar → Teach → Recordings). Every live class that has a recording_url shows up here, newest first." },
+      { kind: "p", body: "Open /dashboard/recordings (sidebar → Teacher → Recordings). Every live class that has a recording_url shows up here, newest first." },
       { kind: "h2", text: "What you see" },
       { kind: "ul", items: [
         "Class title (links to the full class settings page)",
@@ -1221,10 +1221,10 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
     keywords: ["sidebar", "navigation", "dashboard layout"],
     updated: "2026-05-20",
     sections: [
-      { kind: "p", body: "The dashboard sidebar reorganised: Dashboard sits at the top, always visible, one click away. Everything else lives in 5 collapsible groups — Teach, Certificates, Community, Public site, Workspace." },
+      { kind: "p", body: "The dashboard sidebar reorganised: Dashboard sits at the top, always visible, one click away. Everything else lives in 5 collapsible groups — Teacher, Certificates, Community, Public site, Workspace." },
       { kind: "h2", text: "What's where" },
       { kind: "ul", items: [
-        "Teach — Courses, Students, Batches, Live Classes, Recordings, Whiteboards, Quizzes, Assignments, Storefront, Analytics.",
+        "Teacher — Courses, Students, Batches, Live Classes, Recordings, Whiteboards, Quizzes, Assignments, Storefront, Analytics.",
         "Certificates — New Batch, Batch History, Templates.",
         "Community — Inbox, Discussions, Doubts & Q&A, Announcements, Leaderboard, Wall of Love, Refer & Earn.",
         "Public site — Overview, Home page, Pages, Brand, Public profile, Testimonials, Blog, Announcements, Lead inbox, Domain & URL.",
@@ -1232,7 +1232,7 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
       ] },
       { kind: "h2", text: "Smart behaviour" },
       { kind: "ul", items: [
-        "Default-open: Teach (the most-used section). Everything else is collapsed.",
+        "Default-open: Teacher (the most-used section). Everything else is collapsed.",
         "The group containing the current page auto-expands.",
         "Collapsed groups still show a rolled-up count of pending items inside (e.g. unresolved doubts under Community).",
         "Open / closed state persists in localStorage across navigations and refreshes.",

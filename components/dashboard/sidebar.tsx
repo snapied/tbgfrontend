@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { LayoutDashboard, FilePlus, Heart, History, Users, Settings, LogOut, ChevronDown, ChevronRight, BookOpen, Bookmark, GraduationCap, FileQuestion, BarChart3, MessageSquare, Megaphone, Palette, Trophy, UserPlus, Video, ClipboardList, ShoppingBag, Globe, ExternalLink as ExternalLinkIcon, Home, FileText, Trash2, Code2, Users2, PenSquare, Film, Inbox, CreditCard, Banknote, Webhook as WebhookIcon, Languages as LanguagesIcon, Activity, Sparkles, Calendar, Beaker } from "lucide-react"
+import { LayoutDashboard, FilePlus, Heart, History, Users, Settings, LogOut, ChevronDown, ChevronRight, BookOpen, Bookmark, GraduationCap, FileQuestion, BarChart3, MessageSquare, Megaphone, Palette, Trophy, UserPlus, Video, ClipboardList, ShoppingBag, Globe, ExternalLink as ExternalLinkIcon, Home, FileText, Trash2, Code2, Users2, PenSquare, Film, Inbox, CreditCard, Banknote, Webhook as WebhookIcon, Languages as LanguagesIcon, Activity, Sparkles, Calendar, Beaker, Wallet } from "lucide-react"
 import { openTeacherWelcome } from "@/components/dashboard/welcome-modal"
 import { NotificationBell } from "@/components/dashboard/notification-bell"
 import { ViewPublicSiteButton } from "@/components/dashboard/view-public-site-button"
@@ -34,6 +34,10 @@ interface NavItem {
   /** Optional plan-gate. When the current plan doesn't include this
    *  feature, a small lock + popover renders next to the item. */
   lockedBehind?: keyof PlanLimits
+  /** If true, only visible to admin users. Hidden from instructors. */
+  adminOnly?: boolean
+  /** If true, only visible to instructor (teacher) users. Hidden from admins. */
+  teacherOnly?: boolean
 }
 
 interface NavGroup {
@@ -43,6 +47,8 @@ interface NavGroup {
   items: NavItem[]
   /** When true, the group starts expanded for first-time visitors. */
   defaultOpen?: boolean
+  /** If true, the entire group is hidden from instructors. */
+  adminOnly?: boolean
 }
 
 // "Dashboard" stays outside any group — it's the home view, one click away
@@ -57,7 +63,7 @@ const pinnedItem: NavItem = {
 const navGroups: NavGroup[] = [
   {
     id: "teach",
-    label: "Teach",
+    label: "Teacher",
     defaultOpen: true,
     items: [
       { name: "Courses", href: "/dashboard/courses", icon: BookOpen },
@@ -71,9 +77,11 @@ const navGroups: NavGroup[] = [
       { name: "Quizzes", href: "/dashboard/quizzes", icon: FileQuestion },
       { name: "Docs", href: "/dashboard/docs", icon: FileText },
       { name: "Assignments", href: "/dashboard/assignments", icon: ClipboardList },
-      { name: "Storefront", href: "/dashboard/store", icon: ShoppingBag },
+      { name: "Storefront", href: "/dashboard/store", icon: ShoppingBag, adminOnly: true },
       { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-      { name: "Experiments", href: "/dashboard/experiments", icon: Beaker },
+      { name: "Experiments", href: "/dashboard/experiments", icon: Beaker, adminOnly: true },
+      { name: "My Earnings", href: "/dashboard/my-earnings", icon: Wallet, teacherOnly: true },
+      { name: "My Feedback", href: "/dashboard/my-feedback", icon: MessageSquare, teacherOnly: true },
     ],
   },
   {
@@ -111,6 +119,7 @@ const navGroups: NavGroup[] = [
   {
     id: "portal",
     label: "Public site",
+    adminOnly: true,
     items: [
       { name: "Overview", href: "/dashboard/portal", icon: Globe },
       { name: "Home page", href: "/dashboard/portal/home", icon: Home },
@@ -129,12 +138,12 @@ const navGroups: NavGroup[] = [
     id: "workspace",
     label: "Workspace",
     items: [
-      { name: "Instructors", href: "/dashboard/faculty", icon: UserPlus },
-      { name: "Manage Users", href: "/dashboard/users", icon: Users },
-      { name: "Billing & plan", href: "/dashboard/billing", icon: CreditCard },
-      { name: "Payouts", href: "/dashboard/payouts", icon: Banknote },
-      { name: "Developer", href: "/dashboard/developer", icon: Code2, lockedBehind: "apiAccess" },
-      { name: "Webhooks", href: "/dashboard/developer/webhooks", icon: WebhookIcon, lockedBehind: "apiAccess" },
+      { name: "Teachers", href: "/dashboard/teachers", icon: UserPlus, adminOnly: true },
+      { name: "Manage Users", href: "/dashboard/users", icon: Users, adminOnly: true },
+      { name: "Billing & plan", href: "/dashboard/billing", icon: CreditCard, adminOnly: true },
+      { name: "Payouts", href: "/dashboard/payouts", icon: Banknote, adminOnly: true },
+      { name: "Developer", href: "/dashboard/developer", icon: Code2, lockedBehind: "apiAccess", adminOnly: true },
+      { name: "Webhooks", href: "/dashboard/developer/webhooks", icon: WebhookIcon, lockedBehind: "apiAccess", adminOnly: true },
       { name: "Trash", href: "/dashboard/trash", icon: Trash2 },
       { name: "System status", href: "/dashboard/status", icon: Activity },
       { name: "Settings", href: "/dashboard/settings", icon: Settings },
@@ -229,7 +238,7 @@ function useGroupOpenState(activeGroupId: string | null) {
 
 export function DashboardSidebar() {
   const pathname = usePathname()
-  const { currentUser, doubts, discussions, setCurrentUser } = useLMS()
+  const { currentUser, users, doubts, discussions, setCurrentUser } = useLMS()
   const { leads, posts } = usePortal()
   const { currentTenant } = useTenant()
   const displayName = currentUser?.name ?? "Signed out"
@@ -237,7 +246,7 @@ export function DashboardSidebar() {
     ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)
     : "Guest"
 
-  // Find which group the current pathname belongs to. The "Teach" group
+  // Find which group the current pathname belongs to. The "Teacher" group
   // wins ties because more pages share its top-level prefix.
   const activeGroupId = useMemo(() => {
     for (const group of navGroups) {
@@ -386,7 +395,20 @@ export function DashboardSidebar() {
           {pinnedItem.name}
         </Link>
 
-        {navGroups.map((group) => {
+        {navGroups
+          .filter((group) => {
+            // Hide admin-only groups from instructors (teachers)
+            if (group.adminOnly && currentUser?.role === "instructor") return false
+            return true
+          })
+          .map((group) => {
+          // Filter items by role
+          const visibleItems = group.items.filter((item) => {
+            if (item.adminOnly && currentUser?.role === "instructor") return false
+            if (item.teacherOnly && currentUser?.role === "admin") return false
+            return true
+          })
+          if (visibleItems.length === 0) return null
           const isOpen = openIds.has(group.id)
           const groupTotal = groupBadgeCount(group)
           return (
@@ -428,7 +450,7 @@ export function DashboardSidebar() {
               </button>
               {isOpen && (
                 <div id={`navgroup-${group.id}`} className="mt-1 space-y-1">
-                  {group.items.map((item) => {
+                  {visibleItems.map((item) => {
                     const badge = badgeFor(item.href)
                     const active = pathname === item.href || pathname.startsWith(item.href + "/")
                     // Wrap the Communities entry in the multipurpose
@@ -509,6 +531,31 @@ export function DashboardSidebar() {
               <Sparkles className="mr-2 h-4 w-4" />
               Show me around again
             </DropdownMenuItem>
+            {/* Quick user switcher — for testing teacher vs admin views */}
+            {users.filter((u) => u.id !== currentUser?.id).length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Switch to
+                </p>
+                {users
+                  .filter((u) => u.id !== currentUser?.id)
+                  .slice(0, 5)
+                  .map((u) => (
+                    <DropdownMenuItem
+                      key={u.id}
+                      onSelect={() => setCurrentUser(u)}
+                      className="gap-2"
+                    >
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[9px] font-bold">
+                        {initials(u.name)}
+                      </div>
+                      <span className="flex-1 truncate">{u.name}</span>
+                      <span className="text-[10px] capitalize text-muted-foreground">{u.role}</span>
+                    </DropdownMenuItem>
+                  ))}
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="text-destructive focus:text-destructive">
               <Link href="/login" onClick={() => setCurrentUser(null)}>

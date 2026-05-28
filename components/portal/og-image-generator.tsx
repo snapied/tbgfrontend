@@ -56,7 +56,7 @@ export function OgImageGenerator({
   const primary = primaryColor || "#0a3024"
   const accent = accentColor || "#d4af37"
   const name = (siteName || "Your Academy").slice(0, 60)
-  const tag = (tagline || "Teach. Sell. Certify.").slice(0, 100)
+  const tag = (tagline || "Teacher. Sell. Certify.").slice(0, 100)
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "")
 
   const darkPrimary = useMemo(() => darken(primary, 0.28), [primary])

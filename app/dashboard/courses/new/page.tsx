@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { ArrowLeft, Plus, Trash2, Award } from "lucide-react"
@@ -35,7 +35,8 @@ import { RichTextEditor } from "@/components/editor/rich-text-editor"
 import { isRichTextEmpty } from "@/components/editor/rich-text-content"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
 import { AIGenerateButton } from "@/components/ai/ai-generate-button"
-import { aiCourseDescription, aiCourseOutline } from "@/lib/ai-client"
+import { AICourseBuilderDialog } from "@/components/ai/ai-course-builder-dialog"
+import { aiCourseDescription, aiCourseOutline, type GeneratedCourse, type CourseBuilderInput } from "@/lib/ai-client"
 import { toast } from "sonner"
 import { COURSE_LANGUAGES } from "@/lib/course-languages"
 
@@ -255,6 +256,55 @@ function NewCoursePageInner() {
   const isAdvanced = formMode === "advanced"
   const { confirmLeave } = useUnsavedChangesGuard(dirty && !submitting)
 
+  // ── AI Course Builder dialog state ────────────────────────────
+  const [aiBuilderOpen, setAiBuilderOpen] = useState(false)
+
+  const handleAICourseGenerated = useCallback(
+    (generated: GeneratedCourse, builderInput: CourseBuilderInput) => {
+      // Map AI output → form fields so the user can review before saving.
+      setTitle(generated.title)
+      if (generated.subtitle) setSubtitle(generated.subtitle)
+      setDescription(generated.description)
+      if (generated.category) setCategory(generated.category)
+      setLevel(generated.level)
+      if (generated.language) setLanguage(generated.language)
+
+      // Price from builder input (user-supplied), not AI.
+      if (builderInput.price !== undefined) setPrice(String(builderInput.price))
+      if (builderInput.originalPrice !== undefined) setOriginalPrice(String(builderInput.originalPrice))
+
+      // Map modules/lessons.
+      const mappedModules: Module[] = generated.modules.map((mod, mi) => ({
+        id: generateId("module"),
+        title: mod.title,
+        description: mod.description,
+        order: mi,
+        lessons: mod.lessons.map((lesson, li) => ({
+          id: generateId("lesson"),
+          title: lesson.title,
+          description: "",
+          type: "text" as const,
+          content: lesson.content,
+          duration: lesson.estimatedMinutes || 10,
+          order: li,
+          isPreview: mi === 0 && li === 0,
+        })),
+      }))
+      setModules(mappedModules)
+
+      // Marketing fields.
+      if (generated.whatYouLearn.length > 0) setWhatYouLearn(generated.whatYouLearn)
+      if (generated.requirements.length > 0) setRequirements(generated.requirements)
+      if (generated.features.length > 0) setFeatures(generated.features)
+
+      // Flip to advanced so the user sees the learning outcomes / requirements.
+      if (formMode === "simple") toggleFormMode()
+
+      toast.success("Course generated! Review the details below and click Create Course.")
+    },
+    [formMode, toggleFormMode],
+  )
+
   const goBack = (href: string) => {
     if (confirmLeave()) router.push(href)
   }
@@ -406,6 +456,11 @@ function NewCoursePageInner() {
             (below) where they're more discoverable + the segmented
             control's labels make the current state obvious. */}
         <div className="flex items-center gap-3">
+          <AIGenerateButton
+            label="AI Course Builder"
+            size="default"
+            onGenerate={() => setAiBuilderOpen(true)}
+          />
           <Button variant="outline" onClick={() => goBack("/dashboard/courses")}>
             Cancel
           </Button>
@@ -889,6 +944,14 @@ function NewCoursePageInner() {
           )}
         </div>
       </div>
+
+      {/* AI Course Builder Dialog */}
+      <AICourseBuilderDialog
+        open={aiBuilderOpen}
+        onOpenChange={setAiBuilderOpen}
+        initialTitle={title}
+        onCourseGenerated={handleAICourseGenerated}
+      />
     </div>
   )
 }

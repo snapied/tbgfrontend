@@ -241,7 +241,7 @@ export default function ForPersonalBrandsPage() {
                   <Users className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-foreground">Lifestyle & Wellness Coaches</h4>
+                  <h4 className="font-bold text-sm text-foreground">Lifestyle & Wellness Teachers</h4>
                   <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
                     Sell workout schedules, diet guides, cooking recipe sheets, and coordinate group batches with active student progress tracking and verified certificates.
                   </p>

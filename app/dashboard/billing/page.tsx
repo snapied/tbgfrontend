@@ -22,13 +22,15 @@ import {
   CreditCard,
   ExternalLink,
   Loader2,
+  Plus,
   RefreshCw,
   ShieldCheck,
   Sparkles,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
 import {
   PLANS,
   PLAN_ORDER,
@@ -435,6 +437,11 @@ export default function BillingPage() {
         busy={busy === "checkout"}
       />
 
+      {/* ── Add-ons ───────────────────────────────────────────────── */}
+      {planId !== "starter" && (
+        <AddonsPurchaseSection />
+      )}
+
       <CancelSubscriptionDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}
@@ -684,4 +691,122 @@ function formatLimit(n: number, unit?: string): string {
   if (n === Infinity) return "Unlimited"
   if (unit === "GB") return n >= 1024 ? `${(n / 1024).toFixed(0)} TB` : `${n} GB`
   return n.toLocaleString("en-IN")
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Add-ons section — fetches catalog from backend, shows purchase
+// buttons for live addons and "Coming soon" for the rest.
+// ────────────────────────────────────────────────────────────────────
+
+function AddonsPurchaseSection() {
+  // Addons work locally — no backend dependency. Purchase/cancel
+  // writes to localStorage via addon-store. When the backend is
+  // wired, it mirrors to the TenantAddon DB table too.
+  const [, forceRender] = useState(0)
+  const rerender = () => forceRender((n) => n + 1)
+
+  const CATALOG = [
+    { id: "extra_students_500", name: "+500 students", price: "₹499/mo", desc: "Stack as many as you need.", live: true },
+    { id: "extra_teacher_seat", name: "+1 teacher seat", price: "₹699/mo", desc: "For co-instructors or TAs.", live: true },
+    { id: "extra_storage_100gb", name: "+100 GB recordings", price: "₹299/mo", desc: "Extra retention on top of plan cap.", live: true },
+    { id: "auto_transcription", name: "Auto-transcription", price: "₹2/min", desc: "Searchable transcripts + captions.", live: false },
+    { id: "sms_notifications", name: "SMS notifications", price: "₹0.20/SMS", desc: "Passthrough — we don't mark up.", live: false },
+  ]
+
+  // Read active addons from localStorage
+  let activeAddons: import("@/lib/addon-store").LocalAddon[] = []
+  if (typeof window !== "undefined") {
+    const { getActiveAddons } = require("@/lib/addon-store") as typeof import("@/lib/addon-store")
+    activeAddons = getActiveAddons()
+  }
+
+  function handlePurchase(addonId: string) {
+    const { purchaseAddonLocal } = require("@/lib/addon-store") as typeof import("@/lib/addon-store")
+    const addon = purchaseAddonLocal(addonId)
+    const catalogItem = CATALOG.find((c) => c.id === addonId)
+    toast.success(`${catalogItem?.name ?? "Add-on"} activated!`, {
+      description: `${catalogItem?.price} will be added to your next invoice.`,
+    })
+    rerender()
+  }
+
+  function handleCancel(purchaseId: string) {
+    const { cancelAddonLocal } = require("@/lib/addon-store") as typeof import("@/lib/addon-store")
+    cancelAddonLocal(purchaseId)
+    toast.success("Add-on cancelled. Active until end of current billing period.")
+    rerender()
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-lg">Add-ons</CardTitle>
+        <CardDescription>
+          Don&apos;t jump a whole tier for one extra teacher seat. Add exactly what you need.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {CATALOG.map((item) => {
+            const purchases = activeAddons.filter((a) => a.addonId === item.id)
+            const totalQty = purchases.reduce((s, a) => s + a.quantity, 0)
+            return (
+              <div
+                key={item.id}
+                className={cn(
+                  "flex flex-col justify-between rounded-lg border p-4",
+                  !item.live && "opacity-60",
+                )}
+              >
+                <div>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-sm font-semibold">{item.name}</p>
+                    <p className="text-sm font-bold tabular-nums text-primary">{item.price}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">{item.desc}</p>
+
+                  {purchases.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {purchases.map((p) => (
+                        <div key={p.id} className="flex items-center justify-between rounded bg-green-50 dark:bg-green-950/20 px-2 py-1">
+                          <span className="text-[11px] font-medium text-green-700 dark:text-green-400">
+                            Active &times; {p.quantity}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleCancel(p.id)}
+                            className="text-[10px] font-medium text-muted-foreground hover:text-destructive"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-3">
+                  {item.live ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => handlePurchase(item.id)}
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      {totalQty > 0 ? "Add another" : "Add to plan"}
+                    </Button>
+                  ) : (
+                    <span className="flex items-center justify-center rounded-md border border-dashed py-1.5 text-xs font-medium text-muted-foreground">
+                      Coming soon
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  )
 }

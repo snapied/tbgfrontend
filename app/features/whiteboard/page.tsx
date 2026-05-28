@@ -132,7 +132,7 @@ export const metadata: Metadata = {
     type: "website",
     url: `${SITE_URL}${PAGE_PATH}`,
     siteName: "The Big Class",
-    title: "Pick a template. Teach. Done.",
+    title: "Pick a template. Teacher. Done.",
     description:
       "25+ teaching-ready whiteboard templates — from KG number boxes to Class 11 periodic tables. Real-time multi-cursor. Saves itself per class.",
   },
@@ -156,7 +156,7 @@ export default function WhiteboardFeaturePage() {
             <>
               Pick a template.
               <br />
-              <span className="text-primary">Teach. Done.</span>
+              <span className="text-primary">Teacher. Done.</span>
             </>
           }
           subtitle={`A real-time, multi-cursor whiteboard sitting next to your video — with ${totalTemplates}+ teaching-ready scaffolds. KG number boxes through Class 11 periodic tables, brainstorms, SWOT, mind maps, lab reports. Pick one in two clicks and you're teaching, not setting up.`}

@@ -1,4 +1,4 @@
-// /solutions/for-coaches — 1:1 sessions, group cohorts, content.
+// /solutions/for-teachers — 1:1 sessions, group cohorts, content.
 
 import type { Metadata } from "next"
 import Link from "next/link"
@@ -30,10 +30,10 @@ import { Footer } from "@/components/landing/footer"
 import { SolutionPage } from "@/components/landing/solution-page"
 
 export const metadata: Metadata = {
-  title: "Why Coaches Use Our Booking & Cohort Suite · The Big Class",
+  title: "Why Teachers Use Our Booking & Cohort Suite · The Big Class",
   description:
     "Launch your branded coaching portal. Sell 1:1 consultation slots, run interactive group cohorts, and ship structured course libraries under your own white-labeled custom URL.",
-  alternates: { canonical: "https://thebigclass.com/solutions/for-coaches" },
+  alternates: { canonical: "https://thebigclass.com/solutions/for-teachers" },
 }
 
 export default function ForCoachesPage() {
@@ -42,7 +42,7 @@ export default function ForCoachesPage() {
       <Header />
       <main className="flex-1">
         <SolutionPage
-          eyebrow="For Coaches & Consultants"
+          eyebrow="For Teachers & Consultants"
           title={
             <>
               Your complete{" "}
@@ -74,7 +74,7 @@ export default function ForCoachesPage() {
             {
               icon: <Globe2 className="h-4 w-4" />,
               title: "White-labeled portal domains",
-              body: "Deliver a premium, distraction-free experience (e.g. coach.yourname.com) featuring your customized branding.",
+              body: "Deliver a premium, distraction-free experience (e.g. teacher.yourname.com) featuring your customized branding.",
               href: "/features/portal",
             },
             {
@@ -122,7 +122,7 @@ export default function ForCoachesPage() {
           }}
         />
 
-        {/* ── Workflow Guide Section — How Coaches use this to monetize ── */}
+        {/* ── Workflow Guide Section — How Teachers use this to monetize ── */}
         <section className="border-t border-border/60 py-20 bg-muted/10">
           <div className="mx-auto max-w-5xl px-6 lg:px-8">
             <div className="mx-auto max-w-2xl text-center">
@@ -147,7 +147,7 @@ export default function ForCoachesPage() {
                 </div>
                 <p className="mt-4 text-xs font-bold uppercase text-muted-foreground tracking-wide">THE BRAND STAGE</p>
                 <p className="mt-1 text-sm text-muted-foreground leading-relaxed">
-                  Setup your white-labeled consulting portal (e.g. coach.yourname.com) on day one. List your expertise, credentials, past client reviews, and custom branding templates without writing a line of code.
+                  Setup your white-labeled consulting portal (e.g. teacher.yourname.com) on day one. List your expertise, credentials, past client reviews, and custom branding templates without writing a line of code.
                 </p>
               </div>
 
@@ -254,7 +254,7 @@ export default function ForCoachesPage() {
   )
 }
 
-// ─── Gorgeous Custom Coaches Visual ──────────────────────────────────────────
+// ─── Gorgeous Custom Teachers Visual ──────────────────────────────────────────
 
 function CoachesHeroVisual() {
   return (

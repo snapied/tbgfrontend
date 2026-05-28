@@ -247,7 +247,7 @@ export default function DigitalProductsPage() {
                   <Users className="h-5 w-5" />
                 </div>
                 <div>
-                  <h4 className="font-bold text-sm text-foreground">Lifestyle & Wellness Coaches</h4>
+                  <h4 className="font-bold text-sm text-foreground">Lifestyle & Wellness Teachers</h4>
                   <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
                     Deliver custom workout PDFs, meal-prep PDF schedules, travel itinerary books, lifestyle planners, and coordinate cohort wellness masterclasses directly.
                   </p>
