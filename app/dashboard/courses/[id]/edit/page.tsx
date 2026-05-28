@@ -608,11 +608,6 @@ function EditCoursePageInner({ course }: { course: Course }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <AIGenerateButton
-            label="AI Course Builder"
-            size="sm"
-            onGenerate={() => setAiBuilderOpen(true)}
-          />
           <TakeATourButton tourId="courses-edit-v1" />
           <Button variant="outline" asChild data-tour="course-edit-preview">
             <Link href={`/learn/${slug || course.slug}`} target="_blank" rel="noreferrer">
