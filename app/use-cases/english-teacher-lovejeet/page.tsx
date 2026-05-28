@@ -37,14 +37,19 @@ import { cn } from "@/lib/utils"
 
 const BEFORE_PROBLEMS = [
   {
+    icon: Mic,
+    title: "15 different 1:1 schedules in a notebook",
+    desc: "Each coaching student has a different day and time. Lovejeet tracks them in a paper diary. When someone reschedules, she erases and rewrites. Double-bookings happen. She once had two students show up at the same time.",
+  },
+  {
     icon: Bell,
-    title: "Class reminders eat 2 hours every day",
-    desc: "Lovejeet manually messages 80+ students on WhatsApp before every class. Copy-paste the Zoom link, remind them of the time, chase absentees. Two hours of admin work for a 45-minute class.",
+    title: "Reminders for 15 individuals + 3 groups — daily",
+    desc: "She sends separate WhatsApp messages to each 1:1 student ('Your class is at 4 PM today') and to each group chat ('Batch 2, class at 5 PM'). That's 18+ manual messages every day — before she even starts teaching.",
   },
   {
     icon: Phone,
-    title: "Students forget to join — or join the wrong link",
-    desc: "She uses Zoom, but the link changes every session. Students DM her asking for 'today's link' 10 minutes before class. Some join yesterday's link and sit in an empty room.",
+    title: "Different Zoom links for 1:1 vs group — chaos",
+    desc: "She creates a separate Zoom meeting for each 1:1 and each group. Students DM her 'which link is mine?' 10 minutes before class. 1:1 students accidentally join the group session link.",
   },
   {
     icon: MessageSquare,
@@ -89,24 +94,51 @@ const WALKTHROUGH_STEPS = [
   },
   {
     step: 3,
-    icon: Video,
-    title: "Runs live classes — with auto-reminders",
-    subtitle: "No more copy-pasting Zoom links on WhatsApp",
-    desc: "She schedules a live class in the dashboard. The platform automatically sends reminders to enrolled students via WhatsApp and email — 24 hours before, 1 hour before, and 5 minutes before. One permanent link, no Zoom juggling.",
-    image: "/images/features/live-classes.png",
-    detail: "The live class has: a waiting room, attendance tracking, raise-hand queue, screen sharing, in-class chat (with anti-bypass filter), and auto-recording. Students join from the course page — no separate link needed. Absent students get a 'you missed this class' notification with the recording link.",
+    icon: Mic,
+    title: "Sets up 1:1 coaching sessions as products",
+    subtitle: "Storefront → create a 'session' product → students book & pay",
+    desc: "Lovejeet creates a '1:1 Spoken English Coaching' product in the storefront. She sets the price (₹2,000/month or ₹500/session), adds available time slots, and publishes it. Students book directly from her site. Each booking creates a private live class — one permanent link per student, auto-scheduled.",
+    image: "/images/features/storefront.png",
+    detail: "The 1:1 product supports: per-session pricing OR monthly subscription, time-slot selection by the student, automatic calendar blocking (prevents double-booking), and a private class link that's different from group classes. Each 1:1 student sees only their own sessions in their dashboard — never the group batches. Lovejeet sees all 15 individual sessions + 3 group classes in one unified calendar.",
   },
   {
     step: 4,
-    icon: PlayCircle,
-    title: "Every class is auto-recorded and chaptered",
-    subtitle: "Students who miss class catch up on their own",
-    desc: "After every live class, the recording appears in the course timeline within minutes. AI generates chapters ('Tenses review at 4:12', 'Practice exercise at 18:30') so students can jump to what they missed. No more re-explaining the same topic.",
-    image: "/images/features/courses.png",
-    detail: "Recordings include: auto-generated chapters, searchable transcript, class chat replay synced to the video timeline, and download option for offline viewing. The teacher can trim the recording or hide it for specific classes.",
+    icon: Calendar,
+    title: "One calendar for everything — 1:1 and group",
+    subtitle: "All 15 individual sessions + 3 group batches in one view",
+    desc: "Lovejeet opens the calendar and sees everything: Monday 3 PM — Ananya (1:1), Monday 5 PM — Batch 1 (group), Tuesday 4 PM — Rohit (1:1), and so on. Color-coded by type: blue for 1:1, green for group. Drag to reschedule — the student gets an auto-notification. No notebook, no double-bookings.",
+    image: "/images/features/live-classes.png",
+    detail: "The calendar supports: weekly/monthly views, recurring class scheduling (repeat every week for 12 weeks), color-coded by course, drag-and-drop rescheduling with automatic student notification, holiday blocking, and conflict detection. Students see a synced version on their dashboard. Teachers can export the schedule as an .ics file for Google Calendar / Apple Calendar.",
   },
   {
     step: 5,
+    icon: Bell,
+    title: "Auto-reminders on WhatsApp, email, and push — she sends nothing",
+    subtitle: "24 hours → 1 hour → 5 minutes before class. Zero manual work.",
+    desc: "The moment a class is scheduled, the reminder engine kicks in. Students get 3 automatic reminders: a WhatsApp message 24 hours before ('Spoken English tomorrow at 5 PM — here\\'s your class link'), an email 1 hour before, and a push notification 5 minutes before. Lovejeet sends zero manual messages.",
+    image: "/images/features/live-classes.png",
+    detail: "Reminder flow: (1) 24h before — WhatsApp + email with class title, time, and direct join link. (2) 1h before — WhatsApp only ('Starting in 1 hour'). (3) 5min before — push notification + WhatsApp ('Class starts in 5 minutes — join now'). If a student hasn\\'t joined 10 minutes after start, they get a 'Class is live — join now' nudge. All reminders are configurable: admin can change timing, enable/disable channels, and customize the message template. Parents of minor students also receive the reminders.",
+  },
+  {
+    step: 6,
+    icon: Video,
+    title: "Runs live classes with one permanent link",
+    subtitle: "No Zoom link juggling — students join from the course page",
+    desc: "Lovejeet clicks 'Start Class' on the dashboard. Students join from their course page — same link every time. The class has a waiting room, raise-hand queue, screen sharing, and in-class chat. Attendance is tracked automatically.",
+    image: "/images/features/live-classes.png",
+    detail: "The live class features: lobby with student count before starting, raise-hand queue (ordered by time), screen + whiteboard sharing, in-class polls, chat with anti-bypass filter (auto-redacts phone numbers/emails), and real-time attendance tracking. Late joiners see a 'You missed: [topic covered]' banner. The class auto-records.",
+  },
+  {
+    step: 7,
+    icon: PlayCircle,
+    title: "Every class is auto-recorded and chaptered",
+    subtitle: "Absent students catch up on their own — no re-explaining",
+    desc: "After every live class, the recording appears in the course timeline within minutes. AI generates chapters ('Tenses review at 4:12', 'Practice exercise at 18:30') so students can jump to what they missed. Absent students get a notification: 'You missed Session 5 — watch the recording here.'",
+    image: "/images/features/courses.png",
+    detail: "Recordings include: auto-generated chapters from transcript, searchable full-text transcript, class chat replay synced to the video timeline, and download option for offline viewing. Students who missed the class get an automatic notification with the recording link. The teacher can trim recordings or mark them private.",
+  },
+  {
+    step: 8,
     icon: Send,
     title: "Sends payment links to parents via WhatsApp",
     subtitle: "Course page → Send Payment Link → parent pays → student enrolled",
@@ -115,7 +147,7 @@ const WALKTHROUGH_STEPS = [
     detail: "The payment link shows: academy branding, course title, class count, fee breakdown, and Lovejeet's personal note ('Hi Ananya's mom, this is the spoken English batch we discussed'). After payment, the parent registers and the student gets access immediately.",
   },
   {
-    step: 6,
+    step: 9,
     icon: Award,
     title: "Generates certificates in bulk — one click",
     subtitle: "CSV upload → 30 certificates in 2 minutes",
@@ -124,7 +156,7 @@ const WALKTHROUGH_STEPS = [
     detail: "Certificate templates include: modern, classic, elegant, playful, and more. Each can be customized with logo, colors, and signature. Certificates have a unique QR code linking to a public verification page — parents can verify authenticity by scanning.",
   },
   {
-    step: 7,
+    step: 10,
     icon: Users,
     title: "Builds a community around her teaching",
     subtitle: "Announcements, doubt sessions, leaderboard, wall of love",
@@ -133,7 +165,7 @@ const WALKTHROUGH_STEPS = [
     detail: "The community includes: per-batch discussion groups, Q&A with doubt threading, announcement broadcasts (email + WhatsApp + in-app), a public testimonial wall, and a gamified leaderboard with points for quiz scores and assignment submissions.",
   },
   {
-    step: 8,
+    step: 11,
     icon: Star,
     title: "Students rate her after every class",
     subtitle: "Feedback popup → ratings + tags → teaching insights",
@@ -144,22 +176,32 @@ const WALKTHROUGH_STEPS = [
 ]
 
 const AFTER_BENEFITS = [
-  { icon: CheckCircle2, text: "Auto WhatsApp + email reminders — no more manual messaging before every class" },
+  { icon: CheckCircle2, text: "Visual calendar — schedule the whole week in one view, drag to reschedule, students auto-notified" },
+  { icon: CheckCircle2, text: "3-tier auto reminders — WhatsApp + email + push at 24h, 1h, and 5min before every class" },
+  { icon: CheckCircle2, text: "Missed-class nudge — students who don't join get a 'class is live, join now' ping" },
   { icon: CheckCircle2, text: "One permanent class link — students join from the course page, no Zoom link juggling" },
-  { icon: CheckCircle2, text: "Auto-recorded classes with chapters — absent students catch up on their own" },
+  { icon: CheckCircle2, text: "Auto-recorded classes with AI chapters — absent students catch up on their own" },
   { icon: CheckCircle2, text: "Professional academy site — shareable link for WhatsApp bio and Instagram" },
   { icon: CheckCircle2, text: "AI course builder — full curriculum generated in 2 minutes" },
   { icon: CheckCircle2, text: "Payment links via WhatsApp — parent pays, student auto-enrolled" },
   { icon: CheckCircle2, text: "Bulk certificates with verification QR codes — 30 certificates in 2 minutes" },
   { icon: CheckCircle2, text: "Student feedback after every class — strengths and improvement insights" },
-  { icon: CheckCircle2, text: "Community with announcements — no more buried WhatsApp messages" },
-  { icon: CheckCircle2, text: "Multilingual support — teach in Hindi, English, or both" },
+  { icon: CheckCircle2, text: "Calendar sync — export schedule to Google Calendar / Apple Calendar (.ics)" },
+  { icon: CheckCircle2, text: "Parent reminders — parents of minor students also get class notifications" },
 ]
 
 const FEATURE_HIGHLIGHTS = [
   {
-    q: "How does the auto-reminder work?",
-    a: "When you schedule a live class, the platform sends 3 automatic reminders: 24 hours before (email + WhatsApp), 1 hour before (WhatsApp), and 5 minutes before (push notification + WhatsApp). Students get the class link in every reminder. You don't send a single manual message.",
+    q: "How does the calendar scheduling work?",
+    a: "Open Dashboard → Calendar. You see a weekly or monthly view. Click a time slot to create a class, or drag an existing class to reschedule. Set recurring classes (e.g., every Monday and Wednesday at 5 PM for 12 weeks) in one click. Color-coded by course. Students see their own synced calendar on their dashboard — no separate Google Calendar invite needed. You can also export the full schedule as an .ics file for Google Calendar or Apple Calendar.",
+  },
+  {
+    q: "How do the 3-tier auto-reminders work?",
+    a: "The moment you schedule a class, the reminder engine is armed. (1) 24 hours before: WhatsApp message + email with class title, time, teacher name, and a direct 'Join Class' link. (2) 1 hour before: WhatsApp only — 'Starting in 1 hour, here's your link.' (3) 5 minutes before: push notification + WhatsApp — 'Class starts in 5 minutes, join now.' If a student hasn't joined 10 minutes after the class starts, they get a final nudge: 'Class is live — join now.' Parents of minor students also receive every reminder. You configure which channels are on/off and customize the message template per course.",
+  },
+  {
+    q: "What happens when I reschedule a class?",
+    a: "Drag the class to a new time slot in the calendar. The platform immediately sends a 'Schedule changed' notification to all enrolled students via WhatsApp and email: 'Spoken English moved from Wednesday 5 PM to Thursday 4 PM.' The student's calendar updates automatically. No manual WhatsApp group message needed.",
   },
   {
     q: "What if a student misses the class?",
@@ -176,6 +218,14 @@ const FEATURE_HIGHLIGHTS = [
   {
     q: "Can I teach in Hindi?",
     a: "Yes. The platform supports 10 Indian languages (Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam, Punjabi) plus English. Your public site, course content, and student dashboard all adapt. You can even create courses with mixed-language content.",
+  },
+  {
+    q: "How does 1:1 coaching work vs group classes?",
+    a: "You create a '1:1 Coaching' product in the storefront with per-session or monthly pricing. Students book from your site and pick a time slot. Each booking creates a private live class with its own link — separate from your group batches. Your calendar shows both: blue for 1:1 sessions, green for group classes. No overlap, no double-bookings. 1:1 students only see their own sessions, group students only see their batch. You see everything in one unified view.",
+  },
+  {
+    q: "Can I charge differently for 1:1 vs group?",
+    a: "Yes. Each product has its own pricing. Lovejeet charges ₹2,000/month for 1:1 coaching and ₹800/month for group batches. She can also offer per-session pricing (₹500 per 1:1 session) or package deals (10 sessions for ₹4,500). Each pricing model has its own payment link.",
   },
   {
     q: "What about payment collection?",
@@ -235,13 +285,14 @@ export default function LovejeetUseCasePage() {
             <div className="mx-auto max-w-3xl text-center">
               <SectionLabel>Real-world use case</SectionLabel>
               <h1 className="mt-4 text-4xl font-bold tracking-tight text-balance sm:text-5xl lg:text-6xl">
-                How Lovejeet teaches English to 80 students
-                <span className="text-primary"> without burning out.</span>
+                How Lovejeet runs 1:1 coaching &amp; group classes
+                <span className="text-primary"> without an assistant.</span>
               </h1>
               <p className="mt-6 text-lg leading-relaxed text-muted-foreground">
-                Lovejeet teaches spoken English and grammar in Chandigarh. She was spending 2 hours
-                every day just sending class reminders on WhatsApp. Here&apos;s how she replaced
-                manual admin work with a system that runs itself — and grew her batch from 30 to 80 students.
+                Lovejeet teaches spoken English in Chandigarh — 15 one-on-one coaching students
+                and 3 group batches of 20 each. She was spending 2 hours daily sending WhatsApp
+                reminders, juggling different Zoom links for each session, and tracking who paid for what.
+                Here&apos;s how she replaced the chaos with a system that handles 1:1 and group sessions equally well.
               </p>
             </div>
           </div>
@@ -257,17 +308,17 @@ export default function LovejeetUseCasePage() {
             <div className="mx-auto max-w-xl">
               <PersonaCard
                 name="Lovejeet Kaur"
-                role="English Teacher — Solo Instructor"
+                role="English Coach — 1:1 + Group Sessions"
                 emoji="👩‍🏫"
                 color="border-purple-200 dark:border-purple-800"
                 traits={[
                   "Teaches Spoken English, Grammar, and IELTS Prep in Chandigarh",
-                  "80 students across 3 batches (Class 8-10, College, Working professionals)",
-                  "Uses Zoom for live classes — different link every time",
-                  "Sends reminders manually on WhatsApp before every session",
-                  "Makes certificates in Canva one by one",
-                  "No website — students find her through WhatsApp forwards",
-                  "Biggest pain: 2 hours/day just on admin, not teaching",
+                  "15 one-on-one coaching students (personalized pace, flexible timing)",
+                  "3 group batches of 20 each (Class 8-10, College, Working professionals)",
+                  "Uses Zoom — different link for every 1:1 and every group session",
+                  "Tracks 1:1 schedules in a notebook, group schedules in WhatsApp",
+                  "Charges differently: ₹2,000/month for 1:1, ₹800/month for group",
+                  "Biggest pain: managing 15 individual schedules + 3 group schedules + reminders for ALL of them",
                 ]}
               />
             </div>
