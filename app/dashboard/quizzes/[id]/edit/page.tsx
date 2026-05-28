@@ -151,7 +151,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
         courseId,
         timeLimit: timeLimit ? parseInt(timeLimit) : undefined,
         passingScore: parseInt(passingScore) || 0,
-        maxAttempts: parseInt(maxAttempts) || 1,
+        maxAttempts: Math.max(0, parseInt(maxAttempts) || 0),
         shuffleQuestions,
         showAnswers,
         gradingMode,
@@ -287,12 +287,13 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                 />
               </div>
               <div className="space-y-2">
-                <Label>Associated Course</Label>
+                <Label>Course</Label>
                 <Select value={courseId} onValueChange={setCourseId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a course" />
+                    <SelectValue placeholder="Standalone (no course)" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="">Standalone (no course)</SelectItem>
                     {courses.map((course) => (
                       <SelectItem key={course.id} value={course.id}>
                         {course.title}
@@ -300,6 +301,9 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Optional — leave blank for a standalone quiz shared via link.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -519,9 +523,10 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                 <Input
                   type="number"
                   value={maxAttempts}
-                  onChange={(e) => setMaxAttempts(e.target.value)}
-                  min="1"
+                  onChange={(e) => setMaxAttempts(String(Math.max(0, Number(e.target.value) || 0)))}
+                  min={0}
                 />
+                <p className="text-xs text-muted-foreground">0 = unlimited attempts</p>
               </div>
               <div className="flex items-center space-x-2">
                 <Checkbox

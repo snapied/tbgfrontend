@@ -187,7 +187,7 @@ export default function StudentHomePage() {
       else if (!best.passed) {
         // Failed; only surface as "retry" if there are attempts left.
         const cap = quiz.maxAttempts
-        if (cap === 0 || mine.length < cap) status = "retry-available"
+        if (cap <= 0 || mine.length < cap) status = "retry-available"
       }
       if (!status) continue
       rows.push({
@@ -762,7 +762,7 @@ function QuizToDoItem({
         ? { icon: <RotateCcw className="h-4 w-4" />, label: "Retry available", cta: "Retry", tone: "bg-blue-500/15 text-blue-700 dark:text-blue-300" }
         : { icon: <Clock3 className="h-4 w-4" />, label: "Awaiting review", cta: "View", tone: "bg-violet-500/15 text-violet-700 dark:text-violet-300" }
   const remaining =
-    quiz.maxAttempts === 0
+    !quiz.maxAttempts || quiz.maxAttempts <= 0
       ? "Unlimited attempts"
       : `${Math.max(0, quiz.maxAttempts - attemptsUsed)} of ${quiz.maxAttempts} left`
   return (

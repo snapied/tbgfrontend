@@ -48,7 +48,7 @@ export function RosterPanel({ onClose }: { onClose: () => void }) {
             return (
               <div key={p.identity} className="flex items-center justify-between">
                 <div className="flex flex-col min-w-0">
-                  <span className="truncate text-sm font-medium">
+                  <span className="truncate text-sm font-medium text-foreground">
                     {p.name || p.identity} {isMe && "(You)"}
                   </span>
                 </div>

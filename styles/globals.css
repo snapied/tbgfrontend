@@ -154,3 +154,6 @@ p {
 .position-relative {
   position: relative !important;
 }
+.black {
+  color: #000 !important;
+}

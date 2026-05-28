@@ -115,7 +115,11 @@ export default function NewQuizPage() {
   // course + audience filter. Drives the recipients preview chip + the
   // notification fan-out.
   const enrolledStudents = useMemo<User[]>(() => {
-    if (!courseId) return []
+    if (!courseId) {
+      // Standalone quiz — all students across all courses
+      const allStudentIds = new Set(enrollments.map((e) => e.studentId))
+      return users.filter((u) => allStudentIds.has(u.id))
+    }
     const studentIds = enrollments
       .filter((e) => e.courseId === courseId)
       .map((e) => e.studentId)
@@ -184,8 +188,8 @@ export default function NewQuizPage() {
   }
 
   const handleSubmit = () => {
-    if (!title || !courseId || questions.length === 0) {
-      toast.error("Please fill in the title, pick a course, and add at least one question.")
+    if (!title || questions.length === 0) {
+      toast.error("Please fill in the title and add at least one question.")
       return
     }
 
@@ -197,7 +201,7 @@ export default function NewQuizPage() {
       questions,
       timeLimit: timeLimit ? parseInt(timeLimit) : undefined,
       passingScore: parseInt(passingScore),
-      maxAttempts: parseInt(maxAttempts),
+      maxAttempts: Math.max(0, parseInt(maxAttempts) || 0),
       shuffleQuestions,
       showAnswers,
       gradingMode,
@@ -346,17 +350,21 @@ export default function NewQuizPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="course">Course *</Label>
+                <Label htmlFor="course">Course</Label>
                 <Select value={courseId} onValueChange={setCourseId}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a course" />
+                    <SelectValue placeholder="Standalone (no course)" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="">Standalone (no course)</SelectItem>
                     {courses.map((course) => (
                       <SelectItem key={course.id} value={course.id}>{course.title}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Optional — leave blank to create a standalone quiz you can share via link.
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -606,9 +614,11 @@ export default function NewQuizPage() {
                 <Input
                   id="maxAttempts"
                   type="number"
+                  min={0}
                   value={maxAttempts}
-                  onChange={(e) => setMaxAttempts(e.target.value)}
+                  onChange={(e) => setMaxAttempts(String(Math.max(0, Number(e.target.value) || 0)))}
                 />
+                <p className="text-xs text-muted-foreground">0 = unlimited attempts</p>
               </div>
               <div className="flex items-center justify-between">
                 <Label htmlFor="shuffle">Shuffle Questions</Label>
@@ -684,9 +694,9 @@ export default function NewQuizPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {!courseId ? (
+              {enrolledStudents.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
-                  Pick a course above to see the eligible audience.
+                  {courseId ? "No students enrolled in this course yet." : "No students enrolled yet. You can still share the quiz via link after creating it."}
                 </p>
               ) : (
                 <>
@@ -698,7 +708,7 @@ export default function NewQuizPage() {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">
-                          Everyone enrolled ({enrolledStudents.length})
+                          {courseId ? `Everyone enrolled (${enrolledStudents.length})` : `All students (${enrolledStudents.length})`}
                         </SelectItem>
                         <SelectItem value="selected">Specific students…</SelectItem>
                         <SelectItem value="community" disabled={communityOptions.length === 0}>

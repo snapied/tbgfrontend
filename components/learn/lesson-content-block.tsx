@@ -66,7 +66,7 @@ export function LessonContentBlock({ lesson }: { lesson: Lesson }) {
             <p className="mt-1.5 text-xs text-muted-foreground">
               {quiz.questions.length} {quiz.questions.length === 1 ? "question" : "questions"} ·{" "}
               {quiz.passingScore}% to pass ·{" "}
-              {quiz.maxAttempts} {quiz.maxAttempts === 1 ? "attempt" : "attempts"}
+              {!quiz.maxAttempts || quiz.maxAttempts <= 0 ? "Unlimited attempts" : `${quiz.maxAttempts} ${quiz.maxAttempts === 1 ? "attempt" : "attempts"}`}
               {quiz.timeLimit ? ` · ${quiz.timeLimit} min limit` : ""}
             </p>
           </div>

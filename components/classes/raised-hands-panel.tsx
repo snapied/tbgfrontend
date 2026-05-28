@@ -100,7 +100,7 @@ export function RaisedHandsPanel({ sessionId, onClose }: Props) {
                       {initials}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[13px] font-medium">
+                      <p className="truncate text-[13px] font-medium black">
                         {h.name}
                         {isPrivate && (
                           <span className="ml-1.5 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">

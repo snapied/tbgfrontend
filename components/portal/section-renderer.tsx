@@ -443,7 +443,7 @@ function Hero({
       // pushing everything below off the fold on small screens.
       // The image still lazy-paints; the reserved box prevents the
       // layout jump.
-      className="relative min-h-[60vh] overflow-hidden border-b border-border md:min-h-[70vh]"
+      className="relative min-h-[40vh] overflow-hidden border-b border-border md:min-h-[50vh]"
       style={{ background: bg }}
     >
       {bgImage && overlay > 0 && (
@@ -455,7 +455,7 @@ function Hero({
           // (py-14 instead of py-20) so the hero doesn't dominate
           // the entire mobile viewport before content. Desktop
           // keeps the generous py-28.
-          "relative mx-auto max-w-5xl px-6 py-14 sm:py-20 lg:px-8 lg:py-28",
+          "relative mx-auto max-w-5xl px-6 py-10 sm:py-14 lg:px-8 lg:py-20",
           align === "center" ? "text-center" : "text-left",
         )}
       >
@@ -1064,10 +1064,26 @@ function Testimonials({
       </h2>
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {list.slice(0, 9).map((t) => (
-          <Card key={t.id}>
+          <Card key={t.id} className="overflow-hidden py-0">
+            {/* Media attachment — image or video above the quote */}
+            {t.mediaUrl && t.mediaKind === "video" && (
+              <div className="aspect-video bg-black">
+                <video src={t.mediaUrl} controls className="h-full w-full object-contain" />
+              </div>
+            )}
+            {t.mediaUrl && t.mediaKind === "image" && (
+              <div className="aspect-video overflow-hidden bg-muted">
+                <img src={t.mediaUrl} alt="" className="h-full w-full object-cover" />
+              </div>
+            )}
+            {t.mediaUrl && t.mediaKind === "audio" && (
+              <div className="border-b border-border bg-muted/30 px-4 py-3">
+                <audio src={t.mediaUrl} controls className="w-full" />
+              </div>
+            )}
             <CardContent className="p-6">
               <Quote className="h-5 w-5 text-accent" />
-              <p className="mt-3 text-sm leading-relaxed text-foreground/90">“{t.quote}”</p>
+              <p className="mt-3 text-sm leading-relaxed text-foreground/90">&ldquo;{t.quote}&rdquo;</p>
               {t.rating ? (
                 <div className="mt-3 flex items-center gap-0.5">
                   {[1, 2, 3, 4, 5].map((i) => (

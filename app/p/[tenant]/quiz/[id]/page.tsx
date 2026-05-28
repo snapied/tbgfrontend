@@ -1,43 +1,43 @@
 "use client"
 
-// Tenant-scoped quiz player. Mirrors /app/quiz/[id]/page.tsx but
-// lives inside the tenant subtree so:
-//   • The tenant resolver picks the right slug from the URL — which
-//     means the LMS store hydrates the right `currentUser` for the
-//     signed-in student, and `submitQuizAttempt` writes to the right
-//     tenant's `quizAttempts`. Without this route, attempts were
-//     getting stamped against the anonymous slug + studentId: "guest"
-//     and the student's /my/quizzes never saw them — quiz stayed at
-//     "Not started" even after submission.
-//   • The chrome (brand + home button) belongs to the tenant, not
-//     "The Big Class". Home routes to /p/<slug>/my for signed-in
-//     learners, /p/<slug> for guests.
-//
-// The platform-level /quiz/[id] page stays for guest links shared
-// outside any tenant context (rare, but worth keeping working).
+// Tenant-scoped quiz player. When a non-logged-in user opens a shared
+// quiz link, they see a guest entry form (name + email) before the
+// quiz. If the quiz isn't in localStorage (guest on another device),
+// it's fetched from the public-quiz API.
 
 import { use, useEffect, useState } from "react"
 import Link from "next/link"
-import { ArrowLeft, FileQuestion } from "lucide-react"
+import { ArrowLeft, FileQuestion, Loader2, Mail, User } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { QuizPlayer } from "@/components/quiz/quiz-player"
-import { useLMS } from "@/lib/lms-store"
+import { useLMS, type Quiz } from "@/lib/lms-store"
 import { useTenantBrand } from "@/lib/tenant-brand"
 
-const GUEST_ID_KEY = "thebigclass.quiz.guestId"
+const GUEST_KEY = "thebigclass.quiz.guest"
 
-function getOrCreateGuestId(): string {
-  if (typeof window === "undefined") return "guest"
+interface GuestInfo {
+  id: string
+  name: string
+  email: string
+}
+
+function loadGuest(): GuestInfo | null {
+  if (typeof window === "undefined") return null
   try {
-    const existing = window.localStorage.getItem(GUEST_ID_KEY)
-    if (existing) return existing
-    const id = `guest-${Math.random().toString(36).slice(2, 10)}`
-    window.localStorage.setItem(GUEST_ID_KEY, id)
-    return id
+    const raw = window.localStorage.getItem(GUEST_KEY)
+    return raw ? (JSON.parse(raw) as GuestInfo) : null
   } catch {
-    return "guest"
+    return null
   }
+}
+
+function saveGuest(info: GuestInfo) {
+  try {
+    window.localStorage.setItem(GUEST_KEY, JSON.stringify(info))
+  } catch { /* ignore */ }
 }
 
 export default function TenantQuizPage({
@@ -48,15 +48,64 @@ export default function TenantQuizPage({
   const { tenant, id } = use(params)
   const { getQuizById, currentUser, getCourseById } = useLMS()
   const brand = useTenantBrand()
-  const quiz = getQuizById(id)
-  const course = quiz ? getCourseById(quiz.courseId) : undefined
+  const localQuiz = getQuizById(id)
 
-  const [studentId, setStudentId] = useState<string>("guest")
+  // If the quiz isn't in localStorage (guest on another device),
+  // fetch it from the public-quiz API.
+  const [remoteQuiz, setRemoteQuiz] = useState<Quiz | null>(null)
+  const [loading, setLoading] = useState(!localQuiz)
   useEffect(() => {
-    setStudentId(currentUser?.id ?? getOrCreateGuestId())
+    if (localQuiz) { setLoading(false); return }
+    let cancelled = false
+    fetch(`/api/public-quiz/${id}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data.ok && data.quiz) setRemoteQuiz(data.quiz)
+      })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [id, localQuiz])
+
+  const quiz = localQuiz ?? remoteQuiz
+  const course = quiz?.courseId ? getCourseById(quiz.courseId) : undefined
+
+  const [guest, setGuest] = useState<GuestInfo | null>(null)
+  const [guestName, setGuestName] = useState("")
+  const [guestEmail, setGuestEmail] = useState("")
+
+  useEffect(() => {
+    if (!currentUser) {
+      const saved = loadGuest()
+      if (saved) setGuest(saved)
+    }
   }, [currentUser])
 
+  const studentId = currentUser?.id ?? guest?.id ?? "guest"
+  const isReady = !!currentUser || !!guest
   const homeHref = currentUser ? `/p/${tenant}/my` : `/p/${tenant}`
+
+  const handleGuestSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimName = guestName.trim()
+    const trimEmail = guestEmail.trim().toLowerCase()
+    if (!trimName || !trimEmail) return
+    const info: GuestInfo = {
+      id: `guest-${trimEmail.replace(/[^a-z0-9]/g, "").slice(0, 12)}-${Date.now().toString(36)}`,
+      name: trimName,
+      email: trimEmail,
+    }
+    saveGuest(info)
+    setGuest(info)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    )
+  }
 
   if (!quiz) {
     return (
@@ -120,6 +169,58 @@ export default function TenantQuizPage({
               <p className="mt-1 text-sm text-muted-foreground">
                 The creator hasn&apos;t added any questions. Check back later.
               </p>
+            </CardContent>
+          </Card>
+        ) : !isReady ? (
+          <Card className="mx-auto max-w-md">
+            <CardHeader className="text-center">
+              <CardTitle className="text-xl">{quiz.title}</CardTitle>
+              <CardDescription>
+                Enter your details to start the quiz
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleGuestSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="guest-name">Your name</Label>
+                  <div className="relative">
+                    <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="guest-name"
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      placeholder="e.g. Aanya Sharma"
+                      className="pl-9"
+                      required
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="guest-email">Email address</Label>
+                  <div className="relative">
+                    <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      id="guest-email"
+                      type="email"
+                      value={guestEmail}
+                      onChange={(e) => setGuestEmail(e.target.value)}
+                      placeholder="aanya@example.com"
+                      className="pl-9"
+                      required
+                    />
+                  </div>
+                </div>
+                <Button type="submit" className="w-full" size="lg">
+                  Continue to quiz
+                </Button>
+                <p className="text-center text-xs text-muted-foreground">
+                  Already have an account?{" "}
+                  <Link href={`/p/${tenant}/login?next=/p/${tenant}/quiz/${id}`} className="text-primary hover:underline">
+                    Sign in
+                  </Link>
+                </p>
+              </form>
             </CardContent>
           </Card>
         ) : (

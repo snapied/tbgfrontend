@@ -862,41 +862,35 @@ async function pullServerBlob(slug: string): Promise<void> {
   // lastPublishedAt timestamps. If local is newer, the server is behind us
   // (our flush is still in flight) — skip ALL live* keys entirely.
   const LIVE_KEY_NAMES: KeyName[] = ["liveConfig", "livePages", "liveFaculty", "liveTestimonials", "livePosts"]
-  // Read lastPublishedAt fresh from localStorage (not preSnapshot) because
-  // publishDraft() may have written it after we took the snapshot above.
+  const DRAFT_KEY_NAMES: KeyName[] = ["config", "pages", "faculty", "testimonials", "posts"]
+
+  // ─── Published-at guard (protects live* keys) ─────────────────────
   const localPublishedAtKey = `thebigclass.t.${slug}.${KEY_SUFFIXES.lastPublishedAt}`
   const localPublishedAtRaw = window.localStorage.getItem(localPublishedAtKey)
   const serverPublishedAtRaw = serverState[KEY_SUFFIXES.lastPublishedAt]
   const localPublishedAt = localPublishedAtRaw ? new Date(JSON.parse(localPublishedAtRaw) as string).getTime() : 0
   const serverPublishedAt = serverPublishedAtRaw ? new Date(serverPublishedAtRaw as string).getTime() : 0
-  // Local has published more recently than the server knows about → skip live* keys.
-  const localAheadOfServer = localPublishedAt > serverPublishedAt
+  const localPublishAhead = localPublishedAt > serverPublishedAt
 
-  // Three-way sync between localStorage and the server blob, keyed by
-  // each known portal suffix. The matrix:
-  //   server-only      → write into localStorage (incognito visitor's
-  //                      first paint becomes the right brand/pages)
-  //   localStorage-only → upload to server (one-shot bootstrap for the
-  //                      teacher whose data lived only locally before
-  //                      the server store existed)
-  //   both present     → server wins UNLESS the local value changed
-  //                      during the fetch (user was editing while the
-  //                      server was slow — keep the fresh local edit)
-  //   neither          → leave defaults
+  // Three-way sync between localStorage and the server blob.
   for (const name of Object.keys(KEY_SUFFIXES) as KeyName[]) {
-    // If we published locally but the server doesn't know yet, don't let
-    // the server's stale live* values overwrite our fresh published state.
-    if (localAheadOfServer && LIVE_KEY_NAMES.includes(name)) continue
+    // Guard: local published more recently → skip live* keys
+    if (localPublishAhead && LIVE_KEY_NAMES.includes(name)) continue
+    // Guard: local draft keys that already exist locally are NEVER
+    // overwritten by server data. localStorage is the source of truth
+    // for the editing browser. Server data only fills empty slots
+    // (fresh browser / incognito).
+    if (DRAFT_KEY_NAMES.includes(name)) {
+      const localDraftKey = `thebigclass.t.${slug}.${KEY_SUFFIXES[name]}`
+      if (window.localStorage.getItem(localDraftKey)) continue
+    }
 
     const suffix = KEY_SUFFIXES[name]
     const lsKey = `thebigclass.t.${slug}.${suffix}`
     const inServer = Object.prototype.hasOwnProperty.call(serverState, suffix)
     const lsRaw = window.localStorage.getItem(lsKey)
     if (inServer) {
-      // Skip overwriting if the local value changed while we were fetching
-      // (e.g. the user edited the Display Name while the server GET was in
-      // flight). Their write is fresher than anything the server can return
-      // from this request — the next autosave/publish will push it up.
+      // Skip if local value changed during the fetch
       if (lsRaw !== preSnapshot.get(lsKey)) continue
       try {
         window.localStorage.setItem(lsKey, JSON.stringify(serverState[suffix]))
@@ -1037,7 +1031,11 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // portal. They should see the LIVE snapshot, not the editor draft.
   // Everywhere else (the dashboard) sees the draft so edits show up
   // immediately while the creator works.
-  const publishedView = !!pathname?.startsWith("/p/")
+  // Exception: ?preview=true (set by the dashboard's live preview
+  // iframe) forces draft mode so the teacher sees real-time changes
+  // without having to publish first.
+  const isPreview = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("preview") === "true"
+  const publishedView = !!pathname?.startsWith("/p/") && !isPreview
 
   // Draft state — what the dashboard editor mutates.
   const [config, setConfig] = useState<PortalConfig>(DEFAULT_PORTAL_CONFIG)
@@ -1189,26 +1187,39 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     setLastPublishedAt(loadJSON<string | null>(slug, "lastPublishedAt", null))
   }, [slug])
 
-  // Initial hydrate. First paints from whatever's in localStorage
-  // (instant, may be empty in a fresh browser), then asynchronously
-  // pulls the server-stored blob for this tenant and re-hydrates.
-  // That second pass is what makes the brand + pages visible in a
-  // separate browser / incognito window that's never edited locally.
+  // Initial hydrate from localStorage — always instant, always runs.
+  //
+  // Server pull (pullServerBlob) ONLY runs on the PUBLIC portal route
+  // (/p/<tenant>) when localStorage is empty. This is the incognito /
+  // new-device scenario where the server is the only source of truth.
+  //
+  // On the dashboard (/dashboard/*) and preview iframes (?preview=true),
+  // localStorage IS the source of truth — the server is just a mirror.
+  // Pulling from the server on the dashboard caused a persistent bug:
+  // stale server data overwrote localStorage, reverting the user's
+  // published edits on refresh.
+  const isPublicRoute = !!pathname?.startsWith("/p/")
   useEffect(() => {
     hydrate()
     setHydrated(true)
+
+    // Dashboard + preview iframe: localStorage only, no server pull.
+    if (!isPublicRoute || isPreview) return
+
+    // Public route: pull from server only if localStorage is empty
+    // (fresh browser visiting the public site for the first time).
+    const hasLocalConfig = typeof window !== "undefined" && !!window.localStorage.getItem(
+      `thebigclass.t.${slug}.${KEY_SUFFIXES.config}`,
+    )
+    if (hasLocalConfig) return
+
     let cancelled = false
     void pullServerBlob(slug).then(() => {
       if (cancelled) return
-      // Re-run the same hydrate path so all the state setters see the
-      // newly-populated localStorage. Cheap — it's the same code that
-      // runs on mount.
       hydrate()
     })
-    return () => {
-      cancelled = true
-    }
-  }, [hydrate, slug])
+    return () => { cancelled = true }
+  }, [hydrate, slug, isPreview, isPublicRoute])
 
   // Cross-frame sync. The `storage` event fires in OTHER same-origin
   // windows (including iframes) when localStorage is written. We
@@ -1230,8 +1241,13 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // dialog substituted it on insert still carry the literal text.
   // Idempotent — once replaced the placeholder is gone, so this effect
   // is a no-op on subsequent renders.
+  // One-time placeholder replacement — runs once after hydrate, not on
+  // every pages change. A ref tracks whether we've already checked.
+  const placeholderChecked = useRef(false)
   useEffect(() => {
     if (!hydrated || !ownerEmail || pages.length === 0) return
+    if (placeholderChecked.current) return
+    placeholderChecked.current = true
     const PLACEHOLDER = "[YOUR-SUPPORT-EMAIL]"
     let changed = false
     const next = pages.map((p) => {
@@ -1271,36 +1287,42 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   // saveJSON calls and server POSTs. (The isHydrating.current guard was
   // unreliable because React 18 batches state updates asynchronously, so
   // effects always ran after isHydrating was reset to false.)
+  // Persist draft state to localStorage. CRITICAL: skip until hydrated
+  // is true. Without this guard, the persistence effect fires on the
+  // first render with the initial useState value (pages=[]), which
+  // overwrites the correct data in localStorage BEFORE hydrate()'s
+  // setPages() triggers a re-render. This was the root cause of the
+  // "content reverting to Welcome" bug.
   useEffect(() => {
-    if (typeof window === "undefined" || !slug) return
+    if (!hydrated || isPreview || typeof window === "undefined" || !slug) return
     const next = JSON.stringify(config)
     if (window.localStorage.getItem(tk(slug, "config")) !== next) saveJSON(slug, "config", config)
-  }, [slug, config])
+  }, [slug, config, isPreview, hydrated])
   useEffect(() => {
-    if (typeof window === "undefined" || !slug) return
+    if (!hydrated || isPreview || typeof window === "undefined" || !slug) return
     const next = JSON.stringify(pages)
     if (window.localStorage.getItem(tk(slug, "pages")) !== next) saveJSON(slug, "pages", pages)
-  }, [slug, pages])
+  }, [slug, pages, isPreview, hydrated])
   useEffect(() => {
-    if (typeof window === "undefined" || !slug) return
+    if (!hydrated || isPreview || typeof window === "undefined" || !slug) return
     const next = JSON.stringify(faculty)
     if (window.localStorage.getItem(tk(slug, "faculty")) !== next) saveJSON(slug, "faculty", faculty)
-  }, [slug, faculty])
+  }, [slug, faculty, isPreview, hydrated])
   useEffect(() => {
-    if (typeof window === "undefined" || !slug) return
+    if (!hydrated || isPreview || typeof window === "undefined" || !slug) return
     const next = JSON.stringify(testimonials)
     if (window.localStorage.getItem(tk(slug, "testimonials")) !== next) saveJSON(slug, "testimonials", testimonials)
-  }, [slug, testimonials])
+  }, [slug, testimonials, isPreview, hydrated])
   useEffect(() => {
-    if (typeof window === "undefined" || !slug) return
+    if (!hydrated || isPreview || typeof window === "undefined" || !slug) return
     const next = JSON.stringify(posts)
     if (window.localStorage.getItem(tk(slug, "posts")) !== next) saveJSON(slug, "posts", posts)
-  }, [slug, posts])
+  }, [slug, posts, isPreview, hydrated])
   useEffect(() => {
-    if (typeof window === "undefined" || !slug) return
+    if (!hydrated || isPreview || typeof window === "undefined" || !slug) return
     const next = JSON.stringify(leads)
     if (window.localStorage.getItem(tk(slug, "leads")) !== next) saveJSON(slug, "leads", leads)
-  }, [slug, leads])
+  }, [slug, leads, isPreview, hydrated])
 
   // ────────────────────────────────────────────────────────────────
   // Publishing.

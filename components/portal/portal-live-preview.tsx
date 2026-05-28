@@ -75,18 +75,18 @@ export function PortalLivePreview({
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const firstChangeSkip = useRef(true)
 
-  // Auto-refresh: reload the iframe ONLY when the PUBLISHED state
-  // changes (i.e. after the user clicks "Publish changes" or restores
-  // a version). Draft edits must NOT trigger a reload — if they did,
-  // every keystroke would cause the iframe to refresh and the user
-  // would see draft content in the "Real site preview", making it look
-  // like changes go live immediately without publishing.
+  // The iframe loads with ?preview=true so the PortalProvider inside
+  // it reads DRAFT data (not the published snapshot). Since parent
+  // and iframe share localStorage on the same origin, draft writes
+  // from the editor trigger a `storage` event in the iframe →
+  // PortalProvider.hydrate() → real-time preview without reload.
+  // We still bump reloadKey on publish/restore so the iframe picks
+  // up any structural changes (new page, deleted section, etc.)
+  // that the storage-event path might miss.
   const { lastPublishedAt } = usePortal()
   useEffect(() => {
     if (!autoRefresh) return
     if (firstChangeSkip.current) {
-      // Don't bump on the initial mount — the iframe is already
-      // loading with the current state.
       firstChangeSkip.current = false
       return
     }
@@ -95,11 +95,7 @@ export function PortalLivePreview({
   }, [autoRefresh, lastPublishedAt])
 
   const fullUrl = `/p/${tenant}${path === "/" ? "" : path}`
-  // Cache-busting: only changes when reloadKey bumps (publish or
-  // manual refresh). MUST NOT include Date.now() — that changes on
-  // every render, causing the browser to navigate the iframe on
-  // every parent re-render → infinite reload loop.
-  const iframeSrc = `${fullUrl}${fullUrl.includes("?") ? "&" : "?"}_t=${reloadKey}`
+  const iframeSrc = `${fullUrl}${fullUrl.includes("?") ? "&" : "?"}preview=true&_t=${reloadKey}`
 
   // Measure the visible width of the iframe container BEFORE first
   // paint. Using useLayoutEffect (not useEffect) ensures the

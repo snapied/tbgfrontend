@@ -1022,7 +1022,7 @@ function InClassShell({
   const reconnect = useReconnectGuard()
 
   return (
-    <main className="fixed inset-0 z-50 flex flex-col bg-background overflow-hidden">
+    <main className="fixed inset-0 z-50 flex flex-col bg-background text-foreground overflow-hidden">
       <div className="flex h-12 shrink-0 items-center justify-between border-b border-border/60 bg-card px-4">
         <Link
           href={`/p/${tenant}`}

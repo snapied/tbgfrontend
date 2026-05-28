@@ -588,3 +588,6 @@ div[data-slot="dialog-footer"] {
   POSITION: relative;
   BOTTOM: 0;
 }
+.black {
+  color: #000 !important
+}

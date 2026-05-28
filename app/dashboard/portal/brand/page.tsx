@@ -1244,28 +1244,28 @@ function PortalBrandPageInner() {
                 label="Google Analytics 4 ID"
                 provider="ga4"
                 value={config.analytics?.ga4MeasurementId ?? ""}
-                onChange={(v) => updateConfig({ analytics: { ...(config.analytics ?? {}), ga4MeasurementId: v || undefined } })}
+                onChange={(v) => updateConfig((prev) => ({ analytics: { ...(prev.analytics ?? {}), ga4MeasurementId: v || undefined } }))}
                 placeholder="G-XXXXXXXXXX"
               />
               <AnalyticsField
                 label="Plausible domain"
                 provider="plausible"
                 value={config.analytics?.plausibleDomain ?? ""}
-                onChange={(v) => updateConfig({ analytics: { ...(config.analytics ?? {}), plausibleDomain: v || undefined } })}
+                onChange={(v) => updateConfig((prev) => ({ analytics: { ...(prev.analytics ?? {}), plausibleDomain: v || undefined } }))}
                 placeholder="acme.thebigclass.com"
               />
               <AnalyticsField
                 label="Hotjar Site ID"
                 provider="hotjar"
                 value={config.analytics?.hotjarId ?? ""}
-                onChange={(v) => updateConfig({ analytics: { ...(config.analytics ?? {}), hotjarId: v || undefined } })}
+                onChange={(v) => updateConfig((prev) => ({ analytics: { ...(prev.analytics ?? {}), hotjarId: v || undefined } }))}
                 placeholder="1234567"
               />
               <AnalyticsField
                 label="Meta Pixel ID"
                 provider="metaPixel"
                 value={config.analytics?.metaPixelId ?? ""}
-                onChange={(v) => updateConfig({ analytics: { ...(config.analytics ?? {}), metaPixelId: v || undefined } })}
+                onChange={(v) => updateConfig((prev) => ({ analytics: { ...(prev.analytics ?? {}), metaPixelId: v || undefined } }))}
                 placeholder="1234567890"
               />
               <div className="sm:col-span-2">
@@ -1275,7 +1275,7 @@ function PortalBrandPageInner() {
                 </p>
                 <textarea
                   value={config.analytics?.customHeadHtml ?? ""}
-                  onChange={(e) => updateConfig({ analytics: { ...(config.analytics ?? {}), customHeadHtml: e.target.value || undefined } })}
+                  onChange={(e) => updateConfig((prev) => ({ analytics: { ...(prev.analytics ?? {}), customHeadHtml: e.target.value || undefined } }))}
                   placeholder={'<meta name="google-site-verification" content="..." />'}
                   rows={5}
                   className="block w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs text-foreground outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
@@ -1828,33 +1828,14 @@ function LocalSyncInput({
 }) {
   const [value, setValue] = useState<string>(storedValue ?? fallbackValue)
   const focusedRef = useRef(false)
-  // Timestamp (ms) of the last blur. We ignore store updates for
-  // BLUR_LOCK_MS after a blur so the async save can't clobber the
-  // value the user just typed.
-  const blurredAtRef = useRef<number>(0)
-  const BLUR_LOCK_MS = 1500
 
-  // Sync external store changes into local state — but only when:
-  //  1. The field is not focused, and
-  //  2. It has been more than BLUR_LOCK_MS since the last blur.
-  useEffect(() => {
-    if (focusedRef.current) return
-    if (Date.now() - blurredAtRef.current < BLUR_LOCK_MS) return
-    const next = storedValue ?? fallbackValue
-    if (next !== value) {
-      setValue(next)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storedValue, fallbackValue])
-
-  const handleFocus = () => {
-    focusedRef.current = true
-  }
-
-  const handleBlur = () => {
-    focusedRef.current = false
-    blurredAtRef.current = Date.now()
-    onChange(value)
+  // Sync external changes into local state when not focused
+  const prevStored = useRef(storedValue)
+  const prevFallback = useRef(fallbackValue)
+  if (storedValue !== prevStored.current || fallbackValue !== prevFallback.current) {
+    prevStored.current = storedValue
+    prevFallback.current = fallbackValue
+    if (!focusedRef.current) setValue(storedValue ?? fallbackValue)
   }
 
   return (
@@ -1862,13 +1843,12 @@ function LocalSyncInput({
       id={id}
       value={value}
       placeholder={placeholder}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-      onChange={(e) => {
-        const v = e.target.value
-        setValue(v)
-        onChange(v)
+      onFocus={() => { focusedRef.current = true }}
+      onBlur={() => {
+        focusedRef.current = false
+        onChange(value)
       }}
+      onChange={(e) => setValue(e.target.value)}
     />
   )
 }

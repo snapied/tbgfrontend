@@ -116,7 +116,9 @@ export function QuizPlayer({ quiz, studentId, onExit, onComplete }: QuizPlayerPr
     [getAttemptsForQuiz, quiz.id, effectiveStudentId],
   )
   const attemptsUsed = prevAttempts.length
-  const attemptsRemaining = Math.max(0, quiz.maxAttempts - attemptsUsed)
+  // maxAttempts <= 0 means unlimited attempts
+  const unlimitedAttempts = !quiz.maxAttempts || quiz.maxAttempts <= 0
+  const attemptsRemaining = unlimitedAttempts ? Infinity : Math.max(0, quiz.maxAttempts - attemptsUsed)
   const bestScore = prevAttempts
     .filter((a) => (a.status ?? "graded") === "graded")
     .reduce((m, a) => Math.max(m, a.score), 0)
@@ -373,7 +375,7 @@ export function QuizPlayer({ quiz, studentId, onExit, onComplete }: QuizPlayerPr
   // -------- RENDER --------
 
   if (phase === "intro") {
-    const noAttemptsLeft = attemptsRemaining <= 0
+    const noAttemptsLeft = !unlimitedAttempts && attemptsRemaining <= 0
     return (
       <Card className="border-border/60 shadow-sm">
         <CardContent className="p-6 sm:p-8 space-y-6">
@@ -408,14 +410,14 @@ export function QuizPlayer({ quiz, studentId, onExit, onComplete }: QuizPlayerPr
             <StatTile
               icon={<RotateCcw className="h-4 w-4" />}
               label="Attempts"
-              value={`${attemptsUsed}/${quiz.maxAttempts}`}
+              value={unlimitedAttempts ? `${attemptsUsed}/∞` : `${attemptsUsed}/${quiz.maxAttempts}`}
             />
           </div>
 
           <div className="rounded-lg border border-border/60 bg-muted/40 p-4 text-sm">
             <p className="font-medium">Before you begin</p>
             <ul className="mt-2 space-y-1 text-muted-foreground">
-              <li>• You have {attemptsRemaining} attempt{attemptsRemaining === 1 ? "" : "s"} remaining.</li>
+              <li>• {unlimitedAttempts ? "You have unlimited attempts." : `You have ${attemptsRemaining} attempt${attemptsRemaining === 1 ? "" : "s"} remaining.`}</li>
               {quiz.timeLimit && (
                 <li>• The timer starts the moment you press Start.</li>
               )}
@@ -503,7 +505,7 @@ export function QuizPlayer({ quiz, studentId, onExit, onComplete }: QuizPlayerPr
         quiz={quiz}
         attempt={resultAttempt}
         answers={resultAttempt.answers ?? answers}
-        attemptsRemaining={Math.max(0, quiz.maxAttempts - attemptsUsed)}
+        attemptsRemaining={unlimitedAttempts ? Infinity : Math.max(0, quiz.maxAttempts - attemptsUsed)}
         onRetry={startQuiz}
         onExit={onExit}
       />
@@ -924,7 +926,7 @@ function ResultsView({
             {canRetry && (
               <Button onClick={onRetry} variant={passed ? "outline" : "default"}>
                 <RotateCcw className="mr-2 h-4 w-4" />
-                Retry ({attemptsRemaining} left)
+                Retry{attemptsRemaining === Infinity ? "" : ` (${attemptsRemaining} left)`}
               </Button>
             )}
             {onExit && (

@@ -610,7 +610,7 @@ export interface Quiz {
   id: string
   title: string
   description: string
-  courseId: string
+  courseId: string  // empty string = standalone quiz (not tied to a course)
   moduleId?: string
   lessonId?: string
   questions: QuizQuestion[]
@@ -2640,6 +2640,33 @@ export function LMSProvider({ children }: { children: ReactNode }) {
     if (!liveSessionsHydrated) return
     persistTenantSlice(tenantSlug, KEY_SUFFIXES.liveSessions, liveSessions)
   }, [liveSessions, liveSessionsHydrated, tenantSlug])
+
+  // Auto-stamp wasHeld on sessions whose time window has passed.
+  // Without this, a class that ended (teacher closed the tab without
+  // going through the wrap wizard) stays in "upcoming/live" forever
+  // because wasHeld is never set. Runs once on hydration AND every
+  // 60s so a class that ends while the dashboard is open also moves.
+  useEffect(() => {
+    if (!liveSessionsHydrated) return
+    const stamp = () => {
+      const now = Date.now()
+      setLiveSessions((prev) => {
+        let changed = false
+        const next = prev.map((s) => {
+          if (s.status === "cancelled") return s
+          if (s.wasHeld !== undefined) return s
+          const end = new Date(s.scheduledAt).getTime() + s.durationMinutes * 60 * 1000
+          if (now > end) { changed = true; return { ...s, wasHeld: true } }
+          return s
+        })
+        return changed ? next : prev
+      })
+    }
+    stamp()
+    const interval = setInterval(stamp, 60_000)
+    return () => clearInterval(interval)
+  }, [liveSessionsHydrated])
+
   useEffect(() => {
     if (!attendanceHydrated) return
     persistTenantSlice(tenantSlug, KEY_SUFFIXES.attendance, attendance)
@@ -3332,9 +3359,21 @@ export function LMSProvider({ children }: { children: ReactNode }) {
   const isEnrolled = useCallback((courseId: string, studentId: string) => 
     enrollments.some(e => e.courseId === courseId && e.studentId === studentId), [enrollments])
   
+  // Auto-publish quiz to the public API so shared links work across
+  // devices. Fire-and-forget — failure is non-fatal.
+  const publishQuizToPublicApi = useCallback((quiz: Quiz) => {
+    if (typeof window === "undefined") return
+    fetch(`/api/public-quiz/${quiz.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quiz }),
+    }).catch(() => { /* non-fatal */ })
+  }, [])
+
   const addQuiz = useCallback((quiz: Quiz) => {
     setQuizzes(prev => [...prev, quiz])
-  }, [])
+    publishQuizToPublicApi(quiz)
+  }, [publishQuizToPublicApi])
 
   // Re-read quizzes from localStorage. The store hydrates once on
   // mount and otherwise stays in memory, so a quiz created in
@@ -3351,8 +3390,13 @@ export function LMSProvider({ children }: { children: ReactNode }) {
   }, [tenantSlug])
 
   const updateQuiz = useCallback((id: string, updates: Partial<Quiz>) => {
-    setQuizzes(prev => prev.map(q => q.id === id ? { ...q, ...updates } : q))
-  }, [])
+    setQuizzes(prev => {
+      const next = prev.map(q => q.id === id ? { ...q, ...updates } : q)
+      const updated = next.find(q => q.id === id)
+      if (updated) publishQuizToPublicApi(updated)
+      return next
+    })
+  }, [publishQuizToPublicApi])
 
   const deleteQuiz = useCallback((id: string) => {
     setQuizzes(prev => {

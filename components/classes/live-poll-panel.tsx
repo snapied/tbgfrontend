@@ -11,7 +11,7 @@
 // to breakouts/agenda.
 
 import { useEffect, useState } from "react"
-import { BarChart3, Check, Play, PlusCircle, Sparkles, X } from "lucide-react"
+import { BarChart3, Play, PlusCircle, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -103,7 +103,7 @@ function HostPanel({
   const Header = (
     <div className="flex items-center justify-between gap-2 border-b border-border pb-2">
       <div className="min-w-0">
-        <p className="text-sm font-semibold">Live poll</p>
+        <p className="text-sm font-semibold text-foreground">Live poll</p>
         <p className="text-[11px] text-muted-foreground">
           One poll at a time · students see it instantly
         </p>
@@ -151,7 +151,7 @@ function HostPanel({
                     className="group flex w-full items-center gap-2 rounded-md border border-primary/20 bg-card px-2 py-1.5 text-left text-[12px] transition-all hover:border-primary hover:shadow-sm"
                     title={`Launch poll: ${p.question}`}
                   >
-                    <span className="line-clamp-1 min-w-0 flex-1 font-medium">
+                    <span className="line-clamp-1 min-w-0 flex-1 font-medium text-foreground">
                       {p.question || "(untitled)"}
                     </span>
                     <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold text-primary-foreground opacity-90 transition-opacity group-hover:opacity-100">
@@ -209,7 +209,7 @@ function HostPanel({
     <div className="flex h-full flex-col">
       {Header}
       <div className="mt-3 space-y-2">
-        <p className="text-sm font-medium">{poll.question}</p>
+        <p className="text-sm font-medium text-foreground">{poll.question}</p>
         <p className="text-[11px] text-muted-foreground">
           {total} {total === 1 ? "vote" : "votes"}
           {poll.closedAt && " · poll closed"}
@@ -223,44 +223,30 @@ function HostPanel({
             variant="outline"
             onClick={() => {
               closePoll(sessionId)
-              // Snapshot the current poll state into the host
-              // callback so the consumer can compute winner +
-              // total votes for the results-broadcast notif.
               onClosed?.(poll)
             }}
           >
             Close poll
           </Button>
         ) : (
-          <Button size="sm" onClick={() => setComposerOpen(true)}>
-            <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> New poll
-          </Button>
+          <>
+            <Button size="sm" onClick={() => {
+              clearPoll(sessionId)
+              setComposerOpen(true)
+            }}>
+              <PlusCircle className="mr-1.5 h-3.5 w-3.5" /> New poll
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() => clearPoll(sessionId)}
+            >
+              Clear
+            </Button>
+          </>
         )}
-        <Button
-          size="sm"
-          variant="ghost"
-          className="text-destructive hover:text-destructive"
-          onClick={() => clearPoll(sessionId)}
-        >
-          Clear
-        </Button>
       </div>
-      {composerOpen && (
-        <div className="mt-3 border-t border-border pt-3">
-          <Composer
-            question={question}
-            setQuestion={setQuestion}
-            options={options}
-            setOptions={setOptions}
-            launchable={launchable}
-            onCancel={() => setComposerOpen(false)}
-            onLaunch={() => {
-              const next = launchPoll(sessionId, { question, optionLabels: options })
-              onLaunched?.(next)
-            }}
-          />
-        </div>
-      )}
     </div>
   )
 }
@@ -279,53 +265,38 @@ function StudentPanel({
   const myVote = poll.votes[viewerId]
   const locked = !!poll.closedAt
 
-  // Once submitted, remove from student UI to keep it clean (unless it's closed and showing final results)
-  if (myVote && !locked) {
-    return null
-  }
+  // Already voted and poll still open — remove from view
+  if (myVote && !locked) return null
 
   const tally = tallyPoll(poll)
   const total = Object.keys(poll.votes).length
+
   return (
     <div className="space-y-3 rounded-md border border-primary/20 bg-primary/[0.04] p-3">
       <div>
         <p className="text-[11px] font-bold uppercase tracking-wider text-primary">
           Live poll
         </p>
-        <p className="mt-1 text-sm font-semibold">{poll.question}</p>
+        <p className="mt-1 text-sm font-semibold text-foreground">{poll.question}</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
           {total} {total === 1 ? "vote" : "votes"}
           {locked && " · closed"}
         </p>
       </div>
-      {/* Once the poll is closed, render results only. While open,
-          show the buttons; the student's current pick is filled. */}
       {locked ? (
         <ResultBars tally={tally} />
       ) : (
         <div className="space-y-1.5">
-          {poll.options.map((opt) => {
-            const picked = myVote === opt.id
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => castVote(sessionId, viewerId, opt.id)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors",
-                  picked
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background hover:border-primary/40",
-                )}
-              >
-                {picked && <Check className="h-3.5 w-3.5" />}
-                <span className="min-w-0 flex-1 truncate">{opt.label}</span>
-                <span className={cn("text-[11px] tabular-nums", picked ? "opacity-80" : "text-muted-foreground")}>
-                  {tally.find((t) => t.optionId === opt.id)?.count ?? 0}
-                </span>
-              </button>
-            )
-          })}
+          {poll.options.map((opt) => (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => castVote(sessionId, viewerId, opt.id)}
+              className="flex w-full items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-left text-sm transition-colors hover:border-primary/40"
+            >
+              <span className="min-w-0 flex-1 truncate text-foreground">{opt.label}</span>
+            </button>
+          ))}
         </div>
       )}
     </div>
@@ -341,7 +312,7 @@ function ResultBars({ tally }: { tally: ReturnType<typeof tallyPoll> }) {
         return (
           <li key={t.optionId} className="space-y-1">
             <div className="flex items-center justify-between text-[12px]">
-              <span className={cn("font-medium", isWinner && "text-primary")}>
+              <span className={cn("font-medium text-foreground", isWinner && "text-primary")}>
                 {t.label}
               </span>
               <span className="tabular-nums text-muted-foreground">

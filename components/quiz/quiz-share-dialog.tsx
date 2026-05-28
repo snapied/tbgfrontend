@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import type { Quiz } from "@/lib/lms-store"
+import { useTenant } from "@/lib/tenant-store"
 
 interface QuizShareDialogProps {
   quiz: Quiz
@@ -34,11 +35,18 @@ interface QuizShareDialogProps {
 export function QuizShareDialog({ quiz, open, onOpenChange }: QuizShareDialogProps) {
   const [copied, setCopied] = useState(false)
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
+  const { currentTenant, tenants } = useTenant()
 
+  // Always use subdomain format: tenant.thebigclass.com/quiz/{id}
+  // Try currentTenant first, then first active tenant from the array.
   const shareUrl = useMemo(() => {
+    const slug = currentTenant?.slug
+      ?? tenants.find((t) => t.status === "active")?.slug
+      ?? tenants[0]?.slug
+    if (slug) return `https://${slug}.thebigclass.com/quiz/${quiz.id}`
     if (typeof window === "undefined") return `/quiz/${quiz.id}`
     return `${window.location.origin}/quiz/${quiz.id}`
-  }, [quiz.id])
+  }, [quiz.id, currentTenant?.slug, tenants])
 
   useEffect(() => {
     if (!open) {
@@ -46,6 +54,14 @@ export function QuizShareDialog({ quiz, open, onOpenChange }: QuizShareDialogPro
       return
     }
     let cancelled = false
+
+    // Publish the quiz to the server so guests on other devices can access it
+    fetch(`/api/public-quiz/${quiz.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ quiz }),
+    }).catch(() => { /* non-fatal */ })
+
     QRCode.toDataURL(shareUrl, {
       margin: 1,
       width: 240,
@@ -60,7 +76,7 @@ export function QuizShareDialog({ quiz, open, onOpenChange }: QuizShareDialogPro
     return () => {
       cancelled = true
     }
-  }, [open, shareUrl])
+  }, [open, shareUrl, quiz])
 
   const handleCopy = async () => {
     try {
@@ -169,7 +185,7 @@ export function QuizShareDialog({ quiz, open, onOpenChange }: QuizShareDialogPro
             <SettingRow
               icon={<RotateCcw className="h-3.5 w-3.5" />}
               label="Attempts"
-              value={`${quiz.maxAttempts}`}
+              value={!quiz.maxAttempts || quiz.maxAttempts <= 0 ? "Unlimited" : `${quiz.maxAttempts}`}
             />
           </div>
         </div>

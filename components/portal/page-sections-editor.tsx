@@ -9,7 +9,7 @@
 // the actual page on the right. Each section card has the fields
 // relevant to its kind, plus reorder up/down, show/hide, and delete.
 
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowDown,
   ArrowUp,
@@ -434,7 +434,7 @@ export function PageSectionsEditor({
                             </span>
                           )}
                         </p>
-                        <p className="truncate text-xs text-muted-foreground">
+                        <p className="line-clamp-2 break-words text-xs text-muted-foreground">
                           {sectionSummary(section)}
                         </p>
                       </div>
@@ -499,21 +499,11 @@ export function PageSectionsEditor({
 
         {/* Right: live preview */}
         <div className="lg:sticky lg:top-6 lg:self-start" data-tour="live-preview">
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <CardTitle>Live preview</CardTitle>
-              <CardDescription>
-                Updates a moment after each edit. Toggle devices in the iframe chrome.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {tenantSlug ? (
-                <PortalLivePreview tenant={tenantSlug} path={previewPath} height={620} />
-              ) : (
-                <p className="text-sm text-muted-foreground">Tenant loading…</p>
-              )}
-            </CardContent>
-          </Card>
+          {tenantSlug ? (
+            <PortalLivePreview tenant={tenantSlug} path={previewPath} height={620} />
+          ) : (
+            <p className="text-sm text-muted-foreground">Tenant loading…</p>
+          )}
         </div>
       </div>
 
@@ -662,6 +652,21 @@ function AddSectionMenu({ onPick }: { onPick: (kind: SectionKind) => void }) {
 // Section editor — dispatches by kind
 // ============================================================
 
+// Blur-save input — owns local state, pushes to store on blur only.
+// No debounce, no keystroke-level store writes. Simple and reliable.
+function BlurInput({ value, onCommit, ...rest }: Omit<React.ComponentProps<typeof Input>, "onChange" | "onBlur" | "value"> & { value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState(value)
+  const ref = useRef(value)
+  if (value !== ref.current) { ref.current = value; setLocal(value) }
+  return <Input value={local} onChange={(e) => setLocal(e.target.value)} onBlur={() => { if (local !== value) onCommit(local) }} {...rest} />
+}
+function BlurTextarea({ value, onCommit, ...rest }: Omit<React.ComponentProps<typeof Textarea>, "onChange" | "onBlur" | "value"> & { value: string; onCommit: (v: string) => void }) {
+  const [local, setLocal] = useState(value)
+  const ref = useRef(value)
+  if (value !== ref.current) { ref.current = value; setLocal(value) }
+  return <Textarea value={local} onChange={(e) => setLocal(e.target.value)} onBlur={() => { if (local !== value) onCommit(local) }} {...rest} />
+}
+
 function SectionEditor({
   section,
   tenantSlug,
@@ -671,10 +676,22 @@ function SectionEditor({
   tenantSlug: string
   onChange: (patch: Record<string, unknown>) => void
 }) {
+  const cfgRef = useRef(section.config)
+  cfgRef.current = section.config
+
   const c = section.config
   const str = (k: string, fb = "") => (typeof c[k] === "string" ? (c[k] as string) : fb)
   const num = (k: string, fb = 0) => (typeof c[k] === "number" ? (c[k] as number) : fb)
   const obj = (k: string) => (typeof c[k] === "object" && c[k] ? (c[k] as Record<string, unknown>) : {})
+  // Fresh-read helpers for onChange closures — read from ref, not render snapshot
+  const freshObj = (k: string) => {
+    const v = cfgRef.current[k]
+    return v && typeof v === "object" ? (v as Record<string, unknown>) : {}
+  }
+  const freshArr = <T,>(k: string): T[] => {
+    const v = cfgRef.current[k]
+    return Array.isArray(v) ? (v as T[]) : []
+  }
 
   switch (section.kind) {
     case "hero": {
@@ -684,18 +701,18 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Eyebrow (small label above headline)</Label>
-            <Input
+            <BlurInput
               value={str("eyebrow")}
-              onChange={(e) => onChange({ eyebrow: e.target.value })}
+              onCommit={(v) => onChange({ eyebrow: v })}
               placeholder="Welcome"
               maxLength={40}
             />
           </div>
           <div className="space-y-2">
             <Label>Headline</Label>
-            <Textarea
+            <BlurTextarea
               value={str("headline")}
-              onChange={(e) => onChange({ headline: e.target.value })}
+              onCommit={(v) => onChange({ headline: v })}
               placeholder="A line that sells the dream"
               rows={2}
               maxLength={140}
@@ -703,9 +720,9 @@ function SectionEditor({
           </div>
           <div className="space-y-2">
             <Label>Sub-heading</Label>
-            <Textarea
+            <BlurTextarea
               value={str("subhead")}
-              onChange={(e) => onChange({ subhead: e.target.value })}
+              onCommit={(v) => onChange({ subhead: v })}
               placeholder="One or two lines that explain who it's for and what they'll get."
               rows={3}
               maxLength={300}
@@ -714,9 +731,9 @@ function SectionEditor({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Primary CTA label</Label>
-              <Input
+              <BlurInput
                 value={primary.label ?? ""}
-                onChange={(e) => onChange({ primaryCta: { ...primary, label: e.target.value } })}
+                onCommit={(v) => onChange({ primaryCta: { ...freshObj("primaryCta"), label: v } })}
                 placeholder="Browse courses"
               />
             </div>
@@ -725,15 +742,15 @@ function SectionEditor({
               <TenantPrefixInput
                 tenantSlug={tenantSlug}
                 value={primary.href ?? ""}
-                onChange={(href) => onChange({ primaryCta: { ...primary, href } })}
+                onChange={(href) => onChange({ primaryCta: { ...freshObj("primaryCta"), href } })}
                 placeholder="courses"
               />
             </div>
             <div className="space-y-2">
               <Label>Secondary CTA label</Label>
-              <Input
+              <BlurInput
                 value={secondary.label ?? ""}
-                onChange={(e) => onChange({ secondaryCta: { ...secondary, label: e.target.value } })}
+                onCommit={(v) => onChange({ secondaryCta: { ...freshObj("secondaryCta"), label: v } })}
                 placeholder="Meet Your instructor"
               />
             </div>
@@ -742,7 +759,7 @@ function SectionEditor({
               <TenantPrefixInput
                 tenantSlug={tenantSlug}
                 value={secondary.href ?? ""}
-                onChange={(href) => onChange({ secondaryCta: { ...secondary, href } })}
+                onChange={(href) => onChange({ secondaryCta: { ...freshObj("secondaryCta"), href } })}
                 placeholder="teachers"
               />
             </div>
@@ -792,22 +809,22 @@ function SectionEditor({
     }
     case "features": {
       const items = ((c.items as Array<{ title?: string; body?: string }>) ?? [])
-      const setItems = (next: typeof items) => onChange({ items: next })
+      const setItems = (next: Array<{ title?: string; body?: string }>) => onChange({ items: next })
       return (
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Section heading</Label>
-            <Input
+            <BlurInput
               value={str("heading")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
               placeholder="Why learn here"
             />
           </div>
           <div className="space-y-2">
             <Label>Sub-heading</Label>
-            <Input
+            <BlurInput
               value={str("subhead")}
-              onChange={(e) => onChange({ subhead: e.target.value })}
+              onCommit={(v) => onChange({ subhead: v })}
               placeholder="Optional"
             />
           </div>
@@ -822,19 +839,19 @@ function SectionEditor({
                       variant="ghost"
                       size="sm"
                       className="text-destructive hover:text-destructive"
-                      onClick={() => setItems(items.filter((_, j) => j !== i))}
+                      onClick={() => setItems(freshArr<{ title?: string; body?: string }>("items").filter((_, j) => j !== i))}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
-                  <Input
+                  <BlurInput
                     value={it.title ?? ""}
-                    onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, title: e.target.value } : x))}
+                    onCommit={(v) => setItems(freshArr<{ title?: string; body?: string }>("items").map((x, j) => j === i ? { ...x, title: v } : x))}
                     placeholder="Feature title"
                   />
-                  <Textarea
+                  <BlurTextarea
                     value={it.body ?? ""}
-                    onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, body: e.target.value } : x))}
+                    onCommit={(v) => setItems(freshArr<{ title?: string; body?: string }>("items").map((x, j) => j === i ? { ...x, body: v } : x))}
                     placeholder="One or two lines explaining the benefit."
                     rows={2}
                   />
@@ -844,7 +861,7 @@ function SectionEditor({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setItems([...items, { title: "New feature", body: "" }])}
+              onClick={() => setItems([...freshArr<{ title?: string; body?: string }>("items"), { title: "New feature", body: "" }])}
             >
               <Plus className="mr-1 h-3.5 w-3.5" /> Add feature
             </Button>
@@ -857,16 +874,16 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading</Label>
-            <Input
+            <BlurInput
               value={str("heading", "Shop")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
             />
           </div>
           <div className="space-y-2">
             <Label>Sub-heading</Label>
-            <Input
+            <BlurInput
               value={str("subhead")}
-              onChange={(e) => onChange({ subhead: e.target.value })}
+              onCommit={(v) => onChange({ subhead: v })}
               placeholder="Optional"
             />
           </div>
@@ -908,9 +925,9 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading</Label>
-            <Input
+            <BlurInput
               value={str("heading", "Courses")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
@@ -943,9 +960,9 @@ function SectionEditor({
           {str("mode") === "by-category" && (
             <div className="space-y-2">
               <Label>Category</Label>
-              <Input
+              <BlurInput
                 value={str("category")}
-                onChange={(e) => onChange({ category: e.target.value })}
+                onCommit={(v) => onChange({ category: v })}
                 placeholder="e.g. Web Development"
               />
             </div>
@@ -957,9 +974,9 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading</Label>
-            <Input
+            <BlurInput
               value={str("heading", "What students say")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
             />
           </div>
           <div className="space-y-2">
@@ -982,9 +999,9 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading</Label>
-            <Input
+            <BlurInput
               value={str("heading", "Meet the team")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
             />
           </div>
           <div className="space-y-2">
@@ -1008,25 +1025,25 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Headline</Label>
-            <Input
+            <BlurInput
               value={str("headline", "Ready to start?")}
-              onChange={(e) => onChange({ headline: e.target.value })}
+              onCommit={(v) => onChange({ headline: v })}
             />
           </div>
           <div className="space-y-2">
             <Label>Sub-heading</Label>
-            <Input
+            <BlurInput
               value={str("subhead")}
-              onChange={(e) => onChange({ subhead: e.target.value })}
+              onCommit={(v) => onChange({ subhead: v })}
               placeholder="Optional"
             />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Button label</Label>
-              <Input
+              <BlurInput
                 value={primary.label ?? ""}
-                onChange={(e) => onChange({ primaryCta: { ...primary, label: e.target.value } })}
+                onCommit={(v) => onChange({ primaryCta: { ...freshObj("primaryCta"), label: v } })}
                 placeholder="Get started"
               />
             </div>
@@ -1035,7 +1052,7 @@ function SectionEditor({
               <TenantPrefixInput
                 tenantSlug={tenantSlug}
                 value={primary.href ?? ""}
-                onChange={(href) => onChange({ primaryCta: { ...primary, href } })}
+                onChange={(href) => onChange({ primaryCta: { ...freshObj("primaryCta"), href } })}
                 placeholder="courses"
               />
             </div>
@@ -1057,14 +1074,14 @@ function SectionEditor({
       )
     case "faq": {
       const items = ((c.items as Array<{ q?: string; a?: string }>) ?? [])
-      const setItems = (next: typeof items) => onChange({ items: next })
+      const setItems = (next: Array<{ q?: string; a?: string }>) => onChange({ items: next })
       return (
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading</Label>
-            <Input
+            <BlurInput
               value={str("heading", "Frequently asked")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
             />
           </div>
           <div className="space-y-2">
@@ -1078,26 +1095,26 @@ function SectionEditor({
                       variant="ghost"
                       size="sm"
                       className="text-destructive hover:text-destructive"
-                      onClick={() => setItems(items.filter((_, j) => j !== i))}
+                      onClick={() => setItems(freshArr<{ q?: string; a?: string }>("items").filter((_, j) => j !== i))}
                     >
                       <Trash2 className="h-3 w-3" />
                     </Button>
                   </div>
-                  <Input
+                  <BlurInput
                     value={it.q ?? ""}
-                    onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, q: e.target.value } : x))}
+                    onCommit={(v) => setItems(freshArr<{ q?: string; a?: string }>("items").map((x, j) => j === i ? { ...x, q: v } : x))}
                     placeholder="Question"
                   />
-                  <Textarea
+                  <BlurTextarea
                     value={it.a ?? ""}
-                    onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, a: e.target.value } : x))}
+                    onCommit={(v) => setItems(freshArr<{ q?: string; a?: string }>("items").map((x, j) => j === i ? { ...x, a: v } : x))}
                     placeholder="Answer"
                     rows={3}
                   />
                 </CardContent>
               </Card>
             ))}
-            <Button variant="outline" size="sm" onClick={() => setItems([...items, { q: "New question", a: "" }])}>
+            <Button variant="outline" size="sm" onClick={() => setItems([...freshArr<{ q?: string; a?: string }>("items"), { q: "New question", a: "" }])}>
               <Plus className="mr-1 h-3.5 w-3.5" /> Add question
             </Button>
           </div>
@@ -1105,35 +1122,36 @@ function SectionEditor({
       )
     }
     case "stats": {
-      const items = ((c.items as Array<{ value?: string; label?: string }>) ?? [])
-      const setItems = (next: typeof items) => onChange({ items: next })
+      type StatItem = { value?: string; label?: string }
+      const items = ((c.items as StatItem[]) ?? [])
+      const setItems = (next: StatItem[]) => onChange({ items: next })
       return (
         <div className="space-y-2">
           <Label>Stats</Label>
           {items.map((it, i) => (
             <div key={i} className="flex gap-2">
-              <Input
+              <BlurInput
                 value={it.value ?? ""}
-                onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                onCommit={(v) => setItems(freshArr<StatItem>("items").map((x, j) => j === i ? { ...x, value: v } : x))}
                 placeholder="10k+"
                 className="w-28"
               />
-              <Input
+              <BlurInput
                 value={it.label ?? ""}
-                onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+                onCommit={(v) => setItems(freshArr<StatItem>("items").map((x, j) => j === i ? { ...x, label: v } : x))}
                 placeholder="Students taught"
               />
               <Button
                 variant="ghost"
                 size="sm"
                 className="text-destructive hover:text-destructive"
-                onClick={() => setItems(items.filter((_, j) => j !== i))}
+                onClick={() => setItems(freshArr<StatItem>("items").filter((_, j) => j !== i))}
               >
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
           ))}
-          <Button variant="outline" size="sm" onClick={() => setItems([...items, { value: "0", label: "" }])}>
+          <Button variant="outline" size="sm" onClick={() => setItems([...freshArr<StatItem>("items"), { value: "0", label: "" }])}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add stat
           </Button>
         </div>
@@ -1144,16 +1162,16 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading</Label>
-            <Input
+            <BlurInput
               value={str("heading", "Send a message")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
             />
           </div>
           <div className="space-y-2">
             <Label>Success message</Label>
-            <Input
+            <BlurInput
               value={str("successMessage")}
-              onChange={(e) => onChange({ successMessage: e.target.value })}
+              onCommit={(v) => onChange({ successMessage: v })}
               placeholder="Thanks — we'll be in touch."
             />
           </div>
@@ -1164,9 +1182,9 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading</Label>
-            <Input
+            <BlurInput
               value={str("heading", "From the blog")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
             />
           </div>
           <div className="space-y-2">
@@ -1187,40 +1205,41 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Video URL</Label>
-            <Input
+            <BlurInput
               value={str("source")}
-              onChange={(e) => onChange({ source: e.target.value })}
+              onCommit={(v) => onChange({ source: v })}
               placeholder="https://youtube.com/watch?v=…  or  https://vimeo.com/…"
             />
           </div>
           <div className="space-y-2">
             <Label>Title (above the video)</Label>
-            <Input
+            <BlurInput
               value={str("title")}
-              onChange={(e) => onChange({ title: e.target.value })}
+              onCommit={(v) => onChange({ title: v })}
               placeholder="Optional"
             />
           </div>
           <div className="space-y-2">
             <Label>Caption (below the video)</Label>
-            <Input
+            <BlurInput
               value={str("caption")}
-              onChange={(e) => onChange({ caption: e.target.value })}
+              onCommit={(v) => onChange({ caption: v })}
               placeholder="Optional"
             />
           </div>
         </div>
       )
     case "image-gallery": {
-      const images = ((c.images as Array<{ url?: string; caption?: string }>) ?? [])
-      const setImages = (next: typeof images) => onChange({ images: next })
+      type GalleryImage = { url?: string; caption?: string }
+      const images = ((c.images as GalleryImage[]) ?? [])
+      const setImages = (next: GalleryImage[]) => onChange({ images: next })
       return (
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading</Label>
-            <Input
+            <BlurInput
               value={str("heading")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
               placeholder="Optional"
             />
           </div>
@@ -1231,13 +1250,13 @@ function SectionEditor({
                 <div className="flex-1">
                   <ThumbnailField
                     value={img.url ?? ""}
-                    onChange={(url) => setImages(images.map((x, j) => j === i ? { ...x, url } : x))}
+                    onChange={(url) => setImages(freshArr<GalleryImage>("images").map((x, j) => j === i ? { ...x, url } : x))}
                     compress={{ maxDim: 1600, quality: 0.82, mime: "image/jpeg" }}
                   />
-                  <Input
+                  <BlurInput
                     className="mt-1.5"
                     value={img.caption ?? ""}
-                    onChange={(e) => setImages(images.map((x, j) => j === i ? { ...x, caption: e.target.value } : x))}
+                    onCommit={(v) => setImages(freshArr<GalleryImage>("images").map((x, j) => j === i ? { ...x, caption: v } : x))}
                     placeholder="Caption (optional)"
                   />
                 </div>
@@ -1245,13 +1264,13 @@ function SectionEditor({
                   variant="ghost"
                   size="sm"
                   className="text-destructive hover:text-destructive"
-                  onClick={() => setImages(images.filter((_, j) => j !== i))}
+                  onClick={() => setImages(freshArr<GalleryImage>("images").filter((_, j) => j !== i))}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
             ))}
-            <Button variant="outline" size="sm" onClick={() => setImages([...images, { url: "", caption: "" }])}>
+            <Button variant="outline" size="sm" onClick={() => setImages([...freshArr<GalleryImage>("images"), { url: "", caption: "" }])}>
               <Plus className="mr-1 h-3.5 w-3.5" /> Add image
             </Button>
           </div>
@@ -1259,8 +1278,9 @@ function SectionEditor({
       )
     }
     case "trust-badges": {
-      const items = ((c.items as Array<{ icon?: string; label?: string }>) ?? [])
-      const setItems = (next: typeof items) => onChange({ items: next })
+      type BadgeItem = { icon?: string; label?: string }
+      const items = ((c.items as BadgeItem[]) ?? [])
+      const setItems = (next: BadgeItem[]) => onChange({ items: next })
       const variant = (str("variant") || "row") as "row" | "cards"
       const align = (str("align") || "center") as "left" | "center" | "right"
       const ICON_OPTIONS: Array<{ value: string; label: string }> = [
@@ -1277,9 +1297,9 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading (optional)</Label>
-            <Input
+            <BlurInput
               value={str("heading")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
               placeholder='e.g. "What you get"'
             />
           </div>
@@ -1314,16 +1334,16 @@ function SectionEditor({
               <div key={i} className="flex items-center gap-2">
                 <select
                   value={it.icon ?? "check"}
-                  onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, icon: e.target.value } : x))}
+                  onChange={(e) => setItems(freshArr<BadgeItem>("items").map((x, j) => j === i ? { ...x, icon: e.target.value } : x))}
                   className="rounded-md border border-input bg-background px-2 py-2 text-sm"
                 >
                   {ICON_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
-                <Input
+                <BlurInput
                   value={it.label ?? ""}
-                  onChange={(e) => setItems(items.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+                  onCommit={(v) => setItems(freshArr<BadgeItem>("items").map((x, j) => j === i ? { ...x, label: v } : x))}
                   placeholder='e.g. "14-day refund"'
                   className="flex-1"
                 />
@@ -1331,7 +1351,7 @@ function SectionEditor({
                   variant="ghost"
                   size="sm"
                   className="text-destructive hover:text-destructive"
-                  onClick={() => setItems(items.filter((_, j) => j !== i))}
+                  onClick={() => setItems(freshArr<BadgeItem>("items").filter((_, j) => j !== i))}
                   aria-label="Remove badge"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -1341,7 +1361,7 @@ function SectionEditor({
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setItems([...items, { icon: "check", label: "" }])}
+              onClick={() => setItems([...freshArr<BadgeItem>("items"), { icon: "check", label: "" }])}
             >
               <Plus className="mr-1 h-3.5 w-3.5" /> Add badge
             </Button>
@@ -1359,9 +1379,9 @@ function SectionEditor({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label>Heading (e.g. "Trusted by")</Label>
-            <Input
+            <BlurInput
               value={str("heading")}
-              onChange={(e) => onChange({ heading: e.target.value })}
+              onCommit={(v) => onChange({ heading: v })}
               placeholder="Optional"
             />
           </div>

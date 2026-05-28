@@ -63,15 +63,13 @@ export function PathInput({
   const inputRef = useRef<HTMLInputElement>(null)
 
   const [localValue, setLocalValue] = useState(value)
-  const blurredAtRef = useRef<number>(0)
-  const BLUR_LOCK_MS = 1500
 
-  // Sync prop value -> localValue when it changes externally
-  useEffect(() => {
-    if (focused) return
-    if (Date.now() - blurredAtRef.current < BLUR_LOCK_MS) return
-    if (value !== localValue) setLocalValue(value)
-  }, [value, focused, localValue])
+  // Sync prop value -> localValue when not focused
+  const prevValue = useRef(value)
+  if (value !== prevValue.current) {
+    prevValue.current = value
+    if (!focused) setLocalValue(value)
+  }
 
   // Pages from the portal store. Drop duplicates of built-ins so a
   // user-created /contact (theirs would win) doesn't double-list.
@@ -153,15 +151,10 @@ export function PathInput({
       <Input
         ref={inputRef}
         value={localValue}
-        onChange={(e) => {
-          const v = e.currentTarget.value
-          setLocalValue(v)
-          onChange(v)
-        }}
+        onChange={(e) => setLocalValue(e.currentTarget.value)}
         onBlur={() => {
           setFocused(false)
-          blurredAtRef.current = Date.now()
-          onChange(localValue)
+          if (localValue !== value) onChange(localValue)
         }}
         onFocus={() => setFocused(true)}
         onKeyDown={(e) => {

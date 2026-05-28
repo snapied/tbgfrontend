@@ -781,7 +781,7 @@ function LiveHostShell({
   const [mobileTab, setMobileTab] = useState<"stage" | "roster" | "tools">("stage")
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-background overflow-hidden">
+    <div className="fixed inset-0 z-50 flex flex-col bg-background text-foreground overflow-hidden">
       {backendAuthed === false && (
         <div className="flex shrink-0 items-center gap-2 border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-[11px] text-destructive">
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />

@@ -1,0 +1,47 @@
+{
+  "id": "quiz-mppn9w81-44wbkao54",
+  "title": "Pop quiz",
+  "description": "Quick 5-question check-in to confirm students caught the main ideas.",
+  "courseId": "course-mpp5j81w-6ch525byo",
+  "questions": [
+    {
+      "question": "What was the most important concept from today's class?",
+      "type": "short-answer",
+      "correctAnswer": "",
+      "points": 2,
+      "id": "q-mppn9w81-e4fhhx7tw"
+    },
+    {
+      "question": "True or false: the concept applies in real-world scenarios.",
+      "type": "true-false",
+      "options": [
+        "True",
+        "False"
+      ],
+      "correctAnswer": 0,
+      "points": 1,
+      "id": "q-mppn9w81-1dbi5a9ed"
+    },
+    {
+      "question": "Which of these best describes today's main idea?",
+      "type": "multiple-choice",
+      "options": [
+        "Option A",
+        "Option B",
+        "Option C",
+        "Option D"
+      ],
+      "correctAnswer": 0,
+      "points": 2,
+      "id": "q-mppn9w81-17rd3kz3b"
+    }
+  ],
+  "timeLimit": 10,
+  "passingScore": 60,
+  "maxAttempts": 3,
+  "shuffleQuestions": false,
+  "showAnswers": true,
+  "gradingMode": "auto",
+  "createdAt": "2026-05-28T15:25:15.745Z",
+  "createdBy": "user-mpp5j184-d26kut59y"
+}

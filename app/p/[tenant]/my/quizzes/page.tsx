@@ -73,7 +73,7 @@ function deriveStatus(
   if (best.passed) return "passed"
   // Failed best attempt. If they still have retries left, surface that
   // distinction so they know to come back to it.
-  if (maxAttempts === 0 || attempts.length < maxAttempts) return "retry-available"
+  if (maxAttempts <= 0 || attempts.length < maxAttempts) return "retry-available"
   return "failed"
 }
 
@@ -262,10 +262,10 @@ function QuizListRow({ row, slug }: { row: QuizRow; slug: string }) {
   const meta = STATUS_META[row.status]
   const { quiz, bestAttempt, courseTitle, status, attempts } = row
   const remaining =
-    quiz.maxAttempts === 0
+    !quiz.maxAttempts || quiz.maxAttempts <= 0
       ? "Unlimited attempts"
       : `${Math.max(0, quiz.maxAttempts - attempts.length)} attempt${
-          quiz.maxAttempts - attempts.length === 1 ? "" : "s"
+          Math.max(0, quiz.maxAttempts - attempts.length) === 1 ? "" : "s"
         } left`
 
   const cta =
