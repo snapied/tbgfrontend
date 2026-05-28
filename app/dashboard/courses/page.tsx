@@ -516,15 +516,11 @@ export default function CoursesPage() {
             </Button>
           ) : (
             <>
-              {/* Show AI builder in the header only when courses exist —
-                  when empty, the AI path lives in the EmptyState card below. */}
-              {courses.length > 0 && (
-                <AIGenerateButton
-                  label="AI Course Builder"
-                  size="default"
-                  onGenerate={() => setAiBuilderOpen(true)}
-                />
-              )}
+              <AIGenerateButton
+                label="AI Course Builder"
+                size="default"
+                onGenerate={() => setAiBuilderOpen(true)}
+              />
               <Button asChild data-tour="courses-new">
                 <Link href="/dashboard/courses/new">
                   <Plus className="mr-2 h-4 w-4" />

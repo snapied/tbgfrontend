@@ -21,8 +21,7 @@
 //                                  set OPENAI_API_KEY / GROQ_API_KEY.
 
 import { useEffect, useState } from "react"
-import Link from "next/link"
-import { Sparkles, Loader2, Lock } from "lucide-react"
+import { Sparkles, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { fetchAIStatus, type AIStatus } from "@/lib/ai-client"
@@ -56,14 +55,7 @@ export function AIGenerateButton({
     return () => { cancelled = true }
   }, [])
 
-  // Backend has no provider key — hide entirely. There's nothing the
-  // viewer can do about this from the editor; the workspace owner
-  // needs to set the env var. Showing a locked button here would
-  // mislead Starter users into thinking upgrading would unlock it.
-  if (status && !status.configured) return null
-
-  // Still loading the probe — render the button in a neutral
-  // disabled state so the editor doesn't reflow when status lands.
+  // Still loading — show a loading state button (don't hide)
   if (status === null) {
     return (
       <Button
@@ -83,59 +75,8 @@ export function AIGenerateButton({
     )
   }
 
-  // Plan-locked variant — visible to Starter so the feature is
-  // discoverable, clickable to route to /dashboard/billing instead
-  // of running generation. Lock icon + amber tone signal "this is
-  // gated" without screaming "DENIED".
-  //
-  // When the caller has also marked the button disabled (e.g. "no
-  // lesson title yet"), we skip the upgrade link too — pulling the
-  // user toward billing before they've even drafted enough to
-  // generate against would be a tone-deaf upsell.
-  if (!status.planAllowed) {
-    const lockClasses = cn(
-      "gap-1.5 border-amber-500/40 bg-amber-500/5 text-amber-700 hover:bg-amber-500/10 dark:text-amber-400",
-      size === "xs" && "h-7 px-2 text-xs",
-      className,
-    )
-    const ProPill = (
-      <span className="ml-1 rounded-full bg-amber-500/15 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide">
-        Pro
-      </span>
-    )
-    if (disabled) {
-      return (
-        <Button
-          type="button"
-          variant="outline"
-          size={size === "xs" ? "sm" : size}
-          disabled
-          className={lockClasses}
-        >
-          <Lock className="h-3.5 w-3.5" />
-          {label}
-          {ProPill}
-        </Button>
-      )
-    }
-    return (
-      <Button
-        asChild
-        type="button"
-        variant="outline"
-        size={size === "xs" ? "sm" : size}
-        className={lockClasses}
-        title="AI generation is included on Pro and above — upgrade to unlock."
-      >
-        <Link href="/dashboard/billing">
-          <Lock className="h-3.5 w-3.5" />
-          {label}
-          {ProPill}
-        </Link>
-      </Button>
-    )
-  }
-
+  // Always render the button. Plan gating is handled inside the
+  // AI Course Builder dialog, not on the button itself.
   return (
     <Button
       type="button"

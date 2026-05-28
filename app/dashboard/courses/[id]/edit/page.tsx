@@ -60,7 +60,8 @@ import { COURSE_LANGUAGES } from "@/lib/course-languages"
 import { SUPPORTED_CURRENCIES, currencyInfo, formatMoney } from "@/lib/currency"
 import { fireWebhookEvent } from "@/lib/event-dispatcher"
 import { AIGenerateButton } from "@/components/ai/ai-generate-button"
-import { aiCourseTitles, aiCourseDescription } from "@/lib/ai-client"
+import { AICourseBuilderDialog } from "@/components/ai/ai-course-builder-dialog"
+import { aiCourseTitles, aiCourseDescription, type GeneratedCourse, type CourseBuilderInput } from "@/lib/ai-client"
 import { ProductTour, TakeATourButton, type TourStep } from "@/components/tour/product-tour"
 
 const COURSE_EDIT_TOUR: TourStep[] = [
@@ -292,6 +293,7 @@ function EditCoursePageInner({ course }: { course: Course }) {
 
   // Save/auto-save state
   const [saving, setSaving] = useState(false)
+  const [aiBuilderOpen, setAiBuilderOpen] = useState(false)
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
   const [dirty, setDirty] = useState(false)
   const firstRender = useRef(true)
@@ -606,6 +608,11 @@ function EditCoursePageInner({ course }: { course: Course }) {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <AIGenerateButton
+            label="AI Course Builder"
+            size="sm"
+            onGenerate={() => setAiBuilderOpen(true)}
+          />
           <TakeATourButton tourId="courses-edit-v1" />
           <Button variant="outline" asChild data-tour="course-edit-preview">
             <Link href={`/learn/${slug || course.slug}`} target="_blank" rel="noreferrer">
@@ -1498,6 +1505,25 @@ function EditCoursePageInner({ course }: { course: Course }) {
           </div>
         </>
       )}
+      {/* AI Course Builder Dialog */}
+      <AICourseBuilderDialog
+        open={aiBuilderOpen}
+        onOpenChange={setAiBuilderOpen}
+        initialTitle={title}
+        onCourseGenerated={(generated) => {
+          // Apply AI-generated content to the current course being edited
+          if (generated.title) setTitle(generated.title)
+          if (generated.subtitle) setSubtitle(generated.subtitle)
+          if (generated.description) setDescription(generated.description)
+          if (generated.category) setCategory(generated.category)
+          if (generated.level) setLevel(generated.level)
+          if (generated.language) setLanguage(generated.language)
+          if (generated.seoTitle) setSeoTitle(generated.seoTitle)
+          if (generated.seoDescription) setSeoDescription(generated.seoDescription)
+          if (generated.seoKeywords?.length) setSeoKeywords(generated.seoKeywords.join(", "))
+          toast.success("AI content applied! Review the changes across all tabs.")
+        }}
+      />
     </div>
   )
 }
