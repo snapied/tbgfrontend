@@ -17,7 +17,7 @@
 
 import { use, useMemo, useState } from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { AlertTriangle, Loader2, LogIn } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -37,6 +37,7 @@ export default function PortalLoginPage({
 }) {
   const { tenant } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { users, setCurrentUser, addUser } = useLMS()
   const brand = useTenantBrand()
   const { t } = useT()
@@ -143,15 +144,19 @@ export default function PortalLoginPage({
         return
       }
       setCurrentUser(found)
-      // Students land on the tenant-scoped /my dashboard; teachers
-      // and admins land on the platform teacher dashboard.
-      // postAuthDestination centralises this branching.
-      router.push(
-        postAuthDestination({
-          user: { role: found.role },
-          tenantSlug: tenant,
-        }),
-      )
+      // If ?next is present (e.g. from invite flow), go there.
+      // Otherwise use postAuthDestination for the default routing.
+      const nextUrl = searchParams?.get("next")
+      if (nextUrl) {
+        router.push(nextUrl)
+      } else {
+        router.push(
+          postAuthDestination({
+            user: { role: found.role },
+            tenantSlug: tenant,
+          }),
+        )
+      }
     } finally {
       setSubmitting(false)
     }
@@ -194,7 +199,7 @@ export default function PortalLoginPage({
               <div className="flex items-center justify-between">
                 <Label htmlFor="login-pw">{t("auth.signIn.password")}</Label>
                 <Link
-                  href={`/p/${tenant}/forgot-password`}
+                  href={`${typeof window !== "undefined" && window.location.hostname.includes(`.${process.env.NEXT_PUBLIC_PLATFORM_HOST || "thebigclass.com"}`) ? "" : `/p/${tenant}`}/forgot-password`}
                   className="text-xs font-medium text-primary hover:underline"
                 >
                   {t("auth.signIn.forgot")}

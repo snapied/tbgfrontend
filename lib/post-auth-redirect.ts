@@ -26,6 +26,7 @@
 // path. Callers do `router.push(postAuthDestination(...))` themselves.
 
 import type { User } from "./lms-store"
+import { PLATFORM_HOST } from "./tenant-resolver"
 
 export interface PostAuthInput {
   /** The just-authenticated user. Null when no user resolved (rare). */
@@ -61,7 +62,18 @@ export function postAuthDestination({ user, tenantSlug, nextPath }: PostAuthInpu
   if (next) return next
   if (!user) return "/login"
   if (user.role === "student") {
-    if (tenantSlug) return `/p/${tenantSlug}/my`
+    if (tenantSlug) {
+      // On subdomain, links don't need the /p/ prefix
+      if (typeof window !== "undefined") {
+        const host = window.location.hostname.toLowerCase()
+        const suffix = `.${PLATFORM_HOST}`
+        if (host.endsWith(suffix)) {
+          const sub = host.slice(0, -suffix.length)
+          if (sub && !sub.includes(".") && sub !== "www") return "/my"
+        }
+      }
+      return `/p/${tenantSlug}/my`
+    }
     // Edge case: a student with no tenant scope. Drop them at the
     // platform login — they almost certainly bookmarked a stale link
     // or their session lost the tenant cookie. Re-signing in via the

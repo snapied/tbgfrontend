@@ -12,33 +12,39 @@ import { NextRequest, NextResponse } from "next/server"
 const PLATFORM_HOST = process.env.NEXT_PUBLIC_PLATFORM_HOST || "thebigclass.com"
 
 // Paths that should never be rewritten (platform routes, not tenant routes)
+// Paths that should NOT be rewritten on subdomains — they are strictly
+// platform-level pages with NO tenant equivalent. Everything else gets
+// rewritten to /p/{tenant}/... so the tenant's version renders.
+//
+// IMPORTANT: Do NOT add paths here that also exist under /p/[tenant]/
+// (like /about, /courses, /blog, /login, /signup, /store, /wall, etc.)
+// — those MUST be rewritten so the tenant page renders, not the platform page.
 const SKIP_PREFIXES = [
-  "/api/",
-  "/dashboard/",
-  "/login",
-  "/signup",
-  "/p/",           // already a tenant path
-  "/i/",           // invite pages
-  "/onboard/",
-  "/pricing",
-  "/about",
-  "/features/",
-  "/solutions/",
-  "/use-cases/",
-  "/help",
-  "/legal/",
-  "/guides",
-  "/updates",
-  "/alternatives/",
-  "/brand",
-  "/verify",
-  "/superadmin",
-  "/_next/",
-  "/static/",
-  "/images/",
-  "/favicon",
-  "/robots.txt",
-  "/sitemap",
+  "/api/",          // API routes — no tenant rewrite
+  "/dashboard/",    // admin dashboard — platform-level
+  "/p/",            // already a tenant path
+  "/i/",            // invite pages — platform-level
+  "/onboard/",      // teacher onboarding — platform-level
+  "/pricing",       // platform pricing page (no tenant equivalent)
+  "/features/",     // platform feature pages
+  "/solutions/",    // platform solution pages
+  "/use-cases",     // platform use-case pages
+  "/alternatives/", // platform alternative pages
+  "/help",          // platform help center (no tenant equivalent)
+  "/legal/",        // platform legal pages (no tenant equivalent)
+  "/brand",         // platform brand assets (no tenant equivalent)
+  "/guides",        // platform guides
+  "/updates",       // platform changelog
+  "/founder-bill",  // platform founder page
+  "/developers",    // platform developer docs
+  "/superadmin",    // platform admin
+  "/verify",        // certificate verification
+  "/_next/",        // Next.js internals
+  "/static/",       // static assets
+  "/images/",       // images
+  "/favicon",       // favicon
+  "/robots.txt",    // robots
+  "/sitemap",       // sitemap
 ]
 
 export function middleware(req: NextRequest) {

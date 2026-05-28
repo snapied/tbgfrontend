@@ -54,7 +54,11 @@ export default function TenantStudentSignupPage({
   const { tenant } = use(params)
   const router = useRouter()
   const searchParams = useSearchParams()
-  const next = searchParams?.get("next") ?? `/p/${tenant}/my`
+  // On subdomain, default to /my (no /p/ prefix). On path-based, use /p/{tenant}/my.
+  const defaultNext = typeof window !== "undefined" && window.location.hostname.includes(`.${process.env.NEXT_PUBLIC_PLATFORM_HOST || "thebigclass.com"}`)
+    ? "/my"
+    : `/p/${tenant}/my`
+  const next = searchParams?.get("next") ?? defaultNext
   const brand = useTenantBrand()
   const { setCurrentUser, addUser } = useLMS()
 
@@ -214,7 +218,7 @@ export default function TenantStudentSignupPage({
           <p className="text-center text-xs text-muted-foreground">
             Already have an account?{" "}
             <Link
-              href={`/p/${tenant}/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
+              href={`${typeof window !== "undefined" && window.location.hostname.includes(`.${process.env.NEXT_PUBLIC_PLATFORM_HOST || "thebigclass.com"}`) ? "" : `/p/${tenant}`}/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}
               className="font-semibold text-primary hover:underline"
             >
               Sign in

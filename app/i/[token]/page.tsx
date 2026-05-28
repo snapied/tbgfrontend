@@ -15,7 +15,6 @@ import Link from "next/link"
 import {
   AlertTriangle,
   CheckCircle2,
-  ExternalLink,
   Loader2,
   ShieldCheck,
 } from "lucide-react"
@@ -35,6 +34,23 @@ function formatINR(n: number): string {
     currency: "INR",
     minimumFractionDigits: 0,
   }).format(n)
+}
+
+/**
+ * Build the correct tenant base path for URLs.
+ * On subdomain (kishorchem.thebigclass.com): returns "" → links become /signup, /my
+ * On platform domain: returns "/p/kishorchem" → links become /p/kishorchem/signup
+ */
+function tenantBase(tenantSlug: string): string {
+  if (typeof window === "undefined") return `/p/${tenantSlug}`
+  const host = window.location.hostname.toLowerCase()
+  const platformHost = process.env.NEXT_PUBLIC_PLATFORM_HOST || "thebigclass.com"
+  const suffix = `.${platformHost}`
+  if (host.endsWith(suffix)) {
+    const sub = host.slice(0, -suffix.length)
+    if (sub && !sub.includes(".") && sub !== "www") return "" // on subdomain
+  }
+  return `/p/${tenantSlug}`
 }
 
 function formatDate(iso: string): string {
@@ -90,8 +106,10 @@ export default function InvitePage({
         // Payment already done. Redirect to tenant register page.
         // The register/login flow will handle creating the student
         // in the academy and claiming the invite.
-        const dashUrl = `/p/${result.tenant_slug}/my`
-        const registerUrl = `/p/${result.tenant_slug}/signup?invite=${token}&next=${encodeURIComponent(dashUrl)}`
+        // Redirect back to THIS invite page after signup — so auto-claim fires
+        const returnUrl = `/i/${token}`
+        const base = tenantBase(result.tenant_slug)
+        const registerUrl = `${base}/signup?invite=${token}&next=${encodeURIComponent(returnUrl)}`
 
         if (hasAccessToken()) {
           // Already logged in — try to auto-claim
@@ -99,8 +117,8 @@ export default function InvitePage({
           const claimResult = await claimInvite(token)
           if (cancelled) return
           if ("error" in claimResult) {
-            // Claim failed — send them to register instead
-            setPhase({ kind: "success", data: result, courseSlug: result.course_slug, tenantSlug: result.tenant_slug })
+            // Claim failed — show error with retry option
+            setPhase({ kind: "error", title: "Enrollment failed", message: claimResult.error })
           } else {
             // Write enrollment + student to tenant's localStorage
             writeEnrollmentToStore(result, claimResult)
@@ -182,8 +200,10 @@ export default function InvitePage({
 
   function redirectToRegister(data: InviteViewData) {
     if (typeof window === "undefined" || !data.tenant_slug) return
-    const dashUrl = `/p/${data.tenant_slug}/my`
-    window.location.href = `/p/${data.tenant_slug}/signup?invite=${token}&next=${encodeURIComponent(dashUrl)}`
+    // Redirect back to THIS invite page after signup — so auto-claim fires
+    const returnUrl = `/i/${token}`
+    const base = tenantBase(data.tenant_slug)
+    window.location.href = `${base}/signup?invite=${token}&next=${encodeURIComponent(returnUrl)}`
   }
 
   // ── Pay handler ───────────────────────────────────────────────
@@ -358,18 +378,12 @@ export default function InvitePage({
               ) : (
                 <div className="space-y-3">
                   <Button asChild className="w-full" size="lg">
-                    <Link href={phase.data.tenant_slug
-                      ? `/p/${phase.data.tenant_slug}/signup?invite=${token}&next=/i/${token}`
-                      : `/signup?invite=${token}`
-                    }>
+                    <Link href={`${tenantBase(phase.data.tenant_slug)}/signup?invite=${token}&next=${encodeURIComponent(`/i/${token}`)}`}>
                       Create Account
                     </Link>
                   </Button>
                   <Button asChild variant="outline" className="w-full" size="lg">
-                    <Link href={phase.data.tenant_slug
-                      ? `/p/${phase.data.tenant_slug}/login?invite=${token}&next=/i/${token}`
-                      : `/login?invite=${token}`
-                    }>
+                    <Link href={`${tenantBase(phase.data.tenant_slug)}/login?invite=${token}&next=${encodeURIComponent(`/i/${token}`)}`}>
                       Sign In
                     </Link>
                   </Button>
@@ -386,10 +400,9 @@ export default function InvitePage({
         {/* ── Success ──────────────────────────────────────────── */}
         {phase.kind === "success" && (() => {
           const tenantSlug = phase.tenantSlug
-          const courseSlug = phase.courseSlug
-          const courseUrl = `/p/${tenantSlug}/my/courses/${courseSlug}`
-          const dashboardUrl = `/p/${tenantSlug}/my`
-          const loginUrl = `/p/${tenantSlug}/login?next=${encodeURIComponent(courseUrl)}`
+          const base = tenantBase(tenantSlug)
+          const dashboardUrl = `${base}/my`
+          const loginUrl = `${base}/login?next=${encodeURIComponent(dashboardUrl)}`
           const isLoggedIn = hasAccessToken()
 
           return (
@@ -419,12 +432,12 @@ export default function InvitePage({
                       Register on <strong>{phase.data.academy_name}</strong> to access your course.
                     </p>
                     <Button asChild size="lg" className="w-full">
-                      <Link href={`/p/${tenantSlug}/signup?next=${encodeURIComponent(dashboardUrl)}`}>
+                      <Link href={`${base}/signup?next=${encodeURIComponent(dashboardUrl)}`}>
                         Register & access your course
                       </Link>
                     </Button>
                     <Button asChild variant="outline" className="w-full">
-                      <Link href={`/p/${tenantSlug}/login?next=${encodeURIComponent(dashboardUrl)}`}>
+                      <Link href={`${base}/login?next=${encodeURIComponent(dashboardUrl)}`}>
                         Already have an account? Sign in
                       </Link>
                     </Button>

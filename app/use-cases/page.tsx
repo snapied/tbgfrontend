@@ -11,6 +11,7 @@ import {
   Film,
   FlaskConical,
   GraduationCap,
+  Languages,
   Hand,
   Heart,
   MessageSquare,
@@ -50,6 +51,21 @@ const USE_CASES: UseCase[] = [
       { title: "Student data is locked", detail: "Anti-bypass filter auto-redacts phone numbers and emails in messages." },
     ],
     cta: "Read Kishor's full story →",
+  },
+  {
+    id: "english-teacher-lovejeet",
+    icon: Languages,
+    who: "Solo teachers with live classes",
+    headline: "Auto-reminders, recordings, certificates — zero admin work.",
+    body:
+      "Lovejeet teaches spoken English in Chandigarh to 80 students. She was spending 2 hours daily on WhatsApp reminders. Now the platform sends them automatically, records every class, and generates certificates in bulk.",
+    pillars: [
+      { title: "Auto class reminders", detail: "WhatsApp + email reminders 24h, 1h, and 5min before every live class. Zero manual messaging." },
+      { title: "Auto-recorded classes", detail: "Every live class is recorded with AI-generated chapters. Absent students catch up on their own." },
+      { title: "Bulk certificates", detail: "17 templates, CSV upload, QR verification. 30 certificates in 2 minutes." },
+      { title: "Payment links via WhatsApp", detail: "Send a link, parent pays, student auto-enrolled. No manual enrollment." },
+    ],
+    cta: "Read Lovejeet's full story →",
   },
   {
     id: "solo-instructor",
@@ -362,7 +378,11 @@ function UseCaseBlock({ useCase, reverse }: { useCase: UseCase; reverse: boolean
                 ))}
               </ul>
               <Button asChild className="mt-6 gap-2">
-                <Link href={useCase.id === "school-teacher-kishor" ? "/use-cases/school-teacher-kishor" : "/signup"}>
+                <Link href={
+                  useCase.id === "school-teacher-kishor" ? "/use-cases/school-teacher-kishor"
+                  : useCase.id === "english-teacher-lovejeet" ? "/use-cases/english-teacher-lovejeet"
+                  : "/signup"
+                }>
                   {useCase.cta} <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
