@@ -437,7 +437,7 @@ export function DashboardSidebar() {
                     one click to open the public site even when collapsed. */}
                 {group.id === "portal" && currentTenant && (
                   <a
-                    href={`/p/${currentTenant.slug}`}
+                    href={tenantPublicUrl(currentTenant.slug, currentTenant.customDomain, currentTenant.customDomainStatus)}
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
