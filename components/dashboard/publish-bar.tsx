@@ -15,7 +15,6 @@
 import { useState } from "react"
 import Link from "next/link"
 import {
-  AlertCircle,
   ArrowRight,
   CheckCircle2,
   Clock,
@@ -27,16 +26,6 @@ import {
   Upload,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Sheet,
   SheetContent,
@@ -68,8 +57,6 @@ export function PublishBar() {
   const { isAllowed } = usePlan()
   const confirm = useConfirm()
   const versioningAllowed = isAllowed("marketingTools") // paid-only proxy
-  const [showPublish, setShowPublish] = useState(false)
-  const [label, setLabel] = useState("")
   const [busy, setBusy] = useState(false)
 
   const doPublish = async (versionLabel?: string) => {
@@ -96,8 +83,6 @@ export function PublishBar() {
       toast.success("Changes published.", {
         description: version.label,
       })
-      setShowPublish(false)
-      setLabel("")
     } finally {
       setBusy(false)
     }
@@ -275,54 +260,6 @@ export function PublishBar() {
           {busy ? "Publishing..." : hasUnpublishedChanges ? "Publish" : "Published"}
         </Button>
       </div>
-
-      <Dialog open={showPublish} onOpenChange={setShowPublish}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Publish to your public site?</DialogTitle>
-            <DialogDescription>
-              Your draft will replace what visitors see at your portal.
-              You can restore from history within 3 months if anything
-              looks wrong.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="version-label">Version label (optional)</Label>
-              <Input
-                id="version-label"
-                value={label}
-                onChange={(e) => setLabel(e.target.value)}
-                placeholder="e.g. Summer 2026 launch"
-                autoFocus
-              />
-              <p className="text-xs text-muted-foreground">
-                Shows up in history so you can find this version later.
-              </p>
-            </div>
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
-              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
-              <span className="text-muted-foreground">
-                This is live the moment you publish. Your students may
-                start seeing the new content right away.
-              </span>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowPublish(false)}
-              disabled={busy}
-            >
-              Cancel
-            </Button>
-            <Button onClick={() => doPublish(label || undefined)} disabled={busy} className="gap-1.5">
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              Publish now
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
