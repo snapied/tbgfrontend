@@ -13,6 +13,7 @@
 import { use, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { BackButton } from "@/components/ui/back-button"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -247,11 +248,7 @@ export default function CheckoutPage({
       <div className="mx-auto max-w-lg px-4 py-12">
 
         {/* Back link */}
-        <Button variant="ghost" size="sm" asChild className="-ml-2 mb-6">
-          <Link href={`/p/${tenantSlug}/courses/${courseSlug}`}>
-            <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to course
-          </Link>
-        </Button>
+        <BackButton label="Back" fallbackHref={`/p/${tenantSlug}/courses/${courseSlug}`} className="-ml-2 mb-6" />
 
         {/* ── CHECKOUT PHASE ────────────────────────────────────── */}
         {phase.kind === "checkout" && (

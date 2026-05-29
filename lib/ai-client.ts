@@ -21,15 +21,13 @@ function authHeaders(): Record<string, string> {
 }
 
 export interface AIStatus {
-  /** True when both a provider key is configured AND the plan
-   *  includes AI. This is what the "Generate with AI" buttons gate
-   *  on — they hide unless this is true. */
   available: boolean
-  /** Backend has at least one provider key (GROQ_API_KEY or
-   *  OPENAI_API_KEY). False = backend env is missing the key. */
   configured: boolean
-  /** Caller's plan tier includes AI (Pro+). False on Starter. */
   planAllowed: boolean
+  plan?: string
+  limit?: number
+  used?: number
+  remaining?: number
 }
 
 let _availability: Promise<boolean> | null = null
@@ -67,6 +65,10 @@ export async function fetchAIStatus(): Promise<AIStatus> {
       available: !!j.available,
       configured: !!j.configured,
       planAllowed: !!j.planAllowed,
+      plan: j.plan,
+      limit: j.limit,
+      used: j.used,
+      remaining: j.remaining,
     }
   } catch {
     return { available: false, configured: false, planAllowed: false }

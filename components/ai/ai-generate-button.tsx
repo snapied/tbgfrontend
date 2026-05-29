@@ -1,39 +1,27 @@
 "use client"
 
-// "Generate with AI" affordance used across the dashboard.
-//
-// Three render states based on /api/ai/status:
-//
-//   1. configured + planAllowed  → normal button. Clicking fires the
-//                                  caller's onGenerate.
-//   2. configured but plan-locked → "lock" button styled as Pro+ teaser.
-//                                  Clicking routes to /dashboard/billing.
-//                                  Instructors on Starter see the feature
-//                                  exists and what they'd unlock by
-//                                  upgrading. (The pricing-rule memory
-//                                  applies: the upgrade nudge is the
-//                                  defence-in-depth UX layer; the
-//                                  backend's requireMinimumPlan is the
-//                                  trust boundary.)
-//   3. not configured            → hidden. No point teasing a feature
-//                                  the platform genuinely can't deliver
-//                                  because the workspace owner hasn't
-//                                  set OPENAI_API_KEY / GROQ_API_KEY.
+// "Generate with AI" button with plan gating.
+//   Starter: locked with lock icon + upgrade popover (same as sidebar)
+//   Pro: 100/mo, Studio: 500/mo, Institute: 5000/mo
+//   Exhausted: lock icon + "limit reached" popover
 
 import { useEffect, useState } from "react"
-import { Sparkles, Loader2 } from "lucide-react"
+import Link from "next/link"
+import { Sparkles, Loader2, Lock, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 import { fetchAIStatus, type AIStatus } from "@/lib/ai-client"
 
 interface Props {
-  /** Called when the button is clicked AND the user is on a plan that
-   *  includes AI. Plan-locked clicks bypass this and route to billing. */
   onGenerate: () => Promise<void> | void
   label?: string
   className?: string
   size?: "sm" | "default" | "xs"
-  /** Disabled state from the caller (e.g. missing title for outline). */
   disabled?: boolean
 }
 
@@ -55,47 +43,72 @@ export function AIGenerateButton({
     return () => { cancelled = true }
   }, [])
 
-  // Still loading — show a loading state button (don't hide)
+  const btnSize = size === "xs" ? "sm" as const : size
+  const sizeClass = size === "xs" ? "h-7 px-2 text-xs" : ""
+
+  // Loading
   if (status === null) {
     return (
-      <Button
-        type="button"
-        variant="outline"
-        size={size === "xs" ? "sm" : size}
-        disabled
-        className={cn(
-          "gap-1.5 border-primary/30 text-primary opacity-60",
-          size === "xs" && "h-7 px-2 text-xs",
-          className,
-        )}
-      >
+      <Button type="button" variant="outline" size={btnSize} disabled className={cn("gap-1.5 border-primary/30 text-primary opacity-60", sizeClass, className)}>
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
         {label}
       </Button>
     )
   }
 
-  // Always render the button. Plan gating is handled inside the
-  // AI Course Builder dialog, not on the button itself.
+  // Not configured
+  if (!status.configured) return null
+
+  // Starter (0 cap) or limit exhausted — show lock icon with upgrade popover
+  const locked = status.limit === 0
+  const exhausted = !locked && status.remaining !== undefined && status.remaining <= 0
+
+  if (locked || exhausted) {
+    return (
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button type="button" variant="outline" size={btnSize} className={cn("gap-1.5 border-primary/30 text-primary/60", sizeClass, className)}>
+            <Sparkles className="h-3.5 w-3.5" />
+            {label}
+            <Lock className="h-3 w-3 text-amber-600" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-64 text-sm" side="bottom" align="end">
+          <p className="font-semibold text-foreground">
+            {locked ? "AI is a Pro feature" : "Monthly AI limit reached"}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {locked
+              ? "Upgrade to Pro to unlock AI course building, text refinement, and quiz generation."
+              : `You've used all ${status.limit} AI calls this month. Upgrade for a higher limit.`}
+          </p>
+          <Button asChild size="sm" className="mt-3 w-full gap-1.5">
+            <Link href="/dashboard/billing">
+              Upgrade plan <ArrowRight className="h-3 w-3" />
+            </Link>
+          </Button>
+        </PopoverContent>
+      </Popover>
+    )
+  }
+
+  // Unlocked — working button
   return (
     <Button
       type="button"
       variant="outline"
-      size={size === "xs" ? "sm" : size}
+      size={btnSize}
       onClick={async () => {
         setBusy(true)
         try {
           await onGenerate()
+          fetchAIStatus().then(setStatus).catch(() => {})
         } finally {
           setBusy(false)
         }
       }}
       disabled={busy || disabled}
-      className={cn(
-        "gap-1.5 border-primary/30 text-primary hover:bg-primary/5",
-        size === "xs" && "h-7 px-2 text-xs",
-        className,
-      )}
+      className={cn("gap-1.5 border-primary/30 text-primary hover:bg-primary/5", sizeClass, className)}
     >
       {busy ? (
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -103,6 +116,11 @@ export function AIGenerateButton({
         <Sparkles className="h-3.5 w-3.5" />
       )}
       {label}
+      {status.remaining !== undefined && status.limit !== undefined && status.limit < 5000 && (
+        <span className="ml-1 text-[10px] tabular-nums text-muted-foreground">
+          {status.remaining}/{status.limit}
+        </span>
+      )}
     </Button>
   )
 }

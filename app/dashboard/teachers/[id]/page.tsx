@@ -6,6 +6,7 @@
 import { use, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { BackButton } from "@/components/ui/back-button"
 import {
   AlertTriangle,
   ArrowLeft,
@@ -164,9 +165,7 @@ export default function TeacherDetailPage({ params }: { params: Promise<{ id: st
         <Card className="border-dashed">
           <CardContent className="py-16 text-center">
             <p className="font-semibold">Teacher not found</p>
-            <Button asChild className="mt-4" variant="outline">
-              <Link href="/dashboard/teachers">Back to teachers</Link>
-            </Button>
+            <BackButton label="Back" fallbackHref="/dashboard/teachers" className="mt-4" />
           </CardContent>
         </Card>
       </div>

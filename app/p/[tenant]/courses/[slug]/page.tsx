@@ -8,6 +8,7 @@
 import { use, useMemo } from "react"
 import Link from "next/link"
 import { ArrowRight, Clock, Star, Users } from "lucide-react"
+import { BackButton } from "@/components/ui/back-button"
 import { EmailTeacherDialog } from "@/components/learn/email-teacher-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -27,9 +28,7 @@ export default function PortalCourseDetailPage({
     return (
       <section className="mx-auto flex min-h-[60vh] max-w-2xl flex-col items-center justify-center px-6 py-20 text-center">
         <h1 className="font-serif text-2xl font-bold tracking-tight">Course not found</h1>
-        <Button asChild variant="outline" className="mt-5">
-          <Link href={`/p/${tenant}/courses`}>← Back to courses</Link>
-        </Button>
+        <BackButton label="Back" fallbackHref={`/p/${tenant}/courses`} className="mt-5" />
       </section>
     )
   }

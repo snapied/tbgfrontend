@@ -2,6 +2,7 @@
 
 import { use, useMemo, useState } from "react"
 import Link from "next/link"
+import { BackButton } from "@/components/ui/back-button"
 import {
   ArrowLeft,
   CheckCircle2,
@@ -101,9 +102,7 @@ export default function QuizDetailPage({ params }: { params: Promise<{ id: strin
         <div className="text-center">
           <FileQuestion className="mx-auto h-10 w-10 text-muted-foreground" />
           <h2 className="mt-3 text-lg font-semibold">Quiz not found</h2>
-          <Button asChild className="mt-4">
-            <Link href="/dashboard/quizzes">Back to Quizzes</Link>
-          </Button>
+          <BackButton label="Back" fallbackHref="/dashboard/quizzes" className="mt-4" />
         </div>
       </div>
     )

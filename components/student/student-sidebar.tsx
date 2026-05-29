@@ -11,7 +11,8 @@
 // when a user is bouncing between two workspaces).
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useMemo } from "react"
+import { usePathname, useRouter } from "next/navigation"
 import {
   Activity,
   Award,
@@ -37,6 +38,7 @@ import {
   UserPlus,
   Users2,
   Video,
+  Search,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { NotificationBell } from "@/components/dashboard/notification-bell"
@@ -107,12 +109,10 @@ function useTenantSlugFromPath(): string {
 
 export function StudentSidebar() {
   const pathname = usePathname() ?? ""
+  const router = useRouter()
   const slug = useTenantSlugFromPath()
-  const { currentUser, setCurrentUser, getUserNotifications, notifications } = useLMS()
+  const { currentUser, users, setCurrentUser, getUserNotifications, notifications } = useLMS()
   const brand = useTenantBrand()
-  // Unread-notification count drives the badge on the Inbox nav row.
-  // We re-derive it from the notifications array so a mark-read inside
-  // the bell popover updates the badge in the same tick.
   const unreadCount = currentUser
     ? getUserNotifications(currentUser.id).filter((n) => n.status !== "read").length
     : 0
@@ -121,6 +121,33 @@ export function StudentSidebar() {
   const roleLabel = currentUser
     ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)
     : "Guest"
+
+  // All other users for the switcher — scan localStorage if the LMS
+  // store's users array is empty (common on student portal).
+  const switchUsers = useMemo(() => {
+    type U = typeof users[number]
+    let all = users.filter((u) => u.id !== currentUser?.id)
+    if (all.length === 0 && typeof window !== "undefined") {
+      try {
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const key = window.localStorage.key(i)
+          if (!key || !key.includes("lms.users")) continue
+          const raw = window.localStorage.getItem(key)
+          if (!raw) continue
+          const parsed = JSON.parse(raw) as U[]
+          if (Array.isArray(parsed)) {
+            all = parsed.filter((u) => u.id !== currentUser?.id)
+            if (all.length > 0) break
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    // Sort: admin first, then instructor, then student
+    return [...all].sort((a, b) => {
+      const order: Record<string, number> = { admin: 0, instructor: 1, student: 2 }
+      return (order[a.role] ?? 3) - (order[b.role] ?? 3)
+    })
+  }, [users, currentUser?.id])
 
   // Instructors/admins previewing the student view get a footer link back
   // to their main dashboard. True students never see this.
@@ -151,6 +178,22 @@ export function StudentSidebar() {
           </span>
         </Link>
         <NotificationBell />
+      </div>
+
+      {/* Search trigger — opens the ⌘K command palette */}
+      <div className="px-3 pt-3">
+        <button
+          type="button"
+          onClick={() => {
+            // Dispatch a synthetic Ctrl+K / ⌘K to open the palette
+            window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))
+          }}
+          className="flex w-full items-center gap-2 rounded-md border border-sidebar-border bg-sidebar px-3 py-1.5 text-xs text-sidebar-foreground/60 transition hover:border-sidebar-foreground/30 hover:text-sidebar-foreground"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span className="flex-1 text-left">Search...</span>
+          <kbd className="rounded border border-sidebar-border px-1.5 py-0.5 font-mono text-[10px] text-sidebar-foreground/40">⌘K</kbd>
+        </button>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -240,6 +283,35 @@ export function StudentSidebar() {
                 Public site
               </Link>
             </DropdownMenuItem>
+            {switchUsers.length > 0 && (
+              <>
+                <DropdownMenuSeparator />
+                <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Switch to
+                </p>
+                {switchUsers.map((u) => (
+                  <DropdownMenuItem
+                    key={u.id}
+                    onSelect={() => {
+                      setCurrentUser(u)
+                      // Navigate to the right dashboard based on role
+                      if (u.role === "admin" || u.role === "instructor") {
+                        router.push("/dashboard")
+                      } else {
+                        router.push(slug ? `/p/${slug}/my` : "/")
+                      }
+                    }}
+                    className="gap-2"
+                  >
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[9px] font-bold text-foreground">
+                      {initials(u.name)}
+                    </div>
+                    <span className="flex-1 truncate text-foreground">{u.name}</span>
+                    <span className="text-[10px] capitalize text-muted-foreground">{u.role}</span>
+                  </DropdownMenuItem>
+                ))}
+              </>
+            )}
             <DropdownMenuSeparator />
             <DropdownMenuItem
               asChild
@@ -282,6 +354,14 @@ export function StudentHeader() {
         <span className="truncate text-sm font-semibold">{brand.name}</span>
       </Link>
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }))}
+          className="rounded-md border border-border p-1.5 text-muted-foreground hover:text-foreground"
+          aria-label="Search"
+        >
+          <Search className="h-4 w-4" />
+        </button>
         <NotificationBell />
         <Button variant="outline" asChild size="sm">
           <Link

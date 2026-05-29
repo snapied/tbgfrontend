@@ -11,6 +11,7 @@
 import { Suspense, use, useEffect, useMemo, useState } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { BackButton } from "@/components/ui/back-button"
 import {
   Award,
   BookOpen,
@@ -35,6 +36,7 @@ import { useLMS } from "@/lib/lms-store"
 import { touchRecentStudent } from "@/lib/recently-viewed-students"
 import { StudentPrivateNotesPanel } from "@/components/students/student-private-notes"
 import { StudentTagsEditor } from "@/components/students/student-tags"
+import { maskEmail, maskPhone } from "@/lib/masking"
 import { DashboardBreadcrumbs } from "@/components/dashboard/dashboard-breadcrumbs"
 import { StudentPerformance } from "@/components/dashboard/student-performance"
 import { StudentEnrollWidget } from "@/components/students/student-enroll-widget"
@@ -98,6 +100,7 @@ function StudentDetailPageInner({ params }: { params: Promise<{ id: string }> })
   const { currentTenant } = useTenant()
   const confirm = useConfirm()
 
+  const isAdmin = currentUser?.role === "admin"
   const student = getUserById(id)
   // Touch the "recently viewed" log on every detail-page mount so
   // the roster's quick-switch strip reflects the teacher's latest
@@ -211,9 +214,7 @@ function StudentDetailPageInner({ params }: { params: Promise<{ id: string }> })
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <h1 className="text-2xl font-bold">Student not found</h1>
-        <Button asChild className="mt-4">
-          <Link href="/dashboard/students">Back to Students</Link>
-        </Button>
+        <BackButton label="Back" fallbackHref="/dashboard/students" className="mt-4" />
       </div>
     )
   }
@@ -248,12 +249,12 @@ function StudentDetailPageInner({ params }: { params: Promise<{ id: string }> })
               <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Mail className="h-3.5 w-3.5" />
-                  {student.email}
+                  {isAdmin ? student.email : maskEmail(student.email)}
                 </span>
                 {student.phone && (
                   <span className="flex items-center gap-1">
                     <Phone className="h-3.5 w-3.5" />
-                    {student.phone}
+                    {isAdmin ? student.phone : maskPhone(student.phone)}
                   </span>
                 )}
                 <span className="flex items-center gap-1">
@@ -266,11 +267,13 @@ function StudentDetailPageInner({ params }: { params: Promise<{ id: string }> })
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" asChild>
-                <Link href={`/dashboard/students/${student.id}/edit`}>
-                  <Pencil className="mr-1.5 h-4 w-4" /> Edit
-                </Link>
-              </Button>
+              {isAdmin && (
+                <Button variant="outline" asChild>
+                  <Link href={`/dashboard/students/${student.id}/edit`}>
+                    <Pencil className="mr-1.5 h-4 w-4" /> Edit
+                  </Link>
+                </Button>
+              )}
               <Button onClick={() => setMessageOpen(true)}>
                 <Send className="mr-1.5 h-4 w-4" /> Send message
               </Button>

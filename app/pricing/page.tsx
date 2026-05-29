@@ -92,7 +92,7 @@ const PLANS: Plan[] = [
       "Live + recordings included — 60 min/class",
       "Refer & Earn (referral program is free on every plan)",
       "— PAID FROM PRO+ —",
-      "AI course drafting · AI text refinement on every editor",
+      "AI course builder — 100 calls/mo (Pro), 500 (Studio), 5,000 (Institute)",
       "Multilingual portal (10 languages) + per-tenant translation editor",
       "Lead inbox + contact-form section + manual lead creation",
       "Community/student announcements + scheduling",
@@ -621,7 +621,7 @@ const MATRIX: { group: string; rows: MatrixRow[] }[] = [
       { feature: "Quizzes, assignments, auto-graded marks", starter: true, pro: true, studio: true, institute: true },
       { feature: "Custom certificate designer + auto-issue", starter: false, pro: true, studio: true, institute: true },
       { feature: "Drip / scheduled lesson unlock", starter: false, pro: true, studio: true, institute: true },
-      { feature: "AI course builder (titles, descriptions, modules, lesson drafts)", starter: true, pro: true, studio: true, institute: true },
+      { feature: "AI course builder (titles, descriptions, modules, lesson drafts)", starter: false, pro: "100/mo", studio: "500/mo", institute: "5,000/mo" },
     ],
   },
   {
@@ -884,7 +884,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "When does AI course drafting work?",
-    a: "Type a course title; we generate a description, subtitle, and a full outline (modules + lessons) for you to edit. Available on Pro and above. Starter sees the button as locked with an upgrade prompt — we don't burn LLM calls on the free tier.",
+    a: "Type a course title; we generate a description, subtitle, and a full outline (modules + lessons) for you to edit. Pro gets 100 AI calls/month, Studio gets 500, and Institute gets 5,000. Starter sees the button as locked with an upgrade prompt.",
   },
   {
     q: "Are live classes included?",

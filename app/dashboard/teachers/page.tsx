@@ -48,12 +48,34 @@ export default function CoachesListPage() {
 
   const filtered = useMemo(() => {
     if (!search.trim()) return teachers
-    const q = search.toLowerCase()
-    return teachers.filter(
-      (t) =>
-        t.name.toLowerCase().includes(q) ||
-        t.email.toLowerCase().includes(q),
-    )
+    const q = search.toLowerCase().trim()
+    // Fuzzy: match if every character of the query appears in order
+    const fuzzy = (hay: string, needle: string) => {
+      let hi = 0
+      for (let ni = 0; ni < needle.length; ni++) {
+        const idx = hay.indexOf(needle[ni], hi)
+        if (idx === -1) return false
+        hi = idx + 1
+      }
+      return true
+    }
+    return teachers
+      .map((t) => {
+        const name = t.name.toLowerCase()
+        const email = t.email.toLowerCase()
+        const bio = (t.bio ?? "").toLowerCase()
+        const exactName = name.includes(q)
+        const exactEmail = email.includes(q)
+        const exactBio = bio.includes(q)
+        const fuzzyName = !exactName && fuzzy(name, q)
+        const fuzzyEmail = !exactEmail && fuzzy(email, q)
+        const match = exactName || exactEmail || exactBio || fuzzyName || fuzzyEmail
+        const score = exactName ? 3 : exactEmail ? 2 : exactBio ? 2 : fuzzyName ? 1 : fuzzyEmail ? 1 : 0
+        return { t, match, score }
+      })
+      .filter((r) => r.match)
+      .sort((a, b) => b.score - a.score)
+      .map((r) => r.t)
   }, [teachers, search])
 
   // Admin-only guard — teachers cannot manage other teachers.

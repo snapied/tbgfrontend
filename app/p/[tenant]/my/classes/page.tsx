@@ -253,6 +253,7 @@ function ClassRow({
   courseTitle?: string
   variant: "upcoming" | "past"
 }) {
+  const [expanded, setExpanded] = useState(false)
   const scheduledMs = new Date(session.scheduledAt).getTime()
   const diffMin = Math.round((scheduledMs - Date.now()) / 60_000)
   const inProgress = variant === "upcoming" && diffMin <= 5 && diffMin >= -60
@@ -268,49 +269,91 @@ function ClassRow({
     ? `/p/${slug}/live/${session.roomCode}`
     : undefined
   const watchHref = session.recordingUrl ?? undefined
+  const hasDetails = variant === "past" && !!(session.summary || watchHref || (session.materials?.length ?? 0) > 0)
 
   return (
     <Card>
-      <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="line-clamp-1 font-serif text-base font-semibold">
-              {session.title}
+      <CardContent className="p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="line-clamp-1 font-serif text-base font-semibold text-foreground">
+                {session.title}
+              </p>
+              {inProgress && (
+                <Badge className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300">
+                  <span className="mr-1 h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                  Live now
+                </Badge>
+              )}
+            </div>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {courseTitle ? `${courseTitle} · ` : ""}
+              {when}
+              {session.durationMinutes ? ` · ${session.durationMinutes} min` : ""}
             </p>
-            {inProgress && (
-              <Badge className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/15 dark:text-emerald-300">
-                <span className="mr-1 h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                Live now
-              </Badge>
+          </div>
+          <div className="flex items-center gap-2">
+            {variant === "upcoming" && joinHref && (
+              <Button asChild size="sm" variant={inProgress ? "default" : "outline"}>
+                <Link href={joinHref}>
+                  <Video className="mr-1.5 h-3.5 w-3.5" />
+                  {inProgress ? "Join now" : "Open room"}
+                </Link>
+              </Button>
+            )}
+            {variant === "past" && watchHref && (
+              <Button asChild size="sm" variant="outline">
+                <a href={watchHref} target="_blank" rel="noreferrer">
+                  <Film className="mr-1.5 h-3.5 w-3.5" />
+                  Watch recording
+                </a>
+              </Button>
+            )}
+            {hasDetails && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => setExpanded(!expanded)}
+                className="text-xs text-muted-foreground"
+              >
+                {expanded ? "Hide details" : "View details"}
+              </Button>
+            )}
+            {variant === "past" && !watchHref && !hasDetails && (
+              <span className="text-xs text-muted-foreground">No recording</span>
             )}
           </div>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {courseTitle ? `${courseTitle} · ` : ""}
-            {when}
-            {session.durationMinutes ? ` · ${session.durationMinutes} min` : ""}
-          </p>
         </div>
-        <div className="flex items-center gap-2">
-          {variant === "upcoming" && joinHref && (
-            <Button asChild size="sm" variant={inProgress ? "default" : "outline"}>
-              <Link href={joinHref}>
-                <Video className="mr-1.5 h-3.5 w-3.5" />
-                {inProgress ? "Join now" : "Open room"}
-              </Link>
-            </Button>
-          )}
-          {variant === "past" && watchHref && (
-            <Button asChild size="sm" variant="outline">
-              <a href={watchHref} target="_blank" rel="noreferrer">
-                <Film className="mr-1.5 h-3.5 w-3.5" />
-                Watch recording
-              </a>
-            </Button>
-          )}
-          {variant === "past" && !watchHref && (
-            <span className="text-xs text-muted-foreground">No recording</span>
-          )}
-        </div>
+        {expanded && (
+          <div className="mt-3 space-y-2 border-t border-border pt-3">
+            {session.summary && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Recap</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{session.summary}</p>
+              </div>
+            )}
+            {(session.materials?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Materials</p>
+                <ul className="mt-1 space-y-1">
+                  {session.materials!.map((m, i) => (
+                    <li key={i}>
+                      <a
+                        href={m.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                      >
+                        {m.label || m.url}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

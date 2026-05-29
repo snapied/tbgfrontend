@@ -3,6 +3,7 @@
 import { use, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { BackButton } from "@/components/ui/back-button"
 import { ArrowLeft, Plus, Trash2, Save, Loader2, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -129,9 +130,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
         <div className="text-center">
           <h2 className="text-xl font-semibold">Quiz not found</h2>
           <p className="mt-2 text-muted-foreground">The quiz you are looking for does not exist.</p>
-          <Button asChild className="mt-4">
-            <Link href="/dashboard/quizzes">Back to Quizzes</Link>
-          </Button>
+          <BackButton label="Back" fallbackHref="/dashboard/quizzes" className="mt-4" />
         </div>
       </div>
     )
@@ -614,6 +613,28 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
               </dl>
             </CardContent>
           </Card>
+        </div>
+      </div>
+      {/* Sticky bottom save — always visible without scrolling to the top */}
+      <div className="sticky bottom-0 z-10 -mx-1 border-t border-border bg-card/95 px-1 py-3 backdrop-blur">
+        <div className="flex items-center justify-end gap-3">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/quizzes">Cancel</Link>
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className={saved ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}
+          >
+            {saving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : saved ? (
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            {saving ? "Saving…" : saved ? "Saved ✓" : "Save changes"}
+          </Button>
         </div>
       </div>
     </div>

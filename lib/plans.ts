@@ -119,6 +119,8 @@ export interface PlanLimits {
    * captured during the trial), but the UI is gated.
    */
   courseVersioning: boolean
+  /** AI content generation calls per calendar month. 0 = none. */
+  aiCallsPerMonth: number
   // NOTE: There is no `transactionFeePercent`. The Founder Bill of
   // Rights (Article 1) and the homepage hero both commit to ZERO
   // commission on creator revenue, on every plan. The flat
@@ -195,6 +197,7 @@ export const PLANS: Record<PlanId, Plan> = {
       multilingual: false,
       apiAccess: false,
       courseVersioning: false,
+      aiCallsPerMonth: 0,
     },
     price: { monthlyPaise: 0, yearlyPaise: 0 },
   },
@@ -225,6 +228,7 @@ export const PLANS: Record<PlanId, Plan> = {
       multilingual: true,
       apiAccess: false,
       courseVersioning: true,
+      aiCallsPerMonth: 100,
     },
     price: {
       monthlyPaise: 149_900,
@@ -261,6 +265,7 @@ export const PLANS: Record<PlanId, Plan> = {
       multilingual: true,
       apiAccess: false,
       courseVersioning: true,
+      aiCallsPerMonth: 500,
     },
     price: {
       monthlyPaise: 349_900,
@@ -298,6 +303,7 @@ export const PLANS: Record<PlanId, Plan> = {
       multilingual: true,
       apiAccess: true,
       courseVersioning: true,
+      aiCallsPerMonth: 5000,
     },
     // Institute is sales-led — no Razorpay self-checkout. Backend
     // operators provision manually after the contract is signed.

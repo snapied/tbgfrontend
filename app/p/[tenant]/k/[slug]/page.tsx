@@ -8,6 +8,7 @@
 import { use, useEffect, useMemo } from "react"
 import Link from "next/link"
 import { ArrowLeft, Calendar, ChevronLeft, Globe2 } from "lucide-react"
+import { BackButton } from "@/components/ui/back-button"
 import { DynamicMeta } from "@/components/seo/dynamic-meta"
 import { useTenantBrand } from "@/lib/tenant-brand"
 import { useLMS } from "@/lib/lms-store"
@@ -66,13 +67,7 @@ export default function TenantPublicDocPage({
         <p className="mt-2 max-w-md text-sm text-muted-foreground">
           This page is either private, deleted, or has never been published.
         </p>
-        <Link
-          href={hubHref}
-          className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline"
-        >
-          <ArrowLeft className="h-3 w-3" />
-          Back to the knowledge hub
-        </Link>
+        <BackButton label="Back" fallbackHref={hubHref} className="mt-4" />
       </main>
     )
   }

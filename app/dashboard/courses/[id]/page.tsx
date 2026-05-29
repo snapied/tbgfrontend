@@ -2,6 +2,7 @@
 
 import { use, useMemo, useState } from "react"
 import Link from "next/link"
+import { BackButton } from "@/components/ui/back-button"
 import {
   ArrowLeft,
   Archive,
@@ -93,9 +94,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <h1 className="text-2xl font-bold">Course not found</h1>
-        <Button asChild className="mt-4">
-          <Link href="/dashboard/courses">Back to Courses</Link>
-        </Button>
+        <BackButton label="Back" fallbackHref="/dashboard/courses" className="mt-4" />
       </div>
     )
   }

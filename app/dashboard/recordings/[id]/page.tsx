@@ -21,6 +21,7 @@ import { useMemo } from "react"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { BackButton } from "@/components/ui/back-button"
 import { useLMS } from "@/lib/lms-store"
 import { RecordingPlayerDialog } from "@/components/classes/recording-player-dialog"
 
@@ -45,11 +46,7 @@ export default function RecordingDetailRoutePage() {
     return (
       <div className="mx-auto max-w-xl px-6 py-16 text-center">
         <p className="text-sm text-muted-foreground">Recording not found, or this class has no recording yet.</p>
-        <Button asChild variant="outline" className="mt-4">
-          <Link href="/dashboard/recordings">
-            <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to recordings
-          </Link>
-        </Button>
+        <BackButton label="Back" fallbackHref="/dashboard/recordings" className="mt-4" />
       </div>
     )
   }

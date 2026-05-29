@@ -28,6 +28,7 @@ import { AskDoubtDialog } from "@/components/learn/ask-doubt-dialog"
 import { CourseAnnouncements } from "@/components/learn/course-announcements"
 import { CompletionConfetti } from "@/components/learn/completion-confetti"
 import { ShareMenu } from "@/components/share/share-menu"
+import { BackButton } from "@/components/ui/back-button"
 
 export default function LearnCoursePage(props: { params: Promise<{ slug: string }> }) {
   // useSearchParams needs a Suspense boundary at the page root for
@@ -446,12 +447,7 @@ function LearnCoursePageInner({ params }: { params: Promise<{ slug: string }> })
       {inTenant ? (
         <div className="border-b border-border bg-card/60">
           <div className="flex h-12 items-center justify-between gap-3 px-4">
-            <Button variant="ghost" size="sm" asChild>
-              <Link href={coursesHref}>
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Courses
-              </Link>
-            </Button>
+            <BackButton label="Back" fallbackHref={coursesHref} />
             <div className="flex items-center gap-3">
               <AskDoubtDialog
                 courseId={course.id}
@@ -482,12 +478,7 @@ function LearnCoursePageInner({ params }: { params: Promise<{ slug: string }> })
         <header className="sticky top-0 z-50 border-b border-border bg-card">
           <div className="flex h-14 items-center justify-between px-4">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" asChild>
-                <Link href={coursesHref}>
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Back to Courses
-                </Link>
-              </Button>
+              <BackButton label="Back" fallbackHref={coursesHref} />
               <div className="hidden sm:block">
                 <h1 className="font-semibold text-foreground truncate max-w-md">{course.title}</h1>
               </div>
@@ -1049,12 +1040,7 @@ function PreviewModePlayer({
       <div className="sticky top-0 z-30 border-b border-border bg-card/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <Button asChild variant="ghost" size="sm" className="-ml-2">
-              <Link href={courseDetailHref}>
-                <ArrowLeft className="mr-1 h-4 w-4" />
-                Back to course
-              </Link>
-            </Button>
+            <BackButton label="Back" fallbackHref={courseDetailHref} className="-ml-2" />
             <div className="hidden h-5 w-px bg-border sm:block" aria-hidden />
             <p className="hidden truncate text-sm font-semibold sm:block">
               {course.title}

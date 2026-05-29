@@ -3,6 +3,7 @@
 import { Suspense, useCallback, useEffect, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
+import { BackButton } from "@/components/ui/back-button"
 import { ArrowLeft, Plus, Trash2, Award } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -424,10 +425,7 @@ function NewCoursePageInner() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" onClick={() => router.push("/dashboard/courses")}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to courses
-          </Button>
+          <BackButton label="Back" fallbackHref="/dashboard/courses" />
         </div>
         <div className="mx-auto max-w-xl pt-8">
           <PlanGatedCard feature="publishedCourses" />
@@ -456,11 +454,6 @@ function NewCoursePageInner() {
             (below) where they're more discoverable + the segmented
             control's labels make the current state obvious. */}
         <div className="flex items-center gap-3">
-          <AIGenerateButton
-            label="AI Course Builder"
-            size="default"
-            onGenerate={() => setAiBuilderOpen(true)}
-          />
           <Button variant="outline" onClick={() => goBack("/dashboard/courses")}>
             Cancel
           </Button>

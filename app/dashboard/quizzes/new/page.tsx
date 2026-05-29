@@ -863,6 +863,15 @@ export default function NewQuizPage() {
           </Card>
         </div>
       </div>
+      {/* Sticky bottom save */}
+      <div className="sticky bottom-0 z-10 -mx-1 border-t border-border bg-card/95 px-1 py-3 backdrop-blur">
+        <div className="flex items-center justify-end gap-3">
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/quizzes">Cancel</Link>
+          </Button>
+          <Button onClick={handleSubmit}>Create Quiz</Button>
+        </div>
+      </div>
     </div>
   )
 }

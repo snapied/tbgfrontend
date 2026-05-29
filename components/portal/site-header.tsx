@@ -6,8 +6,9 @@
 // the same data (nav links + logo + optional CTA), not a separate set
 // of features — so a teacher switching layouts never loses content.
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ChevronDown, GraduationCap, LogOut, Menu, ShoppingBag, X, ArrowRight } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { PortalConfig, PortalPage } from "@/lib/portal-store"
@@ -512,12 +513,41 @@ function SplitWithCta({
 // basePath is the tenant prefix (e.g. "/p/maths-academy"), so links
 // stay inside the tenant brand.
 function AccountMenu({ basePath }: { basePath: string }) {
-  const { currentUser, setCurrentUser } = useLMS()
+  const router = useRouter()
+  const { currentUser, setCurrentUser, users } = useLMS()
   if (!currentUser) return null
   const initial = (currentUser.name?.trim()?.[0] ?? currentUser.email?.[0] ?? "?").toUpperCase()
   const learningHref = `${basePath}/my`
   const libraryHref = `${basePath}/library`
   const signOutHref = `${basePath}/login`
+  // Quick switcher — scan ALL tenant localStorage keys to find users,
+  // because the portal's LMS store may have an empty users array.
+  const otherUsers = useMemo(() => {
+    if (typeof window === "undefined") return [] as typeof users
+    // Try LMS store first
+    let all = users.filter((u) => u.id !== currentUser.id)
+    // If empty, scan localStorage for any tenant's users array
+    if (all.length === 0) {
+      try {
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const key = window.localStorage.key(i)
+          if (!key || !key.includes("lms.users")) continue
+          const raw = window.localStorage.getItem(key)
+          if (!raw) continue
+          const parsed = JSON.parse(raw) as typeof users
+          if (Array.isArray(parsed)) {
+            all = parsed.filter((u) => u.id !== currentUser.id)
+            if (all.length > 0) break
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    const sorted = [...all].sort((a, b) => {
+      const order: Record<string, number> = { admin: 0, instructor: 1, student: 2 }
+      return (order[a.role] ?? 3) - (order[b.role] ?? 3)
+    })
+    return sorted
+  }, [users, currentUser.id])
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -546,6 +576,34 @@ function AccountMenu({ basePath }: { basePath: string }) {
             My library
           </Link>
         </DropdownMenuItem>
+        {otherUsers.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Switch to
+            </p>
+            {otherUsers.map((u) => (
+              <DropdownMenuItem
+                key={u.id}
+                onSelect={() => {
+                  setCurrentUser(u)
+                  if (u.role === "admin" || u.role === "instructor") {
+                    router.push("/dashboard")
+                  } else {
+                    router.push(`${basePath}/my`)
+                  }
+                }}
+                className="gap-2"
+              >
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[9px] font-bold text-foreground">
+                  {u.name.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                </span>
+                <span className="flex-1 truncate text-foreground">{u.name}</span>
+                <span className="text-[10px] capitalize text-muted-foreground">{u.role}</span>
+              </DropdownMenuItem>
+            ))}
+          </>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link

@@ -4,6 +4,7 @@ import { use, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { Suspense } from "react"
 import Link from "next/link"
+import { BackButton } from "@/components/ui/back-button"
 import {
   ArrowLeft,
   Award,
@@ -133,9 +134,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
           <p className="mt-2 text-muted-foreground">
             The course you are looking for does not exist.
           </p>
-          <Button asChild className="mt-4">
-            <Link href="/dashboard/courses">Back to courses</Link>
-          </Button>
+          <BackButton label="Back" fallbackHref="/dashboard/courses" className="mt-4" />
         </div>
       </div>
     )
@@ -466,9 +465,7 @@ function EditCoursePageInner({ course }: { course: Course }) {
         <div className="text-center">
           <h2 className="text-xl font-semibold">Course not found</h2>
           <p className="mt-2 text-muted-foreground">The course you are looking for does not exist.</p>
-          <Button asChild className="mt-4">
-            <Link href="/dashboard/courses">Back to Courses</Link>
-          </Button>
+          <BackButton label="Back" fallbackHref="/dashboard/courses" className="mt-4" />
         </div>
       </div>
     )

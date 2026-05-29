@@ -17,6 +17,7 @@ import { use, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { ArrowRight, Lock, Sparkles, Users2 } from "lucide-react"
+import { BackButton } from "@/components/ui/back-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { useLMS } from "@/lib/lms-store"
@@ -115,9 +116,7 @@ export default function CommunityJoinPage({
             <p className="text-sm text-muted-foreground">
               This link doesn&apos;t match any community in {brand.name}. The admin may have rotated the code — ask them for a fresh one.
             </p>
-            <Button asChild variant="outline">
-              <Link href={`/p/${tenant}`}>Back to {brand.name}</Link>
-            </Button>
+            <BackButton label="Back" fallbackHref={`/p/${tenant}`} />
           </CardContent>
         </Card>
       </Centered>

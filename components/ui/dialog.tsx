@@ -2,6 +2,7 @@
 
 import * as React from 'react'
 import * as DialogPrimitive from '@radix-ui/react-dialog'
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden'
 import { XIcon } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
@@ -59,12 +60,19 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        aria-describedby={undefined}
         className={cn(
           'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 flex flex-col w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
           className,
         )}
         {...props}
       >
+        {/* Fallback accessible title for dialogs that don't include
+            their own DialogTitle. Hidden visually but read by screen
+            readers, silencing the Radix console warning. */}
+        <VisuallyHidden asChild>
+          <DialogPrimitive.Title>Dialog</DialogPrimitive.Title>
+        </VisuallyHidden>
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close

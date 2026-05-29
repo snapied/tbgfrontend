@@ -18,6 +18,7 @@ import {
   ShoppingCart,
   Users,
 } from "lucide-react"
+import { BackButton } from "@/components/ui/back-button"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -63,9 +64,7 @@ export default function PortalProductDetailPage({
         <Package className="h-10 w-10 text-muted-foreground" />
         <h1 className="mt-3 text-2xl font-bold">Product not available</h1>
         <p className="mt-1 text-muted-foreground">It may have been removed or unpublished.</p>
-        <Button asChild className="mt-4">
-          <Link href={storeHref}><ArrowLeft className="mr-2 h-4 w-4" /> Back to store</Link>
-        </Button>
+        <BackButton label="Back" fallbackHref={storeHref} className="mt-4" />
       </main>
     )
   }
@@ -94,13 +93,7 @@ export default function PortalProductDetailPage({
         type="product"
         siteName={brand.name}
       />
-      <Link
-        href={storeHref}
-        className="mb-4 inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="h-3 w-3" />
-        Back to store
-      </Link>
+      <BackButton label="Back" fallbackHref={storeHref} className="mb-4" />
 
       <div className="grid gap-8 lg:grid-cols-[1fr_360px]">
         {/* Left — preview + sales copy */}

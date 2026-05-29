@@ -47,6 +47,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { useLMS } from "@/lib/lms-store"
+import { maskEmail } from "@/lib/masking"
 import { usePlan } from "@/lib/use-plan"
 import { PlanLimitHint, PlanLimitWarning } from "@/components/dashboard/plan-lock"
 import { fuzzyScore } from "@/lib/fuzzy-search"
@@ -1043,7 +1044,7 @@ export default function StudentsPage() {
                         )}
                         <div className="min-w-0">
                           <p className="truncate font-medium text-foreground">{student.name}</p>
-                          <p className="truncate text-sm text-muted-foreground">{student.email}</p>
+                          <p className="truncate text-sm text-muted-foreground">{currentUser?.role === "admin" ? student.email : maskEmail(student.email)}</p>
                           <StudentTagChips studentId={student.id} className="mt-1" />
                         </div>
                       </div>

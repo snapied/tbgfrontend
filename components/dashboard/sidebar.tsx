@@ -1,9 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { LayoutDashboard, FilePlus, Heart, History, Users, Settings, LogOut, ChevronDown, ChevronRight, BookOpen, Bookmark, GraduationCap, FileQuestion, BarChart3, MessageSquare, Megaphone, Palette, Trophy, UserPlus, Video, ClipboardList, ShoppingBag, Globe, ExternalLink as ExternalLinkIcon, Home, FileText, Trash2, Code2, Users2, PenSquare, Film, Inbox, CreditCard, Banknote, Webhook as WebhookIcon, Languages as LanguagesIcon, Activity, Sparkles, Calendar, Beaker, Wallet } from "lucide-react"
+import { LayoutDashboard, FilePlus, Heart, History, Users, Settings, LogOut, ChevronDown, ChevronRight, BookOpen, Bookmark, GraduationCap, FileQuestion, BarChart3, MessageSquare, Megaphone, Palette, Trophy, UserPlus, Video, ClipboardList, ShoppingBag, Globe, ExternalLink as ExternalLinkIcon, Home, FileText, Trash2, Code2, Users2, PenSquare, Film, Inbox, CreditCard, Banknote, Webhook as WebhookIcon, Languages as LanguagesIcon, Activity, Sparkles, Calendar, Beaker, Wallet, Award } from "lucide-react"
 import { openTeacherWelcome } from "@/components/dashboard/welcome-modal"
 import { NotificationBell } from "@/components/dashboard/notification-bell"
 import { ViewPublicSiteButton } from "@/components/dashboard/view-public-site-button"
@@ -49,6 +49,8 @@ interface NavGroup {
   defaultOpen?: boolean
   /** If true, the entire group is hidden from instructors. */
   adminOnly?: boolean
+  /** If true, the entire group is only shown to instructors. */
+  teacherOnly?: boolean
 }
 
 // "Dashboard" stays outside any group — it's the home view, one click away
@@ -63,62 +65,62 @@ const pinnedItem: NavItem = {
 const navGroups: NavGroup[] = [
   {
     id: "teach",
-    label: "Teacher",
+    label: "Teach",
     defaultOpen: true,
     items: [
       { name: "Courses", href: "/dashboard/courses", icon: BookOpen },
-      { name: "Students", href: "/dashboard/students", icon: GraduationCap },
-      { name: "Engagement", href: "/dashboard/students/engagement", icon: Activity },
-      { name: "Communities", href: "/dashboard/batches", icon: Users2 },
       { name: "Live Classes", href: "/dashboard/classes", icon: Video },
       { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
+      { name: "Quizzes", href: "/dashboard/quizzes", icon: FileQuestion },
+      { name: "Assignments", href: "/dashboard/assignments", icon: ClipboardList },
       { name: "Recordings", href: "/dashboard/recordings", icon: Film },
       { name: "Whiteboards", href: "/dashboard/whiteboards", icon: PenSquare },
-      { name: "Quizzes", href: "/dashboard/quizzes", icon: FileQuestion },
       { name: "Docs", href: "/dashboard/docs", icon: FileText },
-      { name: "Assignments", href: "/dashboard/assignments", icon: ClipboardList },
-      { name: "Storefront", href: "/dashboard/store", icon: ShoppingBag, adminOnly: true },
-      { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
-      { name: "Experiments", href: "/dashboard/experiments", icon: Beaker, adminOnly: true },
+    ],
+  },
+  {
+    id: "people",
+    label: "People",
+    defaultOpen: true,
+    items: [
+      { name: "Students", href: "/dashboard/students", icon: GraduationCap, adminOnly: true },
+      { name: "Engagement", href: "/dashboard/students/engagement", icon: Activity, adminOnly: true },
+      { name: "Communities", href: "/dashboard/batches", icon: Users2 },
+      { name: "Leaderboard", href: "/dashboard/leaderboard", icon: Trophy },
+      { name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
+      { name: "Doubts & Q&A", href: "/dashboard/doubts", icon: FileQuestion },
+      { name: "Saved", href: "/dashboard/saved", icon: Bookmark },
+    ],
+  },
+  {
+    id: "me",
+    label: "My Account",
+    teacherOnly: true,
+    defaultOpen: true,
+    items: [
       { name: "My Earnings", href: "/dashboard/my-earnings", icon: Wallet, teacherOnly: true },
       { name: "My Feedback", href: "/dashboard/my-feedback", icon: MessageSquare, teacherOnly: true },
     ],
   },
   {
-    id: "certificates",
-    label: "Certificates",
+    id: "grow",
+    label: "Grow",
+    adminOnly: true,
     items: [
-      { name: "New Batch", href: "/dashboard/new-batch", icon: FilePlus },
-      { name: "Batch History", href: "/dashboard/history", icon: History },
-      { name: "Templates", href: "/dashboard/templates", icon: Palette },
-    ],
-  },
-  {
-    id: "community",
-    label: "Community",
-    items: [
-      // Inbox sits at the top — single rolled-up view of doubts,
-      // discussions, batch posts, leads, and blog comments that need
-      // attention. The specific surfaces below remain for deep work.
-      { name: "Inbox", href: "/dashboard/inbox", icon: Inbox },
-      // Saved — the per-user bookmarked-posts tray. Lives in
-      // Community because that's where every saved post originates
-      // from today; if we add saved lessons or recordings later
-      // they'll come into the same surface.
-      { name: "Saved", href: "/dashboard/saved", icon: Bookmark },
-      // Discussions has been folded into Communities — see
-      // /dashboard/discussions/page.tsx for the redirect surface.
-      // Removing the nav entry prevents new traffic to the old path.
-      { name: "Doubts & Q&A", href: "/dashboard/doubts", icon: FileQuestion },
+      { name: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
+      { name: "Storefront", href: "/dashboard/store", icon: ShoppingBag },
       { name: "Announcements", href: "/dashboard/announcements", icon: Megaphone, lockedBehind: "marketingTools" },
-      { name: "Leaderboard", href: "/dashboard/leaderboard", icon: Trophy },
       { name: "Wall of Love", href: "/dashboard/wall", icon: Heart },
       { name: "Refer & Earn", href: "/dashboard/referrals", icon: UserPlus },
+      { name: "Certificates", href: "/dashboard/new-batch", icon: Award },
+      { name: "Certificate History", href: "/dashboard/history", icon: History },
+      { name: "Certificate Templates", href: "/dashboard/templates", icon: Palette },
+      { name: "Experiments", href: "/dashboard/experiments", icon: Beaker },
     ],
   },
   {
     id: "portal",
-    label: "Public site",
+    label: "Public Site",
     adminOnly: true,
     items: [
       { name: "Overview", href: "/dashboard/portal", icon: Globe },
@@ -128,7 +130,6 @@ const navGroups: NavGroup[] = [
       { name: "Public profile", href: "/dashboard/portal/profile", icon: UserPlus },
       { name: "Testimonials", href: "/dashboard/portal/testimonials", icon: Heart },
       { name: "Blog", href: "/dashboard/portal/blog", icon: BookOpen },
-      { name: "Announcements", href: "/dashboard/portal/announcements", icon: Megaphone, lockedBehind: "marketingTools" },
       { name: "Lead inbox", href: "/dashboard/portal/leads", icon: MessageSquare, lockedBehind: "marketingTools" },
       { name: "Domain & URL", href: "/dashboard/portal/domain", icon: ExternalLinkIcon, lockedBehind: "customDomain" },
       { name: "Languages", href: "/dashboard/portal/languages", icon: LanguagesIcon, lockedBehind: "multilingual" },
@@ -137,16 +138,17 @@ const navGroups: NavGroup[] = [
   {
     id: "workspace",
     label: "Workspace",
+    adminOnly: true,
     items: [
-      { name: "Teachers", href: "/dashboard/teachers", icon: UserPlus, adminOnly: true },
-      { name: "Manage Users", href: "/dashboard/users", icon: Users, adminOnly: true },
-      { name: "Billing & plan", href: "/dashboard/billing", icon: CreditCard, adminOnly: true },
-      { name: "Payouts", href: "/dashboard/payouts", icon: Banknote, adminOnly: true },
-      { name: "Developer", href: "/dashboard/developer", icon: Code2, lockedBehind: "apiAccess", adminOnly: true },
-      { name: "Webhooks", href: "/dashboard/developer/webhooks", icon: WebhookIcon, lockedBehind: "apiAccess", adminOnly: true },
-      { name: "Trash", href: "/dashboard/trash", icon: Trash2 },
-      { name: "System status", href: "/dashboard/status", icon: Activity },
+      { name: "Teachers", href: "/dashboard/teachers", icon: UserPlus },
+      { name: "Manage Users", href: "/dashboard/users", icon: Users },
+      { name: "Billing & plan", href: "/dashboard/billing", icon: CreditCard },
+      { name: "Payouts", href: "/dashboard/payouts", icon: Banknote },
       { name: "Settings", href: "/dashboard/settings", icon: Settings },
+      { name: "Trash", href: "/dashboard/trash", icon: Trash2 },
+      { name: "Developer", href: "/dashboard/developer", icon: Code2, lockedBehind: "apiAccess" },
+      { name: "Webhooks", href: "/dashboard/developer/webhooks", icon: WebhookIcon, lockedBehind: "apiAccess" },
+      { name: "System status", href: "/dashboard/status", icon: Activity },
     ],
   },
 ]
@@ -238,9 +240,35 @@ function useGroupOpenState(activeGroupId: string | null) {
 
 export function DashboardSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
   const { currentUser, users, doubts, discussions, setCurrentUser } = useLMS()
   const { leads, posts } = usePortal()
   const { currentTenant } = useTenant()
+  // All users for the switcher — scan localStorage if LMS store is empty
+  const switchPicks = useMemo(() => {
+    let all = users.filter((u) => u.id !== currentUser?.id)
+    if (all.length === 0 && typeof window !== "undefined") {
+      try {
+        for (let i = 0; i < window.localStorage.length; i++) {
+          const key = window.localStorage.key(i)
+          if (!key || !key.includes("lms.users")) continue
+          const raw = window.localStorage.getItem(key)
+          if (!raw) continue
+          const parsed = JSON.parse(raw) as typeof users
+          if (Array.isArray(parsed)) {
+            all = parsed.filter((u) => u.id !== currentUser?.id)
+            if (all.length > 0) break
+          }
+        }
+      } catch { /* ignore */ }
+    }
+    // Sort: admin first, then instructor, then student
+    return [...all].sort((a, b) => {
+      const order: Record<string, number> = { admin: 0, instructor: 1, student: 2 }
+      return (order[a.role] ?? 3) - (order[b.role] ?? 3)
+    })
+  }, [users, currentUser?.id])
+
   const displayName = currentUser?.name ?? "Signed out"
   const roleLabel = currentUser
     ? currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1)
@@ -397,8 +425,8 @@ export function DashboardSidebar() {
 
         {navGroups
           .filter((group) => {
-            // Hide admin-only groups from instructors (teachers)
             if (group.adminOnly && currentUser?.role === "instructor") return false
+            if (group.teacherOnly && currentUser?.role !== "instructor") return false
             return true
           })
           .map((group) => {
@@ -531,29 +559,31 @@ export function DashboardSidebar() {
               <Sparkles className="mr-2 h-4 w-4" />
               Show me around again
             </DropdownMenuItem>
-            {/* Quick user switcher — for testing teacher vs admin views */}
-            {users.filter((u) => u.id !== currentUser?.id).length > 0 && (
+            {switchPicks.length > 0 && (
               <>
                 <DropdownMenuSeparator />
                 <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                   Switch to
                 </p>
-                {users
-                  .filter((u) => u.id !== currentUser?.id)
-                  .slice(0, 5)
-                  .map((u) => (
-                    <DropdownMenuItem
-                      key={u.id}
-                      onSelect={() => setCurrentUser(u)}
-                      className="gap-2"
-                    >
-                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[9px] font-bold">
-                        {initials(u.name)}
-                      </div>
-                      <span className="flex-1 truncate">{u.name}</span>
-                      <span className="text-[10px] capitalize text-muted-foreground">{u.role}</span>
-                    </DropdownMenuItem>
-                  ))}
+                {switchPicks.map((u) => (
+                  <DropdownMenuItem
+                    key={u.id}
+                    onSelect={() => {
+                      setCurrentUser(u)
+                      if (u.role === "student") {
+                        const slug = currentTenant?.slug
+                        router.push(slug ? `/p/${slug}/my` : "/")
+                      }
+                    }}
+                    className="gap-2"
+                  >
+                    <div className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[9px] font-bold">
+                      {initials(u.name)}
+                    </div>
+                    <span className="flex-1 truncate">{u.name}</span>
+                    <span className="text-[10px] capitalize text-muted-foreground">{u.role}</span>
+                  </DropdownMenuItem>
+                ))}
               </>
             )}
             <DropdownMenuSeparator />
