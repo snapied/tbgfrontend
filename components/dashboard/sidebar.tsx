@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
-import { LayoutDashboard, FilePlus, Heart, History, Users, Settings, LogOut, ChevronDown, ChevronRight, BookOpen, Bookmark, GraduationCap, FileQuestion, BarChart3, MessageSquare, Megaphone, Palette, Trophy, UserPlus, Video, ClipboardList, ShoppingBag, Globe, ExternalLink as ExternalLinkIcon, Home, FileText, Trash2, Code2, Users2, PenSquare, Film, Inbox, CreditCard, Banknote, Webhook as WebhookIcon, Languages as LanguagesIcon, Activity, Sparkles, Calendar, Beaker, Wallet, Award } from "lucide-react"
+import { LayoutDashboard, FilePlus, Heart, History, Users, Settings, LogOut, ChevronDown, ChevronRight, BookOpen, Bookmark, GraduationCap, FileQuestion, BarChart3, MessageSquare, Megaphone, Palette, Trophy, UserPlus, Video, ClipboardList, ShoppingBag, Globe, ExternalLink as ExternalLinkIcon, Home, FileText, Trash2, Code2, Users2, PenSquare, Film, Inbox, CreditCard, Banknote, Webhook as WebhookIcon, Languages as LanguagesIcon, Activity, Sparkles, Calendar, Beaker, Wallet, Award, Presentation } from "lucide-react"
 import { openTeacherWelcome } from "@/components/dashboard/welcome-modal"
 import { NotificationBell } from "@/components/dashboard/notification-bell"
 import { ViewPublicSiteButton } from "@/components/dashboard/view-public-site-button"
@@ -75,6 +75,7 @@ const navGroups: NavGroup[] = [
       { name: "Assignments", href: "/dashboard/assignments", icon: ClipboardList },
       { name: "Recordings", href: "/dashboard/recordings", icon: Film },
       { name: "Whiteboards", href: "/dashboard/whiteboards", icon: PenSquare },
+      { name: "Presentations", href: "/dashboard/presentations", icon: Presentation },
       { name: "Docs", href: "/dashboard/docs", icon: FileText },
     ],
   },

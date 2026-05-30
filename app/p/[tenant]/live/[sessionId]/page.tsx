@@ -26,6 +26,7 @@ import { LivePollPanel } from "@/components/classes/live-poll-panel"
 import { useLivePoll } from "@/lib/live-poll"
 import { RaiseHandButton } from "@/components/classes/raise-hand-button"
 import { useReconnectGuard } from "@/lib/live-class-features"
+import { PresentationCard } from "@/components/classes/presentation-card"
 import Link from "next/link"
 import {
   Bell,
@@ -1351,6 +1352,11 @@ function EndedScreen({
               ))}
             </div>
           )}
+          {/* AI-generated class recap presentation */}
+          <div className="mt-4 text-left">
+            <PresentationCard roomCode={canonicalRoomCode(session)} />
+          </div>
+
           <div className="flex flex-wrap justify-center gap-3 pt-4">
             <Button asChild variant="outline">
               <Link href={`/p/${tenant}`}>Back to home</Link>

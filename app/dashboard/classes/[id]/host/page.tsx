@@ -46,6 +46,7 @@ import { useWhiteboardAccess } from "@/lib/whiteboard-access"
 import { LiveStateBeacon } from "@/components/classes/live-state-beacon"
 import { PreflightChecklist } from "@/components/classes/preflight-checklist"
 import { EndClassWrapWizard, type EndClassDecision } from "@/components/classes/end-class-wrap-wizard"
+import { PresentationCard } from "@/components/classes/presentation-card"
 import { legacyBlocksToBlocknoteContent, useDocs, type DocBlock } from "@/lib/docs"
 import { addReferenceEdge } from "@/lib/doc-references"
 import { BreakoutRoomsPanel } from "@/components/classes/breakout-rooms-panel"
@@ -1492,6 +1493,11 @@ function EndedHostScreen({ session }: { session: LiveSession }) {
               </CardContent>
             </Card>
           )}
+          {/* AI-generated class recap presentation */}
+          <PresentationCard
+            roomCode={canonicalRoomCode(session)}
+            isTeacher
+          />
           <div className="flex justify-center gap-3 pt-4">
             <Button asChild variant="outline">
               <Link href={`/dashboard/classes/${session.id}`}>Class settings</Link>

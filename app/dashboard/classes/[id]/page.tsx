@@ -59,6 +59,7 @@ import {
   providerLabel,
 } from "@/lib/live-session-utils"
 import { readCurrentTenantSlug } from "@/lib/tenant-store"
+import { PresentationCard } from "@/components/classes/presentation-card"
 
 export default function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -383,6 +384,14 @@ export default function ClassDetailPage({ params }: { params: Promise<{ id: stri
 
         return null
       })()}
+
+      {/* AI-generated class recap presentation */}
+      {session.roomState === "ended" && (
+        <PresentationCard
+          roomCode={session.roomCode || session.id}
+          isTeacher
+        />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
