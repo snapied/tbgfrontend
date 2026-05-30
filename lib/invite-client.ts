@@ -198,6 +198,151 @@ export async function resendInvite(inviteId: number, sentVia?: string): Promise<
   }
 }
 
+// ── Admin: Course payment status ────────────────────────────────
+
+export interface CourseStudentStatus {
+  student_id: number
+  display_name: string
+  email: string | null
+  phone: string | null
+  status: string
+  enrolled: boolean
+  payment_status: "paid" | "unpaid" | "pending" | "expired" | "never_invited"
+  invite: {
+    id: number
+    token: string
+    url: string
+    status: InviteStatus
+    sent_via: string | null
+    sent_at: string | null
+    paid_at: string | null
+    claimed_at: string | null
+    final_price: number
+    expires_at: string
+    created_at: string
+  } | null
+}
+
+export interface CourseStatusResponse {
+  students: CourseStudentStatus[]
+  summary: {
+    total: number
+    paid: number
+    unpaid: number
+    pending: number
+    expired: number
+    never_invited: number
+  }
+  reusable_invites: Array<{
+    id: number
+    token: string
+    url: string
+    status: InviteStatus
+    final_price: number
+    use_count: number
+    max_uses: number | null
+    expires_at: string
+    created_at: string
+  }>
+}
+
+export async function getCoursePaymentStatus(
+  courseId: string,
+): Promise<CourseStatusResponse | { error: string; status: number }> {
+  try {
+    const res = await fetch(`${apiBase()}/api/invites/course-status/${courseId}`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!res.ok) return { error: await safeError(res), status: res.status }
+    return (await res.json()) as CourseStatusResponse
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Network error", status: 0 }
+  }
+}
+
+// ── Admin: Bulk create invites ──────────────────────────────────
+
+export interface BulkInviteResult {
+  student_id: number
+  display_name: string
+  email: string | null
+  phone: string | null
+  action: "created" | "resent" | "skipped_enrolled" | "skipped_not_found"
+  invite_id?: number
+  invite_url?: string
+  sent_email?: boolean
+  sent_whatsapp?: boolean
+  error?: string
+}
+
+export interface BulkInviteResponse {
+  results: BulkInviteResult[]
+  summary: {
+    total: number
+    created: number
+    resent: number
+    skipped: number
+    emails_sent: number
+  }
+}
+
+export async function bulkCreateInvites(data: {
+  course_id: string
+  course_price: number
+  students: Array<{ name: string; email: string; phone?: string }>
+  send_via: "email" | "whatsapp" | "both" | "none"
+  admin_note?: string
+  expires_in_days?: number
+}): Promise<BulkInviteResponse | { error: string; status: number }> {
+  try {
+    const res = await fetch(`${apiBase()}/api/invites/bulk`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      credentials: "include",
+      body: JSON.stringify(data),
+    })
+    if (!res.ok) return { error: await safeError(res), status: res.status }
+    return (await res.json()) as BulkInviteResponse
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Network error", status: 0 }
+  }
+}
+
+// ── Admin: Student payment link history ─────────────────────────
+
+export interface StudentInviteHistory {
+  id: number
+  course_id: string
+  course_title: string
+  token: string
+  url: string
+  type: InviteType
+  status: InviteStatus
+  final_price: number
+  sent_via: string | null
+  sent_at: string | null
+  paid_at: string | null
+  claimed_at: string | null
+  expires_at: string
+  created_at: string
+}
+
+export async function getStudentPaymentHistory(
+  studentId: number,
+): Promise<{ student_id: number; invites: StudentInviteHistory[] } | { error: string; status: number }> {
+  try {
+    const res = await fetch(`${apiBase()}/api/invites/student-history/${studentId}`, {
+      headers: authHeaders(),
+      credentials: "include",
+    })
+    if (!res.ok) return { error: await safeError(res), status: res.status }
+    return (await res.json()) as { student_id: number; invites: StudentInviteHistory[] }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Network error", status: 0 }
+  }
+}
+
 // ── Public endpoints (no auth for view/pay) ─────────────────────
 
 export async function viewInvite(token: string): Promise<InviteViewData | { error: string; status: number }> {

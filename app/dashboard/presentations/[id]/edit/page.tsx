@@ -259,19 +259,25 @@ export default function PresentationEditorPage({ params }: { params: Promise<{ i
               />
 
               {/* Image with search */}
+              {/* Image block — optional, can be removed */}
               <div className="rounded-2xl overflow-hidden bg-gradient-to-br from-slate-100 to-slate-50 group/img relative">
                 {slide.image?.startsWith("http") ? (
                   <img src={slide.image} alt="" className="w-full h-56 object-cover" loading="lazy" />
                 ) : (
-                  <div className="w-full h-40 flex items-center justify-center"><ImageIcon className="h-10 w-10 text-slate-200" /></div>
+                  <div className="w-full h-28 flex items-center justify-center"><ImageIcon className="h-8 w-8 text-slate-200" /></div>
                 )}
                 <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 group-hover/img:bg-black/30 transition">
-                  <button onClick={() => slide.id && uploadImage(slide.id)} className="opacity-0 group-hover/img:opacity-100 transition rounded-xl bg-white px-4 py-2 text-xs font-semibold shadow-lg flex items-center gap-2 hover:bg-indigo-50">
-                    <Upload className="h-4 w-4" /> Upload
+                  <button onClick={() => slide.id && uploadImage(slide.id)} className="opacity-0 group-hover/img:opacity-100 transition rounded-xl bg-white px-3 py-1.5 text-xs font-semibold shadow-lg flex items-center gap-1.5 hover:bg-indigo-50">
+                    <Upload className="h-3.5 w-3.5" /> Upload
                   </button>
-                  <button onClick={() => { setImgSearchOpen(!imgSearchOpen); setImgQuery(slide.title || "") }} className="opacity-0 group-hover/img:opacity-100 transition rounded-xl bg-white px-4 py-2 text-xs font-semibold shadow-lg flex items-center gap-2 hover:bg-indigo-50">
-                    <Search className="h-4 w-4" /> Search images
+                  <button onClick={() => { setImgSearchOpen(!imgSearchOpen); setImgQuery(slide.title || "") }} className="opacity-0 group-hover/img:opacity-100 transition rounded-xl bg-white px-3 py-1.5 text-xs font-semibold shadow-lg flex items-center gap-1.5 hover:bg-indigo-50">
+                    <Search className="h-3.5 w-3.5" /> Search
                   </button>
+                  {slide.image && (
+                    <button onClick={async () => { if (slide.id) { await saveSlide(slide.id, { image: '' }); toast.success("Image removed") } }} className="opacity-0 group-hover/img:opacity-100 transition rounded-xl bg-white px-3 py-1.5 text-xs font-semibold shadow-lg flex items-center gap-1.5 text-red-500 hover:bg-red-50">
+                      <Trash2 className="h-3.5 w-3.5" /> Remove
+                    </button>
+                  )}
                 </div>
               </div>
 

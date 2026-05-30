@@ -18,6 +18,7 @@ import {
   Calendar,
   ExternalLink,
   History,
+  Link as LinkIcon2,
   Mail,
   MessageCircleQuestion,
   MessageSquare,
@@ -43,6 +44,7 @@ import { StudentEnrollWidget } from "@/components/students/student-enroll-widget
 import { StudentActivityTimeline } from "@/components/students/student-activity-timeline"
 import { StudentDoubtsPanel } from "@/components/students/student-doubts"
 import { StudentInvoices } from "@/components/students/student-invoices"
+import { StudentPaymentLinks } from "@/components/students/student-payment-links"
 import { MessageComposer } from "@/components/messages/message-composer"
 import { NudgePreviewDialog, type NudgeKind } from "@/components/dashboard/engagement-nudge-dialog"
 import { buildNotifications, type DispatchPayload } from "@/lib/notifications"
@@ -72,7 +74,7 @@ function StudentDetailPageInner({ params }: { params: Promise<{ id: string }> })
   // Tab state via URL so a refresh — or a deep-link from inbox /
   // doubts / messages — lands on the same tab. Whitelisted; falls
   // back to "overview" on a missing / unknown value.
-  const TAB_VALUES = ["overview", "activity", "doubts", "invoices", "messages"] as const
+  const TAB_VALUES = ["overview", "activity", "doubts", "invoices", "payment_links", "messages"] as const
   type StudentTab = (typeof TAB_VALUES)[number]
   const tabFromUrl = (searchParams?.get("tab") ?? "") as StudentTab | ""
   const activeTab: StudentTab = (TAB_VALUES as readonly string[]).includes(tabFromUrl)
@@ -288,11 +290,12 @@ function StudentDetailPageInner({ params }: { params: Promise<{ id: string }> })
           <StudentPerformance studentId={student.id} />
 
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="overview"><UserIcon className="mr-1.5 h-3.5 w-3.5" /> Overview</TabsTrigger>
               <TabsTrigger value="activity"><History className="mr-1.5 h-3.5 w-3.5" /> Activity</TabsTrigger>
               <TabsTrigger value="doubts"><MessageCircleQuestion className="mr-1.5 h-3.5 w-3.5" /> Doubts</TabsTrigger>
               <TabsTrigger value="invoices"><Receipt className="mr-1.5 h-3.5 w-3.5" /> Invoices</TabsTrigger>
+              <TabsTrigger value="payment_links"><LinkIcon2 className="mr-1.5 h-3.5 w-3.5" /> Links</TabsTrigger>
               <TabsTrigger value="messages"><Send className="mr-1.5 h-3.5 w-3.5" /> Messages</TabsTrigger>
             </TabsList>
 
@@ -349,6 +352,10 @@ function StudentDetailPageInner({ params }: { params: Promise<{ id: string }> })
 
             <TabsContent value="invoices" className="mt-4">
               <StudentInvoices student={student} />
+            </TabsContent>
+
+            <TabsContent value="payment_links" className="mt-4">
+              <StudentPaymentLinks studentId={Number(student.id)} studentName={student.name} />
             </TabsContent>
 
             <TabsContent value="messages" className="mt-4">

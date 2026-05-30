@@ -62,6 +62,7 @@ import { stripRichTextTags } from "@/components/editor/rich-text-content"
 import { CourseAnnouncementDialog } from "@/components/courses/course-announcement-dialog"
 import { TestPurchaseDialog } from "@/components/courses/test-purchase-dialog"
 import { DuplicateCourseDialog } from "@/components/courses/duplicate-course-dialog"
+import { BulkPaymentLinks } from "@/components/invite/bulk-payment-links"
 import { useStore } from "@/lib/store-store"
 import { Copy, FlaskConical } from "lucide-react"
 
@@ -644,7 +645,7 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
               (modules + lessons). Keeps the page shape predictable and
               moves the long-form content behind a deliberate click. */}
           <Tabs defaultValue="overview" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="curriculum">
                 Curriculum
@@ -658,10 +659,19 @@ export default function CourseDetailPage({ params }: { params: Promise<{ id: str
                   {enrollments.length}
                 </span>
               </TabsTrigger>
+              <TabsTrigger value="payments">Payment Links</TabsTrigger>
             </TabsList>
 
             <TabsContent value="students" className="space-y-4">
               <CourseStudentsRoster courseId={course.id} />
+            </TabsContent>
+
+            <TabsContent value="payments" className="space-y-4">
+              <BulkPaymentLinks
+                courseId={course.id}
+                courseTitle={course.title}
+                coursePrice={course.price}
+              />
             </TabsContent>
 
             <TabsContent value="overview" className="space-y-4">

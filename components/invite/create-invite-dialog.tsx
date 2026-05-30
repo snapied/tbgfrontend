@@ -76,7 +76,6 @@ export function CreateInviteDialog({
   const [recipientEmail, setRecipientEmail] = useState("")
   const [recipientPhone, setRecipientPhone] = useState("")
   const [overridePrice, setOverridePrice] = useState("")
-  const [couponCode, setCouponCode] = useState("")
   const [adminNote, setAdminNote] = useState("")
   const [expiryOption, setExpiryOption] = useState<ExpiryOption>("7")
   const [customDays, setCustomDays] = useState("")
@@ -103,7 +102,6 @@ export function CreateInviteDialog({
     setRecipientEmail("")
     setRecipientPhone("")
     setOverridePrice("")
-    setCouponCode("")
     setAdminNote("")
     setExpiryOption("7")
     setCustomDays("")
@@ -134,9 +132,6 @@ export function CreateInviteDialog({
       }
       if (showPriceOverride && overridePrice !== "") {
         input.override_price = parseFloat(overridePrice)
-      }
-      if (couponCode.trim()) {
-        input.coupon_code = couponCode.trim()
       }
       if (adminNote.trim()) {
         input.admin_note = adminNote.trim()
@@ -270,7 +265,7 @@ export function CreateInviteDialog({
           /* ── Form state ─────────────────────────────────────── */
           <div className="space-y-5">
             {/* Invite type */}
-            <div className="space-y-2">
+              {/* <div className="space-y-2">
               <Label>Invite type</Label>
               <RadioGroup
                 value={inviteType}
@@ -296,7 +291,7 @@ export function CreateInviteDialog({
                   </Label>
                 </div>
               </RadioGroup>
-            </div>
+            </div> */}
 
             {/* Recipient fields (hidden for reusable) */}
             {isPersonal && (
@@ -358,17 +353,7 @@ export function CreateInviteDialog({
                     onChange={(e) => setOverridePrice(e.target.value)}
                   />
                 </div>
-              )}
-              <div className="space-y-1.5">
-                <Label htmlFor="invite-coupon">Coupon code (optional)</Label>
-                <Input
-                  id="invite-coupon"
-                  placeholder="WELCOME20"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                  className="uppercase"
-                />
-              </div>
+                )}
               {(showPriceOverride && overridePrice !== "") && (
                 <div className="flex justify-between text-sm font-semibold pt-2 border-t">
                   <span>Final price</span>
