@@ -53,12 +53,23 @@ export const metadata: Metadata = {
     type: "website",
     url: "https://thebigclass.com",
     siteName: "The Big Class",
+    // Page-level openGraph replaces the layout's wholesale, so the
+    // shared OG image must be repeated here or no og:image is emitted.
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "The Big Class — the creator-business OS for modern educators",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "The Creator-Business OS for Modern Educators · The Big Class",
     description:
       "The all-in-one workspace for educators, teachers, and creators. One workspace replaces Notion + Discord + Zoom + Teachable.",
+    images: ["/og-image.png"],
   },
 }
 
