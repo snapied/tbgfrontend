@@ -1,0 +1,137 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#062019"/>
+      <stop offset="0.5" stop-color="#0A3024"/>
+      <stop offset="1" stop-color="#0C3B2C"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F0D77E"/>
+      <stop offset="0.5" stop-color="#D4AF37"/>
+      <stop offset="1" stop-color="#B8902B"/>
+    </linearGradient>
+    <linearGradient id="goldText" x1="0" y1="0" x2="1" y2="0.5">
+      <stop offset="0" stop-color="#F3DC8C"/>
+      <stop offset="1" stop-color="#D4AF37"/>
+    </linearGradient>
+    <radialGradient id="glowGold" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#D4AF37" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#D4AF37" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowGreen" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#16553F" stop-opacity="0.8"/>
+      <stop offset="1" stop-color="#16553F" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="14"/>
+    </filter>
+  </defs>
+
+  <!-- Base -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Ambient light -->
+  <circle cx="1010" cy="150" r="380" fill="url(#glowGold)"/>
+  <circle cx="120" cy="560" r="340" fill="url(#glowGreen)"/>
+
+  <!-- faint dotted grid, top-right -->
+  <g fill="#FDF6E3" opacity="0.05">
+    <circle cx="900" cy="48" r="2.6"/><circle cx="942" cy="48" r="2.6"/><circle cx="984" cy="48" r="2.6"/><circle cx="1026" cy="48" r="2.6"/><circle cx="1068" cy="48" r="2.6"/><circle cx="1110" cy="48" r="2.6"/><circle cx="1152" cy="48" r="2.6"/>
+    <circle cx="900" cy="90" r="2.6"/><circle cx="942" cy="90" r="2.6"/><circle cx="984" cy="90" r="2.6"/><circle cx="1026" cy="90" r="2.6"/><circle cx="1068" cy="90" r="2.6"/><circle cx="1110" cy="90" r="2.6"/><circle cx="1152" cy="90" r="2.6"/>
+  </g>
+
+  <!-- ===== RIGHT: floating product suite (the all-in-one OS) ===== -->
+  <g font-family="'Inter','Helvetica Neue',Arial,sans-serif">
+    <!-- soft platform shadow -->
+    <ellipse cx="965" cy="500" rx="190" ry="30" fill="#000000" opacity="0.25" filter="url(#soft)"/>
+
+    <!-- Card: Courses -->
+    <g transform="translate(835,118)">
+      <rect width="266" height="70" rx="16" fill="#FDF6E3" fill-opacity="0.07" stroke="#FDF6E3" stroke-opacity="0.16"/>
+      <rect x="16" y="16" width="38" height="38" rx="11" fill="url(#gold)"/>
+      <g transform="translate(35,35)" fill="#0A3024"><path d="M -6 -8 L 8 0 L -6 8 Z"/></g>
+      <text x="70" y="32" font-size="19" font-weight="700" fill="#FDF6E3">Courses &amp; Cohorts</text>
+      <text x="70" y="53" font-size="13" font-weight="500" fill="#A9C2B4">Self-paced, live &amp; bundles</text>
+    </g>
+
+    <!-- Card: Live -->
+    <g transform="translate(870,206)">
+      <rect width="266" height="70" rx="16" fill="#FDF6E3" fill-opacity="0.09" stroke="#FDF6E3" stroke-opacity="0.18"/>
+      <rect x="16" y="16" width="38" height="38" rx="11" fill="#16553F"/>
+      <g transform="translate(35,35)"><circle r="5" fill="#F0D77E"/><circle r="11" fill="none" stroke="#F0D77E" stroke-width="2" opacity="0.55"/></g>
+      <text x="70" y="32" font-size="19" font-weight="700" fill="#FDF6E3">Live Classes</text>
+      <text x="70" y="53" font-size="13" font-weight="500" fill="#A9C2B4">HD video, chat &amp; recordings</text>
+    </g>
+
+    <!-- Card: Community -->
+    <g transform="translate(835,294)">
+      <rect width="266" height="70" rx="16" fill="#FDF6E3" fill-opacity="0.07" stroke="#FDF6E3" stroke-opacity="0.16"/>
+      <rect x="16" y="16" width="38" height="38" rx="11" fill="url(#gold)"/>
+      <g transform="translate(35,35)" fill="#0A3024"><circle cx="-6" cy="-2" r="5"/><circle cx="6" cy="-2" r="5"/><path d="M -13 9 a 7 7 0 0 1 14 0 Z"/><path d="M -1 9 a 7 7 0 0 1 14 0 Z"/></g>
+      <text x="70" y="32" font-size="19" font-weight="700" fill="#FDF6E3">Community</text>
+      <text x="70" y="53" font-size="13" font-weight="500" fill="#A9C2B4">Feed, doubts &amp; leaderboard</text>
+    </g>
+
+    <!-- Card: Payments (India-native) -->
+    <g transform="translate(870,382)">
+      <rect width="266" height="70" rx="16" fill="#FDF6E3" fill-opacity="0.09" stroke="#FDF6E3" stroke-opacity="0.18"/>
+      <rect x="16" y="16" width="38" height="38" rx="11" fill="#16553F"/>
+      <text x="35" y="42" font-size="24" font-weight="800" fill="#F0D77E" text-anchor="middle">&#8377;</text>
+      <text x="70" y="32" font-size="19" font-weight="700" fill="#FDF6E3">Direct Payments</text>
+      <text x="70" y="53" font-size="13" font-weight="500" fill="#A9C2B4">UPI &amp; cards · 0% commission</text>
+    </g>
+  </g>
+
+  <!-- ===== LEFT: brand + copy ===== -->
+  <!-- Logo -->
+  <g transform="translate(80,66)" font-family="'Inter','Helvetica Neue',Arial,sans-serif">
+    <rect x="0" y="0" width="58" height="58" rx="16" fill="#FDF6E3"/>
+    <text x="29" y="44" font-size="40" font-weight="800" fill="#0A3024" text-anchor="middle" font-family="'Playfair Display','Georgia',serif">b</text>
+    <circle cx="46" cy="13" r="6" fill="url(#gold)"/>
+    <text x="76" y="30" font-size="31" font-weight="800" fill="#FDF6E3" letter-spacing="-0.5">thebigclass</text>
+    <rect x="312" y="13" width="11" height="11" rx="2.5" fill="url(#gold)"/>
+    <text x="78" y="53" font-size="12.5" font-weight="600" fill="#8FB0A0" letter-spacing="2.5">THE CREATOR-BUSINESS OS FOR EDUCATORS</text>
+  </g>
+
+  <!-- Eyebrow pill -->
+  <g transform="translate(80,196)" font-family="'Inter','Helvetica Neue',Arial,sans-serif">
+    <rect x="0" y="0" width="256" height="38" rx="19" fill="#D4AF37" opacity="0.13"/>
+    <rect x="0" y="0" width="256" height="38" rx="19" fill="none" stroke="#D4AF37" stroke-opacity="0.5"/>
+    <circle cx="22" cy="19" r="5" fill="url(#gold)"/>
+    <text x="40" y="25" font-size="14" font-weight="700" fill="#EBD489" letter-spacing="1.5">0% PLATFORM COMMISSION</text>
+  </g>
+
+  <!-- Headline (serif, editorial) -->
+  <g font-family="'Playfair Display','Georgia','Times New Roman',serif">
+    <text x="78" y="318" font-size="58" font-weight="800" fill="#FDF6E3" letter-spacing="-0.5">Build your independent</text>
+    <text x="78" y="384" font-size="58" font-weight="800" fill="url(#goldText)" letter-spacing="-0.5">teaching brand.</text>
+  </g>
+
+  <!-- Subline -->
+  <g font-family="'Inter','Helvetica Neue',Arial,sans-serif" fill="#BCD0C4">
+    <text x="80" y="438" font-size="22" font-weight="500">Host your audience, ship products, run your community,</text>
+    <text x="80" y="468" font-size="22" font-weight="500">go live &amp; get paid — all on your own URL.</text>
+  </g>
+
+  <!-- Feature chips -->
+  <g transform="translate(80,520)" font-family="'Inter','Helvetica Neue',Arial,sans-serif" font-size="15" font-weight="600">
+    <g>
+      <rect x="0" y="0" width="160" height="40" rx="20" fill="#FDF6E3" fill-opacity="0.06" stroke="#FDF6E3" stroke-opacity="0.14"/>
+      <circle cx="22" cy="20" r="4.5" fill="url(#gold)"/>
+      <text x="38" y="25" fill="#E7EFE9">All-in-one workspace</text>
+    </g>
+    <g transform="translate(176,0)">
+      <rect x="0" y="0" width="138" height="40" rx="20" fill="#FDF6E3" fill-opacity="0.06" stroke="#FDF6E3" stroke-opacity="0.14"/>
+      <circle cx="22" cy="20" r="4.5" fill="url(#gold)"/>
+      <text x="38" y="25" fill="#E7EFE9">Own your data</text>
+    </g>
+    <g transform="translate(330,0)">
+      <rect x="0" y="0" width="200" height="40" rx="20" fill="#FDF6E3" fill-opacity="0.06" stroke="#FDF6E3" stroke-opacity="0.14"/>
+      <circle cx="22" cy="20" r="4.5" fill="url(#gold)"/>
+      <text x="38" y="25" fill="#E7EFE9">India-first · Loved worldwide</text>
+    </g>
+  </g>
+
+  <!-- bottom accent -->
+  <rect x="0" y="625" width="1200" height="5" fill="url(#gold)"/>
+</svg>

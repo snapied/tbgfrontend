@@ -117,10 +117,10 @@ export const metadata: Metadata = {
     locale: 'en_US',
     images: [
       {
-        url: '/icon.svg',
+        url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'The Big Class — teach, sell, certify',
+        alt: 'The Big Class — the creator-business OS for modern educators',
       },
     ],
   },
@@ -128,7 +128,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: PLATFORM_TITLE,
     description: PLATFORM_DESCRIPTION,
-    images: ['/icon.svg'],
+    images: ['/og-image.png'],
   },
   robots: {
     index: true,
