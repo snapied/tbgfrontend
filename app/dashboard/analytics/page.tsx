@@ -1,6 +1,6 @@
 "use client"
 
-import { DollarSign, Users, BookOpen, TrendingUp, Award, Clock, Target, BarChart3 } from "lucide-react"
+import { IndianRupee, Users, BookOpen, TrendingUp, Award, Clock, Target, BarChart3 } from "lucide-react"
 import { useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -89,11 +89,11 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Revenue</p>
-                <p className="text-2xl font-bold">${analytics.totalRevenue.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{analytics.totalRevenue.toLocaleString()}</p>
                 <p className="text-xs text-success mt-1">+12.5% from last month</p>
               </div>
               <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-success/10">
-                <DollarSign className="h-6 w-6 text-success" />
+                <IndianRupee className="h-6 w-6 text-success" />
               </div>
             </div>
           </CardContent>
@@ -295,11 +295,11 @@ export default function AnalyticsPage() {
                     <p className="font-medium text-foreground truncate">{course.title}</p>
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span>{course.enrollments.toLocaleString()} students</span>
-                      <span>${course.revenue.toLocaleString()} revenue</span>
+                      <span>₹{course.revenue.toLocaleString()} revenue</span>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-success">${course.revenue.toLocaleString()}</p>
+                    <p className="font-semibold text-success">₹{course.revenue.toLocaleString()}</p>
                   </div>
                 </div>
               ))}

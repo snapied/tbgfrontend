@@ -1,13 +1,15 @@
 "use client"
 
 // "Generate with AI" button with plan gating.
-//   Starter: locked with lock icon + upgrade popover (same as sidebar)
+//   Starter: gated — clicking opens an upgrade popover (no lock icon)
 //   Pro: 100/mo, Studio: 500/mo, Institute: 5000/mo
-//   Exhausted: lock icon + "limit reached" popover
+//   Exhausted: gated — clicking opens a "limit reached" popover
+// The cap is enforced on click via the popover, not a disabled/locked
+// affordance, so the button always looks inviting rather than blocked.
 
 import { useEffect, useState } from "react"
 import Link from "next/link"
-import { Sparkles, Loader2, Lock, ArrowRight } from "lucide-react"
+import { Sparkles, Loader2, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Popover,
@@ -67,10 +69,13 @@ export function AIGenerateButton({
     return (
       <Popover>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" size={btnSize} className={cn("gap-1.5 border-primary/30 text-primary/60", sizeClass, className)}>
+          {/* Gated state: no lock icon. The cap is still enforced —
+              clicking opens the upgrade / limit-reached popover below
+              instead of running onGenerate. The softer text tone is the
+              only visual cue that it's not yet active. */}
+          <Button type="button" variant="outline" size={btnSize} className={cn("gap-1.5 border-primary/30 text-primary/70", sizeClass, className)}>
             <Sparkles className="h-3.5 w-3.5" />
             {label}
-            <Lock className="h-3 w-3 text-amber-600" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-64 text-sm" side="bottom" align="end">

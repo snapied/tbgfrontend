@@ -20,6 +20,8 @@ import { Header } from "@/components/landing/header"
 import { Footer } from "@/components/landing/footer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { OpenInLLM } from "@/components/help/open-in-llm"
+import { articlePrompts } from "@/lib/help-llm-prompt"
 import type { Metadata } from "next"
 
 // ---- Article shape ----
@@ -32,6 +34,14 @@ type Section =
   | { kind: "h2"; text: string }
   | { kind: "code"; lang?: string; body: string }
   | { kind: "callout"; tone: "info" | "warn"; body: string }
+  // Inline diagram. `svg` is a complete, self-authored <svg> string
+  // (NOT user input) — we render it with dangerouslySetInnerHTML, the
+  // same trusted-content path the Article JSON-LD uses below. Diagrams
+  // are drawn with the app's CSS theme variables (var(--primary),
+  // var(--foreground), …) so they recolour automatically in dark mode
+  // instead of shipping a second asset. No external image files, so
+  // there are no broken-path failure modes.
+  | { kind: "figure"; svg: string; caption?: string }
 
 interface Article {
   title: string
@@ -577,6 +587,520 @@ Retry-After: 12      # only on 429 responses` },
       { kind: "p", body: "Learners submit a link or upload + optional notes. The public share token means a student can submit without being signed in (useful for legacy invites)." },
       { kind: "h2", text: "Grading" },
       { kind: "p", body: "Open a submission → score + feedback + status (graded). The learner gets notified by in-app + email; their lesson auto-marks complete when the assignment is graded above passing." },
+    ],
+  },
+
+  // ============================================================
+  // Courses — visual guides for teachers (with diagrams)
+  //
+  // Four illustrated walkthroughs aimed at teachers moving from a
+  // classroom / private-tuition setup to selling online. Each one
+  // carries a self-authored inline SVG (the `figure` section kind)
+  // that recolours with the theme. Facts here are checked against
+  // lib/lms-store.tsx — LessonType (9 kinds), Lesson.isPreview /
+  // isLocked, Module.unlockOffsetDays, CourseVisibility, Enrollment.
+  // ============================================================
+  "course-anatomy": {
+    title: "Course anatomy: courses, modules & lessons",
+    lede: "Every course is three layers deep — the course, the modules inside it, and the lessons inside those. Once that mental model clicks, the whole editor makes sense.",
+    audience: "creator",
+    keywords: ["course structure", "modules and lessons", "how to organise a course", "online course layout"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "Think of it the way you already think about a classroom subject. The course is the whole subject (say, 'Class 10 Physics'). A module is a chapter or unit inside it. A lesson is a single sitting — one video, one reading, one quiz. Open /dashboard/courses → New course to start the top layer; you add the layers underneath in the Curriculum tab." },
+      { kind: "figure", caption: "A course holds modules; each module holds lessons. Drag any module or lesson to reorder.", svg: `<svg viewBox="0 0 720 330" role="img" aria-label="A course contains modules, and each module contains lessons" font-family="ui-sans-serif, system-ui, sans-serif">
+  <rect x="280" y="16" width="160" height="48" rx="10" fill="var(--primary)"/>
+  <text x="360" y="46" text-anchor="middle" font-size="15" font-weight="600" fill="var(--primary-foreground)">Course</text>
+  <line x1="360" y1="64" x2="120" y2="104" stroke="var(--border)" stroke-width="2"/>
+  <line x1="360" y1="64" x2="360" y2="104" stroke="var(--border)" stroke-width="2"/>
+  <line x1="360" y1="64" x2="600" y2="104" stroke="var(--border)" stroke-width="2"/>
+  <rect x="20" y="104" width="200" height="44" rx="10" fill="var(--card)" stroke="var(--border)"/>
+  <text x="120" y="131" text-anchor="middle" font-size="14" font-weight="600" fill="var(--foreground)">Module 1 · Basics</text>
+  <rect x="260" y="104" width="200" height="44" rx="10" fill="var(--card)" stroke="var(--border)"/>
+  <text x="360" y="131" text-anchor="middle" font-size="14" font-weight="600" fill="var(--foreground)">Module 2 · Core</text>
+  <rect x="500" y="104" width="200" height="44" rx="10" fill="var(--card)" stroke="var(--border)"/>
+  <text x="600" y="131" text-anchor="middle" font-size="14" font-weight="600" fill="var(--foreground)">Module 3 · Practice</text>
+  <line x1="120" y1="148" x2="120" y2="300" stroke="var(--border)" stroke-width="2"/>
+  <g>
+    <line x1="120" y1="186" x2="150" y2="186" stroke="var(--border)" stroke-width="2"/>
+    <rect x="150" y="170" width="180" height="32" rx="8" fill="var(--muted)"/>
+    <circle cx="170" cy="186" r="5" fill="var(--accent)"/>
+    <text x="186" y="191" font-size="12.5" fill="var(--foreground)">Lesson · Welcome video</text>
+  </g>
+  <g>
+    <line x1="120" y1="234" x2="150" y2="234" stroke="var(--border)" stroke-width="2"/>
+    <rect x="150" y="218" width="180" height="32" rx="8" fill="var(--muted)"/>
+    <circle cx="170" cy="234" r="5" fill="var(--accent)"/>
+    <text x="186" y="239" font-size="12.5" fill="var(--foreground)">Lesson · Reading</text>
+  </g>
+  <g>
+    <line x1="120" y1="282" x2="150" y2="282" stroke="var(--border)" stroke-width="2"/>
+    <rect x="150" y="266" width="180" height="32" rx="8" fill="var(--muted)"/>
+    <circle cx="170" cy="282" r="5" fill="var(--accent)"/>
+    <text x="186" y="287" font-size="12.5" fill="var(--foreground)">Lesson · Quick quiz</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "The three layers" },
+      { kind: "ul", items: [
+        "Course — the thing students buy or enrol in. Holds the title, thumbnail, price, and SEO. One course = one subject or program.",
+        "Module — a group of related lessons (a chapter / unit / week). A module has a title and an optional short description.",
+        "Lesson — a single piece of content: a video, a reading, a quiz, a live class, and more (see the 9 lesson types).",
+      ]},
+      { kind: "h2", text: "Reordering" },
+      { kind: "p", body: "In the Curriculum tab you can drag modules to resequence them, and drag lessons within or between modules. Nothing is locked in — restructure as your course grows." },
+      { kind: "callout", tone: "info", body: "Start small. One module with three or four lessons is enough to publish. You can keep adding modules after launch without disturbing students who already enrolled." },
+    ],
+    related: [
+      { slug: "lesson-types", label: "The 9 lesson types — and when to use each" },
+      { slug: "course-create", label: "Create your first course" },
+      { slug: "course-curriculum", label: "Build a course curriculum" },
+    ],
+  },
+
+  "lesson-types": {
+    title: "The 9 lesson types — and when to use each",
+    lede: "Video, audio, reading, PDF, document, embed, quiz, live, and recording. Nine ways to put content in a lesson — here's the plain-English guide to picking the right one.",
+    audience: "creator",
+    keywords: ["lesson types", "video lesson", "quiz lesson", "embed lesson", "online course content types"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "When you add a lesson, the first thing you choose is its type. The type decides how students experience that lesson — a player, a reader, a quiz, or a join button. You can mix every type freely inside one module." },
+      { kind: "figure", caption: "The nine lesson types. Pick per lesson — a single module can mix all of them.", svg: `<svg viewBox="0 0 720 320" role="img" aria-label="A grid of the nine lesson types" font-family="ui-sans-serif, system-ui, sans-serif">
+  <g>
+    <rect x="20" y="16" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="44" cy="42" r="7" fill="var(--accent)"/>
+    <text x="62" y="47" font-size="14" font-weight="600" fill="var(--foreground)">Video</text>
+    <text x="38" y="74" font-size="11.5" fill="var(--muted-foreground)">Hosted link + transcript</text>
+  </g>
+  <g>
+    <rect x="255" y="16" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="279" cy="42" r="7" fill="var(--accent)"/>
+    <text x="297" y="47" font-size="14" font-weight="600" fill="var(--foreground)">Audio</text>
+    <text x="273" y="74" font-size="11.5" fill="var(--muted-foreground)">Lecture-style audio</text>
+  </g>
+  <g>
+    <rect x="490" y="16" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="514" cy="42" r="7" fill="var(--accent)"/>
+    <text x="532" y="47" font-size="14" font-weight="600" fill="var(--foreground)">Reading (text)</text>
+    <text x="508" y="74" font-size="11.5" fill="var(--muted-foreground)">Rich-text article</text>
+  </g>
+  <g>
+    <rect x="20" y="118" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="44" cy="144" r="7" fill="var(--accent)"/>
+    <text x="62" y="149" font-size="14" font-weight="600" fill="var(--foreground)">PDF</text>
+    <text x="38" y="176" font-size="11.5" fill="var(--muted-foreground)">A PDF opened inline</text>
+  </g>
+  <g>
+    <rect x="255" y="118" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="279" cy="144" r="7" fill="var(--accent)"/>
+    <text x="297" y="149" font-size="14" font-weight="600" fill="var(--foreground)">Document</text>
+    <text x="273" y="176" font-size="11.5" fill="var(--muted-foreground)">Doc / slides / sheet</text>
+  </g>
+  <g>
+    <rect x="490" y="118" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="514" cy="144" r="7" fill="var(--accent)"/>
+    <text x="532" y="149" font-size="14" font-weight="600" fill="var(--foreground)">Embed</text>
+    <text x="508" y="176" font-size="11.5" fill="var(--muted-foreground)">Canva / Notion / Figma…</text>
+  </g>
+  <g>
+    <rect x="20" y="220" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="44" cy="246" r="7" fill="var(--primary)"/>
+    <text x="62" y="251" font-size="14" font-weight="600" fill="var(--foreground)">Quiz</text>
+    <text x="38" y="278" font-size="11.5" fill="var(--muted-foreground)">Graded, with feedback</text>
+  </g>
+  <g>
+    <rect x="255" y="220" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="279" cy="246" r="7" fill="var(--primary)"/>
+    <text x="297" y="251" font-size="14" font-weight="600" fill="var(--foreground)">Live</text>
+    <text x="273" y="278" font-size="11.5" fill="var(--muted-foreground)">Links a scheduled class</text>
+  </g>
+  <g>
+    <rect x="490" y="220" width="210" height="84" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="514" cy="246" r="7" fill="var(--primary)"/>
+    <text x="532" y="251" font-size="14" font-weight="600" fill="var(--foreground)">Recording</text>
+    <text x="508" y="278" font-size="11.5" fill="var(--muted-foreground)">A past class to rewatch</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "Content you upload or link" },
+      { kind: "ul", items: [
+        "Video — your main teaching format. Paste a video link; you can add a transcript.",
+        "Audio — lecture-style audio for podcasts, language drills, or music.",
+        "Reading (text) — a rich-text article written right in the editor. Good for notes, summaries, and step-by-steps.",
+        "PDF — a PDF file students open inside the lesson.",
+        "Document — a Word doc, slide deck, or spreadsheet shown inline.",
+        "Embed — drop in something you built elsewhere: Canva, Gamma, Google Slides, Notion, Figma, or Loom.",
+      ]},
+      { kind: "h2", text: "Interactive + live" },
+      { kind: "ul", items: [
+        "Quiz — a graded check with four question types (see 'Quizzes that aren't easy to cheat').",
+        "Live — a lesson that links to a scheduled live class; students get a join button at class time.",
+        "Recording — a saved past class students can rewatch, with transcript and chapters.",
+      ]},
+      { kind: "callout", tone: "info", body: "There's no single 'right' mix. A common pattern: one video to teach, one reading to summarise, one quiz to check understanding — repeated per module." },
+    ],
+    related: [
+      { slug: "course-anatomy", label: "Course anatomy: courses, modules & lessons" },
+      { slug: "course-faq-quiz-cheating", label: "“Aren't online quizzes easy to cheat on?”" },
+      { slug: "course-faq-live-only", label: "“I only teach live — do I have to record videos?”" },
+    ],
+  },
+
+  "course-previews-locks": {
+    title: "Free previews & locked lessons — what buyers see",
+    lede: "Mark a lesson as a free preview to use it as a sample, or lock a lesson so only enrolled students reach it. Here's exactly how each toggle behaves on a paid course.",
+    audience: "creator",
+    keywords: ["free preview lesson", "locked lesson", "course sample", "paid course access"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "On a paid course, lessons are locked by default — a visitor can see the lesson titles but can't open them until they buy. Two per-lesson toggles let you change that, lesson by lesson, in the Curriculum tab." },
+      { kind: "figure", caption: "Same course, two viewers. A preview lesson is open to everyone; the rest unlock on enrolment.", svg: `<svg viewBox="0 0 720 270" role="img" aria-label="What the public sees versus what an enrolled student sees" font-family="ui-sans-serif, system-ui, sans-serif">
+  <rect x="16" y="16" width="330" height="238" rx="12" fill="var(--card)" stroke="var(--border)"/>
+  <text x="40" y="46" font-size="13" font-weight="700" fill="var(--foreground)">Before buying (public)</text>
+  <rect x="40" y="62" width="282" height="40" rx="8" fill="var(--muted)"/>
+  <circle cx="62" cy="82" r="8" fill="var(--accent)"/>
+  <text x="80" y="79" font-size="12.5" font-weight="600" fill="var(--foreground)">Lesson 1 · Welcome</text>
+  <text x="80" y="94" font-size="10.5" fill="var(--muted-foreground)">Free preview — opens for anyone</text>
+  <rect x="40" y="112" width="282" height="36" rx="8" fill="var(--muted)"/>
+  <rect x="55" y="123" width="13" height="13" rx="3" fill="none" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M58 123 v-3 a3.5 3.5 0 0 1 7 0 v3" fill="none" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <text x="80" y="135" font-size="12.5" fill="var(--muted-foreground)">Lesson 2 · Locked</text>
+  <rect x="40" y="158" width="282" height="36" rx="8" fill="var(--muted)"/>
+  <rect x="55" y="169" width="13" height="13" rx="3" fill="none" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M58 169 v-3 a3.5 3.5 0 0 1 7 0 v3" fill="none" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <text x="80" y="181" font-size="12.5" fill="var(--muted-foreground)">Lesson 3 · Locked</text>
+  <rect x="40" y="204" width="282" height="36" rx="8" fill="var(--muted)"/>
+  <rect x="55" y="215" width="13" height="13" rx="3" fill="none" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M58 215 v-3 a3.5 3.5 0 0 1 7 0 v3" fill="none" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <text x="80" y="227" font-size="12.5" fill="var(--muted-foreground)">Lesson 4 · Locked</text>
+
+  <rect x="374" y="16" width="330" height="238" rx="12" fill="var(--card)" stroke="var(--primary)"/>
+  <text x="398" y="46" font-size="13" font-weight="700" fill="var(--foreground)">After enrolling</text>
+  <rect x="398" y="62" width="282" height="40" rx="8" fill="var(--muted)"/>
+  <circle cx="420" cy="82" r="8" fill="var(--accent)"/>
+  <text x="438" y="79" font-size="12.5" font-weight="600" fill="var(--foreground)">Lesson 1 · Welcome</text>
+  <text x="438" y="94" font-size="10.5" fill="var(--muted-foreground)">Still free — the same preview</text>
+  <g>
+    <rect x="398" y="112" width="282" height="36" rx="8" fill="var(--muted)"/>
+    <path d="M413 130 l4 4 l8 -9" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="438" y="135" font-size="12.5" fill="var(--foreground)">Lesson 2 · Unlocked</text>
+  </g>
+  <g>
+    <rect x="398" y="158" width="282" height="36" rx="8" fill="var(--muted)"/>
+    <path d="M413 176 l4 4 l8 -9" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="438" y="181" font-size="12.5" fill="var(--foreground)">Lesson 3 · Unlocked</text>
+  </g>
+  <g>
+    <rect x="398" y="204" width="282" height="36" rx="8" fill="var(--muted)"/>
+    <path d="M413 222 l4 4 l8 -9" fill="none" stroke="var(--primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="438" y="227" font-size="12.5" fill="var(--foreground)">Lesson 4 · Unlocked</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "Free preview" },
+      { kind: "p", body: "Turn on 'free preview' for a lesson and it opens for everyone — even visitors who haven't paid. It's your sample, like a free demo class. A preview overrides the paid lock, so use it on a lesson you're happy to give away to win the sale." },
+      { kind: "h2", text: "Locked lessons" },
+      { kind: "p", body: "On a paid course, lessons are gated by default — students reach them only after enrolling. You can also explicitly lock a lesson regardless of pricing, which is useful if you want to keep one lesson gated even on an otherwise-free course." },
+      { kind: "callout", tone: "info", body: "On a free course, everything is already open — previews only matter once a price is involved. Set a price first, then choose which one or two lessons to open as previews." },
+    ],
+    related: [
+      { slug: "course-faq-free-preview", label: "“If I add a free preview, am I giving my course away?”" },
+      { slug: "course-pricing", label: "Set course pricing + currencies" },
+      { slug: "course-publish-vs-draft", label: "Drafts, published, archived + visibility" },
+    ],
+  },
+
+  "course-student-journey": {
+    title: "The student journey: enrol → learn → complete → certificate",
+    lede: "What actually happens after someone joins your course — how progress is tracked, what 'complete' means, and when a certificate goes out.",
+    audience: "creator",
+    keywords: ["course progress tracking", "course completion", "student enrolment", "course certificate"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "You build the course once; every student then moves through the same four-step journey. Knowing these steps helps you decide where to add a quiz, when to issue a certificate, and what your analytics are measuring." },
+      { kind: "figure", caption: "Every learner follows the same path. Progress is the share of lessons they've completed.", svg: `<svg viewBox="0 0 720 170" role="img" aria-label="The four steps a student moves through: enrol, learn, complete, certificate" font-family="ui-sans-serif, system-ui, sans-serif">
+  <g>
+    <rect x="12" y="50" width="150" height="70" rx="12" fill="var(--primary)"/>
+    <text x="87" y="82" text-anchor="middle" font-size="14" font-weight="700" fill="var(--primary-foreground)">1 · Enrol</text>
+    <text x="87" y="102" text-anchor="middle" font-size="10.5" fill="var(--primary-foreground)" opacity="0.85">Buys or joins free</text>
+  </g>
+  <path d="M168 85 h26" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M188 80 l8 5 l-8 5 z" fill="var(--muted-foreground)"/>
+  <g>
+    <rect x="198" y="50" width="150" height="70" rx="12" fill="var(--card)" stroke="var(--border)"/>
+    <text x="273" y="82" text-anchor="middle" font-size="14" font-weight="700" fill="var(--foreground)">2 · Learn</text>
+    <text x="273" y="102" text-anchor="middle" font-size="10.5" fill="var(--muted-foreground)">Progress 0 → 100%</text>
+  </g>
+  <path d="M354 85 h26" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M374 80 l8 5 l-8 5 z" fill="var(--muted-foreground)"/>
+  <g>
+    <rect x="384" y="50" width="150" height="70" rx="12" fill="var(--card)" stroke="var(--border)"/>
+    <text x="459" y="82" text-anchor="middle" font-size="14" font-weight="700" fill="var(--foreground)">3 · Complete</text>
+    <text x="459" y="102" text-anchor="middle" font-size="10.5" fill="var(--muted-foreground)">All lessons done</text>
+  </g>
+  <path d="M540 85 h26" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M560 80 l8 5 l-8 5 z" fill="var(--muted-foreground)"/>
+  <g>
+    <rect x="570" y="50" width="150" height="70" rx="12" fill="var(--accent)"/>
+    <text x="645" y="82" text-anchor="middle" font-size="14" font-weight="700" fill="var(--accent-foreground)">4 · Certificate</text>
+    <text x="645" y="102" text-anchor="middle" font-size="10.5" fill="var(--accent-foreground)" opacity="0.85">If enabled</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "1 · Enrol" },
+      { kind: "p", body: "A student enrols by buying a paid course or joining a free one. From that moment they have an enrolment record tied to your course — that's what your student list and revenue numbers count." },
+      { kind: "h2", text: "2 · Learn (progress)" },
+      { kind: "p", body: "As a student finishes lessons, those lessons are marked complete and their progress climbs from 0% to 100%. Progress is simply the share of the course's lessons they've completed — so if you add lessons later, everyone's percentage adjusts automatically." },
+      { kind: "h2", text: "3 · Complete" },
+      { kind: "p", body: "When a student has finished every lesson, the course is marked complete for them and the completion date is recorded. This is what your completion-rate analytics measure." },
+      { kind: "h2", text: "4 · Certificate" },
+      { kind: "p", body: "If you've turned on a certificate for the course, completing it issues that student a personalised certificate with a public verify link. No certificate is issued for courses where you've left it off." },
+      { kind: "callout", tone: "info", body: "Want students to finish, not just buy? Put a short quiz at the end of each module — it gives them a sense of progress and gives you a completion signal to watch in analytics." },
+    ],
+    related: [
+      { slug: "certificates-templates", label: "Certificate templates + the Template Designer" },
+      { slug: "analytics-dashboard", label: "What the analytics dashboard tracks" },
+      { slug: "course-anatomy", label: "Course anatomy: courses, modules & lessons" },
+    ],
+  },
+
+  // ============================================================
+  // Courses — questions new & private teachers ask
+  //
+  // Five things that sound confusing the first time but are
+  // actually some of the nicest parts of teaching online. Written
+  // for teachers moving from a classroom or private-tuition setup.
+  // Each answer is grounded in a real, verified feature.
+  // ============================================================
+  "course-faq-drip": {
+    title: "“Will all my lessons unlock at once?”",
+    lede: "No — you can release them on a schedule. It's called dripping, and it lets you run an online course at the pace of a real batch instead of dumping everything on day one.",
+    audience: "creator",
+    keywords: ["drip content", "release lessons over time", "cohort course pacing", "scheduled course"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "This is the worry every classroom teacher has: 'If I upload all my lessons, won't students binge Module 5 before they've understood Module 1?' You don't have to allow that. Each module has an unlock setting that releases it a set number of days after a student enrols." },
+      { kind: "figure", caption: "Drip example: Module 1 opens on day 0, Module 2 a week later, Module 3 the week after.", svg: `<svg viewBox="0 0 720 150" role="img" aria-label="A timeline showing modules unlocking on day 0, day 7, and day 14" font-family="ui-sans-serif, system-ui, sans-serif">
+  <line x1="40" y1="95" x2="680" y2="95" stroke="var(--border)" stroke-width="3"/>
+  <g>
+    <circle cx="110" cy="95" r="9" fill="var(--primary)"/>
+    <text x="110" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="var(--foreground)">Module 1</text>
+    <text x="110" y="125" text-anchor="middle" font-size="11.5" fill="var(--muted-foreground)">Day 0 · on enrol</text>
+  </g>
+  <g>
+    <circle cx="360" cy="95" r="9" fill="var(--accent)"/>
+    <text x="360" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="var(--foreground)">Module 2</text>
+    <text x="360" y="125" text-anchor="middle" font-size="11.5" fill="var(--muted-foreground)">Day 7</text>
+  </g>
+  <g>
+    <circle cx="610" cy="95" r="9" fill="var(--accent)"/>
+    <text x="610" y="60" text-anchor="middle" font-size="13" font-weight="600" fill="var(--foreground)">Module 3</text>
+    <text x="610" y="125" text-anchor="middle" font-size="11.5" fill="var(--muted-foreground)">Day 14</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "Why teachers end up loving it" },
+      { kind: "ul", items: [
+        "It recreates the rhythm of a real batch — nobody races ahead and gets lost.",
+        "It gives students a reason to come back each week, which lifts completion.",
+        "Students still see the locked modules with an 'unlocks on…' note, so they know what's coming — it builds anticipation rather than confusion.",
+      ]},
+      { kind: "h2", text: "Example" },
+      { kind: "p", body: "A spoken-English tutor runs a 3-week course. She sets Module 1 to unlock immediately, Module 2 after 7 days, Module 3 after 14. A student who joins on the 1st gets Module 2 on the 8th — exactly like attending week by week, but it runs automatically for every new student." },
+      { kind: "callout", tone: "info", body: "Leave the unlock setting empty and a module is available straight away. Drip is opt-in, module by module — mix dripped and instant modules in the same course." },
+    ],
+    related: [
+      { slug: "course-drip", label: "Drip course content on a schedule" },
+      { slug: "course-anatomy", label: "Course anatomy: courses, modules & lessons" },
+    ],
+  },
+
+  "course-faq-private-share": {
+    title: "“How do I share a course with only my own students?”",
+    lede: "You don't have to list a course publicly to sell or share it. Four visibility settings let you keep a course off the catalogue and hand it to exactly the people you choose.",
+    audience: "creator",
+    keywords: ["private course", "unlisted course", "share course with link", "password protected course"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "A lot of private tutors assume putting a course online means putting it on display for the whole world. It doesn't. A course's visibility is separate from whether it's published — you can have a fully working, paid course that never appears in any public list." },
+      { kind: "figure", caption: "Four visibility settings, from fully public to invite-only.", svg: `<svg viewBox="0 0 720 250" role="img" aria-label="The four course visibility settings" font-family="ui-sans-serif, system-ui, sans-serif">
+  <g>
+    <rect x="20" y="16" width="680" height="48" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="48" cy="40" r="9" fill="var(--accent)"/>
+    <text x="72" y="36" font-size="13.5" font-weight="700" fill="var(--foreground)">Public</text>
+    <text x="72" y="53" font-size="11.5" fill="var(--muted-foreground)">Listed in your catalogue and found by search engines.</text>
+  </g>
+  <g>
+    <rect x="20" y="74" width="680" height="48" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="48" cy="98" r="9" fill="var(--primary)"/>
+    <text x="72" y="94" font-size="13.5" font-weight="700" fill="var(--foreground)">Unlisted</text>
+    <text x="72" y="111" font-size="11.5" fill="var(--muted-foreground)">Hidden from the catalogue — only people with the direct link can open it.</text>
+  </g>
+  <g>
+    <rect x="20" y="132" width="680" height="48" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="48" cy="156" r="9" fill="var(--primary)"/>
+    <text x="72" y="152" font-size="13.5" font-weight="700" fill="var(--foreground)">Password</text>
+    <text x="72" y="169" font-size="11.5" fill="var(--muted-foreground)">Hidden — visitors must type the password you set before they can view it.</text>
+  </g>
+  <g>
+    <rect x="20" y="190" width="680" height="48" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <circle cx="48" cy="214" r="9" fill="var(--primary)"/>
+    <text x="72" y="210" font-size="13.5" font-weight="700" fill="var(--foreground)">Private</text>
+    <text x="72" y="227" font-size="11.5" fill="var(--muted-foreground)">Invite-only — just the students you enrol and you can see it.</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "Which one for which situation" },
+      { kind: "ul", items: [
+        "Public — you want new students to discover and buy it. The normal storefront case.",
+        "Unlisted — you'll share a link in your WhatsApp group or class, but don't want strangers stumbling onto it.",
+        "Password — same as unlisted, but with an extra password gate you give only to your batch.",
+        "Private — a closed course for a named set of students you enrol yourself; nobody else can reach it.",
+      ]},
+      { kind: "h2", text: "Example" },
+      { kind: "p", body: "A maths tutor with a fixed batch of 20 makes the course Unlisted and drops the link in the batch's WhatsApp group. The 20 enrol; the course never shows up in any public catalogue or on Google. When she later builds a beginner course to attract new students, she makes that one Public." },
+      { kind: "callout", tone: "info", body: "Visibility only matters once a course is Published. A Draft is invisible to everyone but you, no matter which visibility you pick." },
+    ],
+    related: [
+      { slug: "course-publish-vs-draft", label: "Drafts, published, archived + visibility" },
+      { slug: "course-bulk-import", label: "Bulk-import students via CSV" },
+    ],
+  },
+
+  "course-faq-live-only": {
+    title: "“I only teach live — do I have to record videos?”",
+    lede: "No. You can run your live classes exactly as you do now and let the course wrap around them. A recorded video library is optional, not a requirement.",
+    audience: "creator",
+    keywords: ["live only course", "do I need to record videos", "live class course", "teach live online"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "Plenty of teachers freeze here: 'I'm a live teacher, I don't have a studio, I'm not making polished videos.' You don't need to. A course can be built almost entirely from live classes — the recordings then build themselves as you go." },
+      { kind: "figure", caption: "Teach live on the tool you already use; the recording becomes a rewatchable lesson afterwards.", svg: `<svg viewBox="0 0 720 160" role="img" aria-label="A live class becomes a recording lesson after it ends" font-family="ui-sans-serif, system-ui, sans-serif">
+  <g>
+    <rect x="30" y="45" width="250" height="80" rx="12" fill="var(--primary)"/>
+    <text x="155" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="var(--primary-foreground)">Live class</text>
+    <text x="155" y="102" text-anchor="middle" font-size="11" fill="var(--primary-foreground)" opacity="0.85">Zoom / Meet / Teams link</text>
+  </g>
+  <path d="M286 85 h110" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M390 79 l10 6 l-10 6 z" fill="var(--muted-foreground)"/>
+  <text x="341" y="74" text-anchor="middle" font-size="11" fill="var(--muted-foreground)">after class</text>
+  <g>
+    <rect x="408" y="45" width="282" height="80" rx="12" fill="var(--card)" stroke="var(--border)"/>
+    <text x="549" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="var(--foreground)">Recording lesson</text>
+    <text x="549" y="102" text-anchor="middle" font-size="11" fill="var(--muted-foreground)">students rewatch any time</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "How it works in practice" },
+      { kind: "ul", items: [
+        "Schedule a live class and paste your Zoom, Google Meet, or Microsoft Teams link — we detect the provider for you. There's nothing new to learn.",
+        "Add a 'live' lesson in the course so students get a join button at class time.",
+        "After the class, attach the recording. It becomes a 'recording' lesson students can rewatch — so absentees catch up without a separate upload.",
+      ]},
+      { kind: "h2", text: "Example" },
+      { kind: "p", body: "A music teacher runs two live sessions a week on Google Meet. He adds each as a live lesson; after each class he attaches the recording. Over a month the course quietly fills with eight recorded lessons — he never sat down to 'make videos', yet students who missed a class always have one to watch." },
+      { kind: "callout", tone: "info", body: "Mix and match: some teachers run everything live, others add a couple of short recorded intros. Start with what you already do every week." },
+    ],
+    related: [
+      { slug: "live-classes-zoom", label: "Zoom, Google Meet, Microsoft Teams integration" },
+      { slug: "live-classes-schedule", label: "Schedule a live class — single or recurring" },
+      { slug: "lesson-types", label: "The 9 lesson types — and when to use each" },
+    ],
+  },
+
+  "course-faq-free-preview": {
+    title: "“If I add a free preview, am I giving my course away?”",
+    lede: "No. A preview is one sample lesson — like a free demo class. It shows buyers your teaching style; the rest of the course stays locked until they pay.",
+    audience: "creator",
+    keywords: ["free preview", "course demo lesson", "course sample", "sell course online"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "Offline, you'd happily give a prospective parent a free trial class to win them over. A free preview is the exact same idea — you choose one lesson to open to everyone, and that single lesson does the selling. Nothing else unlocks." },
+      { kind: "figure", caption: "One open sample lesson does the selling; the rest of the course stays paid.", svg: `<svg viewBox="0 0 720 170" role="img" aria-label="One free preview lesson is open, the remaining lessons stay locked" font-family="ui-sans-serif, system-ui, sans-serif">
+  <rect x="30" y="40" width="300" height="44" rx="9" fill="var(--muted)" stroke="var(--accent)"/>
+  <circle cx="56" cy="62" r="8" fill="var(--accent)"/>
+  <text x="74" y="59" font-size="12.5" font-weight="700" fill="var(--foreground)">Lesson 1 · Free preview</text>
+  <text x="74" y="74" font-size="10.5" fill="var(--muted-foreground)">Open to everyone — your demo class</text>
+  <rect x="30" y="96" width="300" height="30" rx="8" fill="var(--muted)"/>
+  <rect x="45" y="105" width="12" height="12" rx="3" fill="none" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <text x="70" y="115" font-size="12" fill="var(--muted-foreground)">Lessons 2–12 · locked until purchase</text>
+  <path d="M345 90 h40" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M379 84 l10 6 l-10 6 z" fill="var(--muted-foreground)"/>
+  <g>
+    <rect x="402" y="55" width="288" height="60" rx="12" fill="var(--primary)"/>
+    <text x="546" y="82" text-anchor="middle" font-size="13.5" font-weight="700" fill="var(--primary-foreground)">Preview sells</text>
+    <text x="546" y="100" text-anchor="middle" font-size="11" fill="var(--primary-foreground)" opacity="0.85">the other 11 lessons</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "Why it helps you sell" },
+      { kind: "ul", items: [
+        "Buyers hear your voice and see your style before paying — that trust is what closes the sale.",
+        "It answers 'is this right for me?' without a refund request later.",
+        "You decide exactly which lesson is the sample, so you show your best.",
+      ]},
+      { kind: "h2", text: "Example" },
+      { kind: "p", body: "A coding tutor opens just the first lesson — 'Set up your laptop in 8 minutes' — as a free preview. It's genuinely useful, so beginners finish it, feel capable, and buy the rest. The other lessons never unlock until they do." },
+      { kind: "callout", tone: "info", body: "Pick a preview lesson that delivers a real quick win on its own. A preview that only says 'welcome, more coming soon' doesn't convince anyone." },
+    ],
+    related: [
+      { slug: "course-previews-locks", label: "Free previews & locked lessons — what buyers see" },
+      { slug: "course-pricing", label: "Set course pricing + currencies" },
+    ],
+  },
+
+  "course-faq-quiz-cheating": {
+    title: "“Aren't online quizzes easy to cheat on?”",
+    lede: "They don't have to be. A few toggles — shuffle, a timer, an attempt cap, hidden answers — make a quiz hard to game, and you can hand-grade written answers yourself.",
+    audience: "creator",
+    keywords: ["online quiz cheating", "anti cheat quiz", "quiz question types", "graded quiz online"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "The fear is fair: an unguarded online quiz is just an open-book guessing game. But you control four settings that, together, make casual cheating pointless — and for anything that really needs judgement, you grade it yourself." },
+      { kind: "figure", caption: "Four toggles that harden a quiz, plus teacher grading for written answers.", svg: `<svg viewBox="0 0 720 250" role="img" aria-label="Quiz anti-cheat settings shown as switches" font-family="ui-sans-serif, system-ui, sans-serif">
+  <g>
+    <rect x="20" y="16" width="680" height="42" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <text x="44" y="42" font-size="13" font-weight="600" fill="var(--foreground)">Shuffle questions &amp; options</text>
+    <rect x="636" y="27" width="44" height="20" rx="10" fill="var(--primary)"/>
+    <circle cx="670" cy="37" r="8" fill="var(--primary-foreground)"/>
+  </g>
+  <g>
+    <rect x="20" y="66" width="680" height="42" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <text x="44" y="92" font-size="13" font-weight="600" fill="var(--foreground)">Time limit per attempt</text>
+    <rect x="636" y="77" width="44" height="20" rx="10" fill="var(--primary)"/>
+    <circle cx="670" cy="87" r="8" fill="var(--primary-foreground)"/>
+  </g>
+  <g>
+    <rect x="20" y="116" width="680" height="42" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <text x="44" y="142" font-size="13" font-weight="600" fill="var(--foreground)">Attempt cap (e.g. 1 try)</text>
+    <rect x="636" y="127" width="44" height="20" rx="10" fill="var(--primary)"/>
+    <circle cx="670" cy="137" r="8" fill="var(--primary-foreground)"/>
+  </g>
+  <g>
+    <rect x="20" y="166" width="680" height="42" rx="10" fill="var(--muted)" stroke="var(--border)"/>
+    <text x="44" y="192" font-size="13" font-weight="600" fill="var(--foreground)">Hide answers until the score is final</text>
+    <rect x="636" y="177" width="44" height="20" rx="10" fill="var(--primary)"/>
+    <circle cx="670" cy="187" r="8" fill="var(--primary-foreground)"/>
+  </g>
+  <g>
+    <rect x="20" y="216" width="680" height="34" rx="9" fill="none"/>
+    <text x="20" y="238" font-size="11.5" fill="var(--muted-foreground)">Written (long-answer) questions skip auto-grading — you review and score them yourself.</text>
+  </g>
+</svg>` },
+      { kind: "h2", text: "The four anti-cheat toggles" },
+      { kind: "ul", items: [
+        "Shuffle — randomise the order of questions and options per attempt, so two students never see the same sheet.",
+        "Time limit — cap how long an attempt can take, leaving no time to look everything up.",
+        "Attempt cap — allow just one try (or a few), so a student can't brute-force the answers.",
+        "Hide answers — keep correct answers hidden until results are final, so early takers can't pass them around.",
+      ]},
+      { kind: "h2", text: "Question types — and who grades them" },
+      { kind: "ul", items: [
+        "Multiple-choice and true/false — graded automatically the moment a student submits.",
+        "Short answer — checked against the answer you set.",
+        "Long answer (essay) — not auto-graded; it goes to you to read and score, just like marking a written paper.",
+      ]},
+      { kind: "p", body: "You also choose the grading mode: 'auto' reveals the score instantly, or 'teacher' holds every submission in a review queue until you release results — handy when a quiz mixes auto and written questions." },
+      { kind: "h2", text: "Example" },
+      { kind: "p", body: "A UPSC coach sets a 10-question quiz to one attempt, a 12-minute timer, shuffled order, and answers hidden until results. For the two essay questions she keeps it in teacher mode and grades them herself over the weekend — fast checks stay automatic, judgement stays human." },
+      { kind: "callout", tone: "info", body: "Quizzes are about learning as much as policing. Add an explanation to each question — students see why an answer was right once results are out, and that's often where the real teaching happens." },
+    ],
+    related: [
+      { slug: "course-quizzes", label: "Build quizzes that aren't gameable" },
+      { slug: "lesson-types", label: "The 9 lesson types — and when to use each" },
     ],
   },
 
@@ -1679,6 +2203,96 @@ if (v.payload.tnt && v.payload.tnt !== urlTenantSlug) {
     ],
   },
 
+  "ai-course-builder-cover": {
+    title: "AI Course Builder — and giving it a cover image",
+    lede: "The full AI Course Builder writes your whole course from a short brief — title, description, modules, lessons, quizzes, SEO. It doesn't draw a cover, so here's how to add one in a click right after.",
+    audience: "creator",
+    keywords: ["ai course builder", "generate course with ai", "course cover image", "course thumbnail", "ai course image"],
+    updated: "2026-05-31",
+    sections: [
+      { kind: "p", body: "There are two AI tools for courses. The lightweight one fills the new-course form from a title (see 'Draft a course from just the title'). This article is about the bigger one — the AI Course Builder dialog — which generates an entire course from a short brief, and then how to give that course a cover image, since the builder produces text, not artwork." },
+
+      { kind: "h2", text: "Open the builder" },
+      { kind: "ul", items: [
+        "Go to /dashboard/courses.",
+        "Click AI Course Builder (it sits next to New course).",
+        "If you don't see it, your workspace operator hasn't connected an AI provider yet — the button hides itself rather than showing a dead control.",
+      ]},
+
+      { kind: "h2", text: "The brief you fill in" },
+      { kind: "ul", items: [
+        "Title — the only required field.",
+        "Description, Category, Audience — optional; leave blank and the AI infers them.",
+        "Level (beginner / intermediate / advanced) and Language.",
+        "Tone — conversational, formal, practical, or encouraging.",
+        "Duration — Short (1–2h), Medium (3–5h), or Full (8–12h). This scales how many modules and lessons it writes.",
+        "Price and Original price — optional.",
+        "Keywords — comma-separated, used for the SEO fields.",
+        "A quiz per module — on by default.",
+        "Custom instructions — anything specific you want it to follow.",
+      ]},
+
+      { kind: "h2", text: "What it generates" },
+      { kind: "ul", items: [
+        "Title, subtitle, and a full description.",
+        "Modules, each with lessons (lessons come in as the Reading / text type — swap any to video, quiz, etc. in the curriculum editor).",
+        "A quiz per module when you leave that toggle on.",
+        "Marketing copy: what students will learn, requirements, and feature bullets.",
+        "SEO fields and an FAQ.",
+      ]},
+      { kind: "callout", tone: "warn", body: "The AI Course Builder does not create a cover image. When you click Create as Draft, the course is saved with a plain placeholder thumbnail and opens in the editor — adding the cover is the next step below." },
+
+      { kind: "figure", caption: "The AI builder writes the course text and leaves a placeholder cover; you add the real cover in the editor.", svg: `<svg viewBox="0 0 720 250" role="img" aria-label="AI builds the course text, then you add a cover image in four ways" font-family="ui-sans-serif, system-ui, sans-serif">
+  <g>
+    <rect x="16" y="40" width="190" height="92" rx="12" fill="var(--primary)"/>
+    <text x="111" y="74" text-anchor="middle" font-size="14" font-weight="700" fill="var(--primary-foreground)">AI Course Builder</text>
+    <text x="111" y="96" text-anchor="middle" font-size="11" fill="var(--primary-foreground)" opacity="0.85">title · modules · lessons</text>
+    <text x="111" y="112" text-anchor="middle" font-size="11" fill="var(--primary-foreground)" opacity="0.85">quizzes · SEO</text>
+  </g>
+  <path d="M210 86 h34" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M238 80 l10 6 l-10 6 z" fill="var(--muted-foreground)"/>
+  <g>
+    <rect x="256" y="40" width="180" height="92" rx="12" fill="var(--card)" stroke="var(--border)"/>
+    <text x="346" y="78" text-anchor="middle" font-size="13" font-weight="600" fill="var(--foreground)">Draft course</text>
+    <text x="346" y="98" text-anchor="middle" font-size="11" fill="var(--muted-foreground)">placeholder cover</text>
+    <text x="346" y="114" text-anchor="middle" font-size="11" fill="var(--muted-foreground)">(no image yet)</text>
+  </g>
+  <path d="M440 86 h34" stroke="var(--muted-foreground)" stroke-width="2"/>
+  <path d="M468 80 l10 6 l-10 6 z" fill="var(--muted-foreground)"/>
+  <g>
+    <rect x="486" y="16" width="220" height="44" rx="9" fill="var(--accent)"/>
+    <text x="596" y="43" text-anchor="middle" font-size="12.5" font-weight="700" fill="var(--accent-foreground)">Regenerate designed cover</text>
+    <rect x="486" y="64" width="220" height="36" rx="9" fill="var(--muted)" stroke="var(--border)"/>
+    <text x="596" y="86" text-anchor="middle" font-size="12.5" fill="var(--foreground)">Upload your own</text>
+    <rect x="486" y="104" width="220" height="36" rx="9" fill="var(--muted)" stroke="var(--border)"/>
+    <text x="596" y="126" text-anchor="middle" font-size="12.5" fill="var(--foreground)">Search Unsplash</text>
+    <rect x="486" y="144" width="220" height="36" rx="9" fill="var(--muted)" stroke="var(--border)"/>
+    <text x="596" y="166" text-anchor="middle" font-size="12.5" fill="var(--foreground)">Design a gradient cover</text>
+  </g>
+  <text x="596" y="200" text-anchor="middle" font-size="11" fill="var(--muted-foreground)">Cover options in the course editor</text>
+</svg>` },
+
+      { kind: "h2", text: "Add a cover image (in the editor)" },
+      { kind: "p", body: "After Create as Draft you land in the course editor. The Thumbnail field is where the cover lives, with four ways to fill it:" },
+      { kind: "ul", items: [
+        "Regenerate designed cover — one click composes a cover for you: a stock photo picked to match your category, with your course title and a few details (module/lesson counts) laid over it. It's generated from your course, not from an AI image prompt, so the same course always produces the same cover. Click again any time the title changes.",
+        "Upload — drop in your own image or paste an image URL. It's auto-compressed for fast loading.",
+        "Unsplash — search the free Unsplash photo library and optionally lay your title text over the photo.",
+        "Design — pick from preset gradients and type a title + subtitle for a clean, text-only cover.",
+      ]},
+      { kind: "callout", tone: "info", body: "There's no AI image generator (no 'describe a picture and get art'). The 'Regenerate designed cover' button composes a real photo plus your text — reliable and on-brand, with no surprise AI artwork." },
+
+      { kind: "h2", text: "While you're there: the social-share image" },
+      { kind: "p", body: "The editor can reuse the same composer for your social-share (Open Graph) image — there's a Use the course cover button, or it auto-fills from the cover when you leave the social image empty. That's the picture that shows when someone shares your course link on WhatsApp, X, or LinkedIn." },
+      { kind: "callout", tone: "info", body: "Whatever the AI wrote is a first draft. Read the modules, fix anything that doesn't fit your audience, set a cover, then publish." },
+    ],
+    related: [
+      { slug: "course-ai-draft", label: "Draft a course from just the title (AI)" },
+      { slug: "course-curriculum", label: "Build a course curriculum" },
+      { slug: "course-create", label: "Create your first course" },
+    ],
+  },
+
   // ---------- Productivity / shortcuts ----------
   "fuzzy-search-and-slash": {
     title: "Fuzzy search and the “/” shortcut",
@@ -2571,6 +3185,20 @@ export default function HelpArticlePage({
                 Last updated {new Date(article.updated).toLocaleDateString(undefined, { dateStyle: "medium" })}
               </p>
             )}
+            {/* Apidog-style "Open in ChatGPT / Claude" — hand the reader
+                this exact article as a pre-filled prompt so they can ask
+                follow-ups without copy-pasting. */}
+            <div className="flex flex-wrap items-center gap-2 pt-3">
+              {(() => {
+                const p = articlePrompts({
+                  title: article.title,
+                  lede: article.lede,
+                  body: articleToPlainText(article),
+                  url: `${SITE_URL}/help/${slug}`,
+                })
+                return <OpenInLLM urlPrompt={p.urlPrompt} copyPrompt={p.copyPrompt} />
+              })()}
+            </div>
           </header>
 
           <div className="prose prose-sm mt-8 max-w-none">
@@ -2601,6 +3229,36 @@ export default function HelpArticlePage({
       <Footer />
     </div>
   )
+}
+
+// Flatten an article's sections into clean plain text for the
+// "Open in ChatGPT / Claude" prompt. Diagrams (figure) are emitted as
+// their caption only — the SVG itself isn't useful to an assistant.
+function articleToPlainText(article: Article): string {
+  const lines: string[] = [article.lede, ""]
+  for (const s of article.sections) {
+    switch (s.kind) {
+      case "h2":
+        lines.push("", `## ${s.text}`)
+        break
+      case "p":
+        lines.push(s.body)
+        break
+      case "ul":
+        for (const it of s.items) lines.push(`- ${it}`)
+        break
+      case "code":
+        lines.push("```" + (s.lang ?? ""), s.body, "```")
+        break
+      case "callout":
+        lines.push(`> ${s.tone === "warn" ? "Warning" : "Note"}: ${s.body}`)
+        break
+      case "figure":
+        if (s.caption) lines.push(`[Diagram: ${s.caption}]`)
+        break
+    }
+  }
+  return lines.join("\n").trim()
 }
 
 function renderSection(s: Section, i: number) {
@@ -2646,6 +3304,23 @@ function renderSection(s: Section, i: number) {
         >
           <CardContent className="p-3 text-sm">{s.body}</CardContent>
         </Card>
+      )
+    case "figure":
+      // Trusted, self-authored SVG (see the Section type note). The
+      // [&_svg]:w-full rule lets the diagram scale to the column while
+      // its own viewBox preserves the aspect ratio.
+      return (
+        <figure key={i} className="mt-5">
+          <div
+            className="overflow-hidden rounded-lg border border-border bg-card p-4 [&_svg]:h-auto [&_svg]:w-full"
+            dangerouslySetInnerHTML={{ __html: s.svg }}
+          />
+          {s.caption && (
+            <figcaption className="mt-2 text-center text-xs text-muted-foreground">
+              {s.caption}
+            </figcaption>
+          )}
+        </figure>
       )
   }
 }

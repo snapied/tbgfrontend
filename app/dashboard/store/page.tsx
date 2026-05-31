@@ -7,7 +7,7 @@ import {
   Briefcase,
   CalendarClock,
   Copy,
-  DollarSign,
+  IndianRupee,
   Download,
   ExternalLink,
   Filter,
@@ -210,7 +210,7 @@ export default function StoreOverviewPage() {
           yet". The kind quick-start cards take their place below. */}
       {products.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatTile icon={<DollarSign />} label="Gross sales (all time)" value={money(gross, primaryCurrency)} />
+          <StatTile icon={<IndianRupee />} label="Gross sales (all time)" value={money(gross, primaryCurrency)} />
           <StatTile icon={<TrendingUp />} label="Gross (last 30 days)" value={money(gross30, primaryCurrency)} />
           <StatTile icon={<ShoppingBag />} label="Orders" value={`${paidOrders.length}`} />
           <StatTile icon={<Package />} label="Products" value={`${products.length}`} />

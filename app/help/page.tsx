@@ -1,3 +1,5 @@
+"use client"
+
 // Help & guides index.
 //
 // Single browsable index of every help topic we ship. The list
@@ -10,9 +12,17 @@
 // developers) because the same word can mean two different
 // things to those audiences. Inside each group, ordered roughly
 // by "what you need first".
+//
+// Client component: it owns the live fuzzy-search box ("/" focuses
+// it, typo-tolerant matching flattens every group into one ranked
+// result list while you type). The page's <title>/description live
+// in the sibling layout.tsx since a client component can't export
+// `metadata`.
 
+import { useMemo, useState } from "react"
 import Link from "next/link"
-import type { Metadata } from "next"
+import { fuzzySearch } from "@/lib/fuzzy-search"
+import { SearchInput } from "@/components/ui/search-input"
 import {
   ArrowRight,
   Award,
@@ -21,11 +31,13 @@ import {
   Bell,
   Briefcase,
   CalendarClock,
+  CircleHelp,
   ClipboardList,
   Code2,
   Coins,
   CreditCard,
   Download,
+  Eye,
   FileText,
   Film,
   Globe,
@@ -36,6 +48,7 @@ import {
   Languages,
   Layers,
   Lock,
+  Map as MapIcon,
   Megaphone,
   MessageCircleQuestion,
   MessageSquare,
@@ -56,12 +69,8 @@ import { Header } from "@/components/landing/header"
 import { Footer } from "@/components/landing/footer"
 import { Card, CardContent } from "@/components/ui/card"
 import { ContactSupportDialog } from "@/components/support/contact-support-dialog"
-
-export const metadata: Metadata = {
-  title: "Help & guides · The Big Class",
-  description:
-    "Every guide for creators, learners, and developers — one searchable index. From inviting your first faculty member to issuing an API key.",
-}
+import { OpenInLLM } from "@/components/help/open-in-llm"
+import { docsIndexPrompts } from "@/lib/help-llm-prompt"
 
 interface Topic {
   href: string
@@ -76,7 +85,12 @@ interface Topic {
 // status:"new" so visitors can skim what changed.
 
 const COURSES: Topic[] = [
+  { href: "/help/course-anatomy",             title: "Course anatomy: courses, modules & lessons", body: "The three-layer mental model — with a diagram — so the editor makes sense.",                  icon: Layers,          status: "new" },
+  { href: "/help/lesson-types",               title: "The 9 lesson types — and when to use each", body: "Video, audio, reading, PDF, document, embed, quiz, live, recording. Illustrated.",           icon: MapIcon,         status: "new" },
+  { href: "/help/course-previews-locks",      title: "Free previews & locked lessons",    body: "What a buyer sees before and after enrolling — side-by-side diagram.",                          icon: Eye,             status: "new" },
+  { href: "/help/course-student-journey",     title: "The student journey, end to end",   body: "Enrol → learn → complete → certificate, and what progress actually measures.",                  icon: GraduationCap,   status: "new" },
   { href: "/help/course-ai-draft",            title: "Draft a course from just the title (AI)", body: "Type a title, let AI fill the description, subtitle, and curriculum.",                  icon: Sparkles,        status: "new" },
+  { href: "/help/ai-course-builder-cover",    title: "AI Course Builder + adding a cover image", body: "Generate a whole course from a brief, then give it a cover in one click.",            icon: Sparkles,        status: "new" },
   { href: "/help/course-create",              title: "Create your first course",          body: "Empty workspace → published course in 15 minutes.",                                            icon: BookOpen,        status: "new" },
   { href: "/help/course-curriculum",          title: "Build a course curriculum",         body: "Modules, lessons, eight content types. Drag-to-reorder.",                                       icon: Layers,          status: "new" },
   { href: "/help/course-quizzes",             title: "Build quizzes that aren't gameable", body: "Five question types, time limits, attempt caps.",                                              icon: ClipboardList,   status: "new" },
@@ -85,6 +99,18 @@ const COURSES: Topic[] = [
   { href: "/help/course-publish-vs-draft",    title: "Drafts, published, archived + visibility", body: "Status vs visibility — public, private, unlisted, password-gated.",                     icon: FileText,        status: "new" },
   { href: "/help/course-bulk-import",         title: "Bulk-import students via CSV",       body: "10,000+ rows. Dedupes by email. Provisions accounts + enrols.",                                 icon: UserPlus,        status: "new" },
   { href: "/help/assignments",                title: "Assignments + grading workflow",    body: "Lesson, session, or course-level. Submission via link or upload.",                              icon: ClipboardList,   status: "new" },
+]
+
+// Courses FAQ — the questions teachers moving from a classroom or
+// private-tuition setup ask first. Each sounds like a catch, but the
+// answer is one of the nicer parts of teaching online. Plain language,
+// worked examples, a diagram each.
+const COURSES_FAQ: Topic[] = [
+  { href: "/help/course-faq-live-only",       title: "“I only teach live — do I have to record videos?”", body: "No. Run live on Zoom/Meet/Teams as usual; recordings become rewatchable lessons on their own.", icon: CircleHelp, status: "new" },
+  { href: "/help/course-faq-drip",            title: "“Will all my lessons unlock at once?”",            body: "No — drip them. Release modules week by week, like a real batch, automatically per student.",   icon: CircleHelp, status: "new" },
+  { href: "/help/course-faq-free-preview",    title: "“If I add a free preview, am I giving it away?”",   body: "No. A preview is one sample lesson — your free demo class. The rest stays locked.",             icon: CircleHelp, status: "new" },
+  { href: "/help/course-faq-private-share",   title: "“How do I share a course with only my students?”", body: "Unlisted, password, or private visibility — keep it off the public catalogue entirely.",        icon: CircleHelp, status: "new" },
+  { href: "/help/course-faq-quiz-cheating",   title: "“Aren't online quizzes easy to cheat on?”",        body: "Not with shuffle, a timer, an attempt cap, hidden answers — plus hand-grading for essays.",     icon: CircleHelp, status: "new" },
 ]
 
 const LIVE_CLASSES: Topic[] = [
@@ -340,7 +366,51 @@ const FOR_ADMINS: Topic[] = [
   },
 ]
 
+// One ordered list of every group on the page. The render loop and the
+// flat search index both read from this, so a new group is added in
+// exactly one place and can never drift between "browse" and "search".
+const GROUPS: { title: string; topics: Topic[] }[] = [
+  { title: "What's new", topics: WHATS_NEW },
+  { title: "Inside the live room", topics: INSIDE_LIVE_ROOM },
+  { title: "For creators", topics: FOR_CREATORS },
+  { title: "Courses", topics: COURSES },
+  { title: "Courses — questions teachers ask first", topics: COURSES_FAQ },
+  { title: "Live classes", topics: LIVE_CLASSES },
+  { title: "Storefront + payments", topics: STOREFRONT },
+  { title: "Certificates", topics: CERTIFICATES },
+  { title: "Audience + marketing", topics: AUDIENCE },
+  { title: "Customer portal", topics: PORTAL },
+  { title: "Billing & account", topics: BILLING },
+  { title: "Analytics + operations", topics: ANALYTICS },
+  { title: "For learners", topics: FOR_LEARNERS },
+  { title: "For developers", topics: FOR_DEVELOPERS },
+  { title: "For workspace admins", topics: FOR_ADMINS },
+]
+
 export default function HelpIndexPage() {
+  const [query, setQuery] = useState("")
+
+  // Flat, de-duplicated topic list for searching. The same article can
+  // appear in two groups (e.g. a course doc also shown under What's
+  // new) — collapse by href so a search hit shows once. We tag each
+  // with its first group title for a "in <group>" hint in results.
+  const flatTopics = useMemo(() => {
+    const seen = new Map<string, Topic & { group: string }>()
+    for (const g of GROUPS) {
+      for (const t of g.topics) {
+        if (!seen.has(t.href)) seen.set(t.href, { ...t, group: g.title })
+      }
+    }
+    return Array.from(seen.values())
+  }, [])
+
+  const results = useMemo(
+    () => fuzzySearch(flatTopics, query, (t) => [t.title, t.body, t.group]),
+    [flatTopics, query],
+  )
+
+  const searching = query.trim().length > 0
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -352,13 +422,29 @@ export default function HelpIndexPage() {
               Everything we&apos;ve documented, in one place. New topics are flagged so you can skim
               to what changed since your last visit.
             </p>
-            {/* Direct line to support. /help is now the only
-                top-level entry for both browsing docs + reaching
-                humans (the legacy /support index was removed).
-                The dialog captures name + email + WhatsApp + a
-                rich-text message, rate-limited to 3/24h. */}
+
+            {/* Fuzzy search + "/" to focus. Reuses the canonical
+                <SearchInput> (same control every dashboard list uses),
+                so the "/" hotkey, kbd hint, and clear button all come
+                for free. Typing flattens every group into one ranked
+                list below. */}
+            <div className="mt-6 max-w-xl">
+              <SearchInput
+                pageId="help-index"
+                value={query}
+                onChange={setQuery}
+                placeholder="Search the docs by topic, feature, or keyword…"
+                ariaLabel="Search help guides"
+                shortcutDescription="Focus help search"
+              />
+            </div>
+
+            {/* Direct line to support + Apidog-style "ask an assistant
+                about the whole catalogue". /help is the only top-level
+                entry for both browsing docs + reaching humans. */}
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <ContactSupportDialog />
+              <AskAiAboutDocs />
               <p className="text-sm text-muted-foreground">
                 Can&apos;t find an answer? A real human replies — usually within a day.
               </p>
@@ -366,23 +452,51 @@ export default function HelpIndexPage() {
           </div>
         </section>
 
-        <Group title="What's new" topics={WHATS_NEW} />
-        <Group title="Inside the live room" topics={INSIDE_LIVE_ROOM} />
-        <Group title="For creators" topics={FOR_CREATORS} />
-        <Group title="Courses" topics={COURSES} />
-        <Group title="Live classes" topics={LIVE_CLASSES} />
-        <Group title="Storefront + payments" topics={STOREFRONT} />
-        <Group title="Certificates" topics={CERTIFICATES} />
-        <Group title="Audience + marketing" topics={AUDIENCE} />
-        <Group title="Customer portal" topics={PORTAL} />
-        <Group title="Billing & account" topics={BILLING} />
-        <Group title="Analytics + operations" topics={ANALYTICS} />
-        <Group title="For learners" topics={FOR_LEARNERS} />
-        <Group title="For developers" topics={FOR_DEVELOPERS} />
-        <Group title="For workspace admins" topics={FOR_ADMINS} />
+        {searching ? (
+          <section className="py-10">
+            <div className="mx-auto max-w-5xl px-6 lg:px-8">
+              <h2 className="font-serif text-2xl font-bold tracking-tight">
+                {results.length} result{results.length === 1 ? "" : "s"} for &ldquo;{query.trim()}&rdquo;
+              </h2>
+              {results.length === 0 ? (
+                <p className="mt-6 text-muted-foreground">
+                  Nothing matched. Try a shorter or different keyword — or{" "}
+                  <span className="font-medium text-foreground">ask a human</span> with the
+                  Contact support button above.
+                </p>
+              ) : (
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  {results.map((t) => (
+                    <TopicCard key={t.href} topic={t} groupLabel={t.group} />
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        ) : (
+          GROUPS.map((g) => <Group key={g.title} title={g.title} topics={g.topics} />)
+        )}
       </main>
       <Footer />
     </div>
+  )
+}
+
+// Hero affordance: open the help catalogue in ChatGPT / Claude. The
+// deep link stays short (it just points the assistant at the docs home);
+// the Copy button carries the full table of contents so a reader can
+// paste it and ask "which guide covers X?".
+function AskAiAboutDocs() {
+  const prompts = useMemo(() => {
+    const toc = GROUPS.flatMap((g) => g.topics)
+    return docsIndexPrompts(toc)
+  }, [])
+  return (
+    <OpenInLLM
+      urlPrompt={prompts.urlPrompt}
+      copyPrompt={prompts.copyPrompt}
+      label="Ask AI about our docs:"
+    />
   )
 }
 
@@ -393,33 +507,47 @@ function Group({ title, topics }: { title: string; topics: Topic[] }) {
         <h2 className="font-serif text-2xl font-bold tracking-tight">{title}</h2>
         <div className="mt-6 grid gap-3 sm:grid-cols-2">
           {topics.map((t) => (
-            <Link key={t.href} href={t.href} className="group block">
-              <Card className="h-full transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
-                <CardContent className="space-y-1.5 p-4">
-                  <div className="flex items-center gap-2">
-                    <t.icon className="h-4 w-4 text-primary" />
-                    <p className="font-semibold group-hover:text-primary">{t.title}</p>
-                    {t.status === "new" && (
-                      <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                        New
-                      </span>
-                    )}
-                    {t.status === "updated" && (
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
-                        Updated
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-sm text-muted-foreground">{t.body}</p>
-                  <p className="inline-flex items-center gap-1 pt-1 text-xs font-medium text-primary opacity-0 transition group-hover:opacity-100">
-                    Read <ArrowRight className="h-3 w-3" />
-                  </p>
-                </CardContent>
-              </Card>
-            </Link>
+            <TopicCard key={t.href} topic={t} />
           ))}
         </div>
       </div>
     </section>
+  )
+}
+
+// Shared card used by both the grouped browse view and the flat search
+// results, so a result looks identical to its place in the catalogue.
+// `groupLabel` adds an "in <group>" hint, shown only in search results.
+function TopicCard({ topic: t, groupLabel }: { topic: Topic; groupLabel?: string }) {
+  return (
+    <Link href={t.href} className="group block">
+      <Card className="h-full transition-all group-hover:-translate-y-0.5 group-hover:shadow-md">
+        <CardContent className="space-y-1.5 p-4">
+          <div className="flex items-center gap-2">
+            <t.icon className="h-4 w-4 text-primary" />
+            <p className="font-semibold group-hover:text-primary">{t.title}</p>
+            {t.status === "new" && (
+              <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
+                New
+              </span>
+            )}
+            {t.status === "updated" && (
+              <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary">
+                Updated
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">{t.body}</p>
+          <div className="flex items-center justify-between pt-1">
+            <p className="inline-flex items-center gap-1 text-xs font-medium text-primary opacity-0 transition group-hover:opacity-100">
+              Read <ArrowRight className="h-3 w-3" />
+            </p>
+            {groupLabel && (
+              <span className="text-[11px] text-muted-foreground">in {groupLabel}</span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   )
 }
