@@ -59,9 +59,9 @@ export function AIGenerateButton({
   // Not configured
   if (!status.configured) return null
 
-  // Starter (0 cap) or limit exhausted — show lock icon with upgrade popover
+  // Starter (0 cap) or limit exhausted
   const locked = status.limit === 0
-  const exhausted = !locked && status.remaining !== undefined && status.remaining <= 0
+  const exhausted = !locked && !status.planAllowed
 
   if (locked || exhausted) {
     return (
@@ -75,18 +75,20 @@ export function AIGenerateButton({
         </PopoverTrigger>
         <PopoverContent className="w-64 text-sm" side="bottom" align="end">
           <p className="font-semibold text-foreground">
-            {locked ? "AI is a Pro feature" : "Monthly AI limit reached"}
+            {locked ? "AI is a Pro feature" : "AI limit reached"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {locked
               ? "Upgrade to Pro to unlock AI course building, text refinement, and quiz generation."
-              : `You've used all ${status.limit} AI calls this month. Upgrade for a higher limit.`}
+              : "You've hit your AI usage limit. It resets automatically — wait a bit and try again."}
           </p>
-          <Button asChild size="sm" className="mt-3 w-full gap-1.5">
-            <Link href="/dashboard/billing">
-              Upgrade plan <ArrowRight className="h-3 w-3" />
-            </Link>
-          </Button>
+          {locked && (
+            <Button asChild size="sm" className="mt-3 w-full gap-1.5">
+              <Link href="/dashboard/billing">
+                Upgrade plan <ArrowRight className="h-3 w-3" />
+              </Link>
+            </Button>
+          )}
         </PopoverContent>
       </Popover>
     )
@@ -116,11 +118,6 @@ export function AIGenerateButton({
         <Sparkles className="h-3.5 w-3.5" />
       )}
       {label}
-      {status.remaining !== undefined && status.limit !== undefined && status.limit < 5000 && (
-        <span className="ml-1 text-[10px] tabular-nums text-muted-foreground">
-          {status.remaining}/{status.limit}
-        </span>
-      )}
     </Button>
   )
 }

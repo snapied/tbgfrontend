@@ -119,8 +119,10 @@ export interface PlanLimits {
    * captured during the trial), but the UI is gated.
    */
   courseVersioning: boolean
-  /** AI content generation calls per calendar month. 0 = none. */
+  /** AI content generation — sliding window limits (hour/day/week). 0 = none. */
   aiCallsPerMonth: number
+  /** AI rate limits displayed on pricing cards. */
+  aiLimitsLabel: string
   // NOTE: There is no `transactionFeePercent`. The Founder Bill of
   // Rights (Article 1) and the homepage hero both commit to ZERO
   // commission on creator revenue, on every plan. The flat
@@ -198,6 +200,7 @@ export const PLANS: Record<PlanId, Plan> = {
       apiAccess: false,
       courseVersioning: false,
       aiCallsPerMonth: 0,
+      aiLimitsLabel: "—",
     },
     price: { monthlyPaise: 0, yearlyPaise: 0 },
   },
@@ -228,7 +231,8 @@ export const PLANS: Record<PlanId, Plan> = {
       multilingual: true,
       apiAccess: false,
       courseVersioning: true,
-      aiCallsPerMonth: 100,
+      aiCallsPerMonth: 50,
+      aiLimitsLabel: "3/hr · 10/day · 50/week",
     },
     price: {
       monthlyPaise: 149_900,
@@ -265,7 +269,8 @@ export const PLANS: Record<PlanId, Plan> = {
       multilingual: true,
       apiAccess: false,
       courseVersioning: true,
-      aiCallsPerMonth: 500,
+      aiCallsPerMonth: 150,
+      aiLimitsLabel: "5/hr · 25/day · 150/week",
     },
     price: {
       monthlyPaise: 349_900,
@@ -303,7 +308,8 @@ export const PLANS: Record<PlanId, Plan> = {
       multilingual: true,
       apiAccess: true,
       courseVersioning: true,
-      aiCallsPerMonth: 5000,
+      aiCallsPerMonth: 300,
+      aiLimitsLabel: "10/hr · 50/day · 300/week",
     },
     // Institute is sales-led — no Razorpay self-checkout. Backend
     // operators provision manually after the contract is signed.

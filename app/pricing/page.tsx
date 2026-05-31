@@ -92,7 +92,7 @@ const PLANS: Plan[] = [
       "Live + recordings included — 60 min/class",
       "Refer & Earn (referral program is free on every plan)",
       "— PAID FROM PRO+ —",
-      "AI course builder — 100 calls/mo (Pro), 500 (Studio), 5,000 (Institute)",
+      "AI course builder + presentations — smart rate limits (5/hr, 20/day, 100/week on Pro)",
       "Multilingual portal (10 languages) + per-tenant translation editor",
       "Lead inbox + contact-form section + manual lead creation",
       "Community/student announcements + scheduling",
@@ -118,7 +118,7 @@ const PLANS: Plan[] = [
       "Bring your own domain + full white-label",
       "Public site editor — header, footer, page sections, hero copy",
       "Multilingual portal — 10 languages (English + 9 Indian) with per-tenant translation overrides",
-      "AI course drafting — type a title, ship a course",
+      "AI course drafting + AI presentations — smart limits that auto-reset (no monthly lockout)",
       "AI text refinement on hero copy, descriptions, lessons",
       "Lead inbox + contact-form section block + manual lead creation",
       "Community/student announcements (broadcast, per-course, scheduled)",
@@ -477,7 +477,8 @@ const ADDONS: Addon[] = [
 
 const UPGRADE_TRIGGERS: Array<{ feature: string; what: string; tier: "Pro+" | "Studio+" | "Institute" }> = [
   { feature: "Multilingual portal", what: "10-language picker + per-tenant translation editor on the public site", tier: "Pro+" },
-  { feature: "AI course drafting", what: "Type a course title; AI fills description, subtitle, and curriculum", tier: "Pro+" },
+  { feature: "AI course drafting", what: "Type a course title; AI fills description, subtitle, and curriculum. Smart rate limits auto-reset.", tier: "Pro+" },
+  { feature: "AI presentations", what: "Generate slide decks from a topic with themes, images, and export to PPTX. Same rate limits as course builder.", tier: "Pro+" },
   { feature: "AI text refinement", what: "Refine hero copy, lesson text, and announcements with one click", tier: "Pro+" },
   { feature: "Lead inbox + manual lead creation", what: "View every contact-form submission, add leads manually, triage, export", tier: "Pro+" },
   { feature: "Contact-form section block", what: "Drop a lead-capture form on any portal page", tier: "Pro+" },
@@ -621,7 +622,7 @@ const MATRIX: { group: string; rows: MatrixRow[] }[] = [
       { feature: "Quizzes, assignments, auto-graded marks", starter: true, pro: true, studio: true, institute: true },
       { feature: "Custom certificate designer + auto-issue", starter: false, pro: true, studio: true, institute: true },
       { feature: "Drip / scheduled lesson unlock", starter: false, pro: true, studio: true, institute: true },
-      { feature: "AI course builder (titles, descriptions, modules, lesson drafts)", starter: false, pro: "100/mo", studio: "500/mo", institute: "5,000/mo" },
+      { feature: "AI course builder + presentations", starter: false, pro: "3/hr · 10/day · 50/wk", studio: "5/hr · 25/day · 150/wk", institute: "10/hr · 50/day · 300/wk" },
     ],
   },
   {
@@ -884,7 +885,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "When does AI course drafting work?",
-    a: "Type a course title; we generate a description, subtitle, and a full outline (modules + lessons) for you to edit. Pro gets 100 AI calls/month, Studio gets 500, and Institute gets 5,000. Starter sees the button as locked with an upgrade prompt.",
+    a: "Type a course title; we generate a description, subtitle, and a full outline (modules + lessons) for you to edit. AI also powers our presentation builder. Instead of fixed monthly caps, we use smart sliding-window limits that auto-reset: Pro gets 3/hour, 10/day, 50/week; Studio gets 5/hr, 25/day, 150/week; Institute gets 10/hr, 50/day, 300/week. Starter sees the button as locked with an upgrade prompt.",
   },
   {
     q: "Are live classes included?",
