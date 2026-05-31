@@ -262,3 +262,37 @@ export const WHITEBOARD_EDITOR_TOUR: TourStep[] = [
     placement: "center",
   },
 ]
+
+// ============================================================
+// Presentations (/dashboard/presentations)
+// ============================================================
+export const PRESENTATIONS_TOUR_ID = "presentations-v1"
+export const PRESENTATIONS_TOUR: TourStep[] = [
+  {
+    title: "AI Presentations",
+    body:
+      "Create stunning presentations in seconds. Just type your topic, pick a language and slide count, and let AI generate a full deck — complete with themes, layouts, and images.",
+    placement: "center",
+  },
+  {
+    title: "Generate with AI",
+    body:
+      "Type your topic in the input box, choose English or Hindi, pick how many slides (up to 15), and hit Generate. The AI builds your outline and slides automatically.",
+    target: "[data-tour='pres-create']",
+    placement: "bottom",
+  },
+  {
+    title: "Your Presentations",
+    body:
+      "All your presentations appear here as cards. Click any card to open the editor. Use the 3-dot menu to duplicate, share, or delete.",
+    target: "[data-tour='pres-list']",
+    placement: "top",
+  },
+  {
+    title: "Search",
+    body:
+      "Use the search bar to quickly find presentations by name. Press / to focus the search bar from anywhere.",
+    target: "[data-tour='pres-search']",
+    placement: "bottom",
+  },
+]
